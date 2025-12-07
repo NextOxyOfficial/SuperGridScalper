@@ -26,6 +26,5 @@ urlpatterns = [
     path('dashboard/', dashboard_views.dashboard, name='dashboard'),
     path('login/', dashboard_views.user_login, name='login'),
     path('logout/', dashboard_views.user_logout, name='logout'),
-    path('update-investment/', dashboard_views.update_investment, name='update_investment'),
     path('download-ea/', dashboard_views.download_ea, name='download_ea'),
 ]

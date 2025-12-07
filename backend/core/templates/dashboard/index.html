@@ -17,8 +17,8 @@
     </div>
     <div class="stat-card">
         <div class="icon yellow">💰</div>
-        <h3>${{ investment_amount|default:"0" }}</h3>
-        <p>Investment Amount</p>
+        <h3>${{ trade_data.account_balance|default:"0" }}</h3>
+        <p>Account Balance</p>
     </div>
     <div class="stat-card">
         <div class="icon purple">📊</div>
@@ -69,58 +69,8 @@
     </div>
 </div>
 
-<!-- Investment & Settings -->
-<div class="grid grid-2">
-    <div class="card">
-        <div class="card-header">
-            <h2>💰 Investment Settings</h2>
-        </div>
-        <div class="card-body">
-            <form method="post" action="{% url 'update_investment' %}">
-                {% csrf_token %}
-                
-                <div class="investment-display">
-                    <h4>Your Investment Amount</h4>
-                    <div class="amount">$<span id="display-amount">{{ settings.investment_amount|default:"0" }}</span></div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="investment">Set Investment Amount (USD)</label>
-                    <input type="number" id="investment" name="investment_amount" 
-                           value="{{ settings.investment_amount|default:'1000' }}" 
-                           min="100" step="100"
-                           oninput="updateCalculations()">
-                    <p class="help-text">Minimum investment: $100. EA settings will be calculated based on this amount.</p>
-                </div>
-                
-                <div class="calculated-settings">
-                    <h4>Calculated EA Settings</h4>
-                    <div class="setting-row">
-                        <span class="label">Lot Size</span>
-                        <span class="value" id="calc-lot">{{ settings.lot_size|default:"0.01" }}</span>
-                    </div>
-                    <div class="setting-row">
-                        <span class="label">Max Buy Orders</span>
-                        <span class="value" id="calc-buy">{{ settings.max_buy_orders|default:"4" }}</span>
-                    </div>
-                    <div class="setting-row">
-                        <span class="label">Max Sell Orders</span>
-                        <span class="value" id="calc-sell">{{ settings.max_sell_orders|default:"4" }}</span>
-                    </div>
-                    <div class="setting-row">
-                        <span class="label">Max Recovery Orders</span>
-                        <span class="value" id="calc-recovery">{{ settings.max_buy_be_recovery_orders|default:"10" }}</span>
-                    </div>
-                </div>
-                
-                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 20px;">
-                    💾 Save Investment Settings
-                </button>
-            </form>
-        </div>
-    </div>
-    
-    <div class="card">
+<!-- Download EA -->
+<div class="card">
         <div class="card-header">
             <h2>📥 Download EA</h2>
         </div>
@@ -234,19 +184,5 @@ function copyLicense() {
     alert('License key copied!');
 }
 
-function updateCalculations() {
-    const investment = parseFloat(document.getElementById('investment').value) || 0;
-    document.getElementById('display-amount').textContent = investment.toLocaleString();
-    
-    // Calculate settings based on investment (you can modify this logic)
-    const lotSize = Math.max(0.01, (investment / 10000).toFixed(2));
-    const maxOrders = Math.min(20, Math.max(2, Math.floor(investment / 500)));
-    const maxRecovery = Math.min(50, Math.max(5, Math.floor(investment / 200)));
-    
-    document.getElementById('calc-lot').textContent = lotSize;
-    document.getElementById('calc-buy').textContent = maxOrders;
-    document.getElementById('calc-sell').textContent = maxOrders;
-    document.getElementById('calc-recovery').textContent = maxRecovery;
-}
 </script>
 {% endblock %}

@@ -56,7 +56,6 @@ def dashboard(request):
             'settings': settings,
             'trade_data': trade_data,
             'days_remaining': days_remaining,
-            'investment_amount': settings.investment_amount,
         }
         
         return render(request, 'dashboard/index.html', context)
@@ -66,50 +65,7 @@ def dashboard(request):
         return redirect('/')
 
 
-@login_required(login_url='login')
-def update_investment(request):
-    """Update investment amount and calculate settings"""
-    if request.method == 'POST':
-        try:
-            license = License.objects.filter(user=request.user).first()
-            if not license:
-                messages.error(request, 'No license found.')
-                return redirect('dashboard')
-            
-            settings, created = EASettings.objects.get_or_create(license=license)
-            
-            investment = Decimal(request.POST.get('investment_amount', 1000))
-            
-            # Validate minimum investment
-            if investment < 100:
-                messages.error(request, 'Minimum investment is $100')
-                return redirect('dashboard')
-            
-            # Save investment amount
-            settings.investment_amount = investment
-            
-            # Calculate settings based on investment
-            # YOU CAN MODIFY THIS LOGIC AS NEEDED
-            settings.lot_size = max(Decimal('0.01'), (investment / 10000).quantize(Decimal('0.01')))
-            settings.max_buy_orders = min(20, max(2, int(investment / 500)))
-            settings.max_sell_orders = min(20, max(2, int(investment / 500)))
-            settings.max_buy_be_recovery_orders = min(50, max(5, int(investment / 200)))
-            settings.max_sell_be_recovery_orders = min(50, max(5, int(investment / 200)))
-            
-            # Recovery lot settings
-            settings.buy_be_recovery_lot_min = settings.lot_size
-            settings.buy_be_recovery_lot_max = settings.lot_size * 5
-            settings.sell_be_recovery_lot_min = settings.lot_size
-            settings.sell_be_recovery_lot_max = settings.lot_size * 5
-            
-            settings.save()
-            
-            messages.success(request, f'Investment settings updated! Lot size: {settings.lot_size}, Max orders: {settings.max_buy_orders}')
-            
-        except Exception as e:
-            messages.error(request, f'Error updating settings: {str(e)}')
-    
-    return redirect('dashboard')
+# Investment update view removed - lot sizes are now calculated dynamically by EA
 
 
 @login_required(login_url='login')

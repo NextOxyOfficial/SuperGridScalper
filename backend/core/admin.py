@@ -29,7 +29,6 @@ class EASettingsInline(admin.StackedInline):
     verbose_name_plural = "⚙️ EA Settings"
     extra = 0
     fieldsets = (
-        ('💰 Investment & Risk', {'fields': (('investment_amount', 'lot_size'),)}),
         ('📈 BUY Grid', {'fields': (
             ('buy_range_start', 'buy_range_end'),
             ('buy_gap_pips', 'max_buy_orders'),
@@ -115,29 +114,32 @@ class LicenseAdmin(admin.ModelAdmin):
     status_display.short_description = 'Status'
 
     def investment_display(self, obj):
+        """Show account balance from trade data instead of investment amount"""
         try:
-            return f"${obj.ea_settings.investment_amount}"
+            td = obj.trade_data
+            return f"${td.account_balance:,.0f}"
         except:
             return "-"
-    investment_display.short_description = 'Investment'
+    investment_display.short_description = 'Balance'
 
     def trade_status(self, obj):
         try:
             td = obj.trade_data
             profit = td.account_profit
             color = 'green' if profit >= 0 else 'red'
+            profit_str = f"{profit:,.2f}"
             return format_html(
-                '<span style="color: {0};">${1}</span> <small>({2}B/{3}S)</small>',
-                color, f"{profit:,.2f}", td.total_buy_positions, td.total_sell_positions
+                '<span style="color: {};">${}</span> <small>({}B/{}S)</small>',
+                color, profit_str, td.total_buy_positions, td.total_sell_positions
             )
         except:
-            return format_html('<span style="color: gray;">No data</span>')
+            return format_html('<span style="color: gray;">{}</span>', 'No data')
     trade_status.short_description = 'Trading'
 
     def days_remaining_display(self, obj):
         days = obj.days_remaining()
         if days <= 0:
-            return format_html('<span style="color: red; font-weight: bold;">EXPIRED</span>')
+            return format_html('<span style="color: red; font-weight: bold;">{}</span>', 'EXPIRED')
         elif days <= 7:
             return format_html('<span style="color: orange; font-weight: bold;">{} days</span>', days)
         return format_html('<span style="color: green;">{} days</span>', days)
@@ -165,13 +167,13 @@ class LicenseVerificationLogAdmin(admin.ModelAdmin):
 
 @admin.register(EASettings)
 class EASettingsAdmin(admin.ModelAdmin):
-    list_display = ['get_mt5_account', 'symbol', 'lot_size', 'buy_gap_pips', 'buy_range_display', 'max_buy_orders', 'updated_at']
+    list_display = ['get_mt5_account', 'symbol', 'buy_gap_pips', 'buy_range_display', 'max_buy_orders', 'updated_at']
     list_filter = ['symbol']
     search_fields = ['license__license_key', 'license__mt5_account']
     list_editable = ['buy_gap_pips', 'max_buy_orders']  # Quick edit from list view
     
-    # Lot size is auto-calculated, so make it readonly
-    readonly_fields = ['lot_size', 'buy_be_recovery_lot_min', 'sell_be_recovery_lot_min', 'license', 'symbol']
+    # Recovery lot sizes are auto-calculated, so make them readonly
+    readonly_fields = ['buy_be_recovery_lot_min', 'sell_be_recovery_lot_min', 'license', 'symbol']
     
     # Disable adding new settings - they are created automatically when EA connects
     def has_add_permission(self, request):
@@ -181,10 +183,6 @@ class EASettingsAdmin(admin.ModelAdmin):
         ('License & Symbol (Read-only)', {
             'fields': ('license', 'symbol'),
             'description': 'Settings are created automatically when EA connects. Edit existing settings below.'
-        }),
-        ('💰 Lot Size (Auto-calculated)', {
-            'fields': ('lot_size',),
-            'description': 'Lot size: $100 = 0.06 lot (calculated from investment)'
         }),
         ('📈 BUY Grid Settings', {
             'fields': (
@@ -234,14 +232,7 @@ class EASettingsAdmin(admin.ModelAdmin):
         # Only apply defaults for NEW records, not when editing existing ones
         if not change:  # This is a new record
             obj.apply_symbol_defaults()
-        else:  # This is editing an existing record
-            # Only apply fixed lot sizes, keep user's custom settings
-            obj.investment_amount = obj.FIXED_INVESTMENT
-            obj.lot_size = obj.FIXED_LOT_SIZE
-            obj.buy_be_recovery_lot_min = obj.FIXED_RECOVERY_LOT_MIN
-            obj.sell_be_recovery_lot_min = obj.FIXED_RECOVERY_LOT_MIN
-            obj.buy_be_recovery_lot_max = obj.FIXED_RECOVERY_LOT_MAX
-            obj.sell_be_recovery_lot_max = obj.FIXED_RECOVERY_LOT_MAX
+        # No longer applying fixed lot sizes - they are now dynamic
         super().save_model(request, obj, form, change)
 
     def get_mt5_account(self, obj):

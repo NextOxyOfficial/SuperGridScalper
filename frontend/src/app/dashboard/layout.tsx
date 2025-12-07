@@ -15,24 +15,19 @@ function DashboardNav() {
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   };
 
-  const tabs = [
-    { name: 'Dashboard', href: '/dashboard' },
-    { name: 'Download EA', href: '/dashboard/download' },
-  ];
-
   // Simple nav for license selection page
   if (!selectedLicense && pathname === '/dashboard') {
     return (
-      <nav className="bg-gradient-to-r from-indigo-600 to-indigo-800 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+      <nav className="bg-gradient-to-r from-slate-900 via-purple-900 to-slate-900 border-b border-purple-500/20">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <Link href="/" className="text-white font-bold text-xl">
+            <Link href="/" className="text-white font-bold text-lg hover:text-purple-300 transition">
               SuperGrid Scalper
             </Link>
           </div>
-          <div className="flex items-center gap-4">
-            <p className="text-white text-sm hidden sm:block">{user?.email}</p>
-            <button onClick={logout} className="text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg">
+          <div className="flex items-center gap-3">
+            <span className="text-purple-300 text-sm hidden sm:block">{user?.email}</span>
+            <button onClick={logout} className="text-purple-300 hover:text-white text-sm px-3 py-1.5 hover:bg-purple-500/20 rounded-lg transition">
               Logout
             </button>
           </div>
@@ -41,65 +36,72 @@ function DashboardNav() {
     );
   }
 
-  return (
-    <>
-      <nav className="bg-gradient-to-r from-indigo-600 to-indigo-800 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => {
-                clearSelectedLicense();
-              }}
-              className="text-white/70 hover:text-white flex items-center gap-1"
-            >
-              ← Licenses
-            </button>
-            {selectedLicense && (
-              <>
-                <div className="h-6 w-px bg-white/20"></div>
-                <div>
-                  <h1 className="text-lg font-bold text-white">{selectedLicense.plan}</h1>
-                  <p className="text-xs text-indigo-200 font-mono">{selectedLicense.license_key?.slice(0, 15)}...</p>
-                </div>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden sm:block">
-              <p className="text-white text-sm">{user?.email}</p>
-              {selectedLicense && (
-                <p className="text-indigo-200 text-xs">{getDaysRemaining(selectedLicense)} days left</p>
-              )}
-            </div>
-            <button onClick={logout} className="text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg">
-              Logout
-            </button>
-          </div>
-        </div>
-      </nav>
+  const isDownloadPage = pathname === '/dashboard/download';
 
-      {selectedLicense && (
-        <div className="max-w-7xl mx-auto px-4 pt-8">
-          <div className="flex gap-2 mb-8 bg-white p-2 rounded-xl shadow-sm overflow-x-auto">
-            {tabs.map((tab) => {
-              const isActive = pathname === tab.href || 
-                (tab.href !== '/dashboard' && pathname.startsWith(tab.href));
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={`px-6 py-3 rounded-lg font-medium transition whitespace-nowrap ${
-                    isActive ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  {tab.name}
-                </Link>
-              );
-            })}
-          </div>
+  return (
+    <nav className="bg-gradient-to-r from-slate-900 via-purple-900 to-slate-900 border-b border-purple-500/20">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+        {/* Left: Back + License Info */}
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => clearSelectedLicense()}
+            className="text-purple-300 hover:text-white text-sm flex items-center gap-1 transition"
+          >
+            ← Back
+          </button>
+          {selectedLicense && (
+            <>
+              <div className="h-5 w-px bg-purple-500/30"></div>
+              <div className="flex items-center gap-3">
+                <span className="text-white font-semibold">{selectedLicense.plan}</span>
+                <span className="text-purple-400 text-xs font-mono hidden sm:inline bg-purple-500/10 px-2 py-0.5 rounded">
+                  {selectedLicense.license_key?.slice(0, 12)}...
+                </span>
+                <span className="bg-purple-500/20 text-purple-300 text-xs px-2 py-0.5 rounded-full border border-purple-500/30">
+                  {getDaysRemaining(selectedLicense)} days
+                </span>
+              </div>
+            </>
+          )}
         </div>
-      )}
-    </>
+
+        {/* Right: Nav Links + User */}
+        <div className="flex items-center gap-3">
+          {selectedLicense && (
+            <>
+              <Link
+                href="/dashboard"
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+                  !isDownloadPage 
+                    ? 'bg-purple-600 text-white' 
+                    : 'text-purple-300 hover:text-white hover:bg-purple-500/20'
+                }`}
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/dashboard/download"
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${
+                  isDownloadPage 
+                    ? 'bg-purple-600 text-white' 
+                    : 'text-purple-300 hover:text-white hover:bg-purple-500/20'
+                }`}
+              >
+                ↓ Download EA
+              </Link>
+              <div className="h-5 w-px bg-purple-500/30 mx-1"></div>
+            </>
+          )}
+          <span className="text-purple-300 text-sm hidden sm:inline">{user?.email}</span>
+          <button 
+            onClick={logout} 
+            className="text-purple-300 hover:text-white text-sm px-3 py-1.5 hover:bg-purple-500/20 rounded-lg transition"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+    </nav>
   );
 }
 

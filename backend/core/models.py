@@ -121,8 +121,7 @@ class EASettings(models.Model):
     license = models.ForeignKey(License, on_delete=models.CASCADE, related_name='ea_settings')
     symbol = models.CharField(max_length=20, choices=SYMBOL_CHOICES, default='XAUUSD', help_text="Trading symbol")
     
-    # Investment Amount (for calculation)
-    investment_amount = models.DecimalField(max_digits=15, decimal_places=2, default=100, help_text="Investment amount in USD")
+    # Investment amount removed - now using dynamic balance from TradeData
     
     # BUY Grid Range Settings
     buy_range_start = models.DecimalField(max_digits=10, decimal_places=2, default=100000, help_text="BUY Range Start Price")
@@ -154,8 +153,7 @@ class EASettings(models.Model):
     sell_max_sl_distance = models.DecimalField(max_digits=10, decimal_places=2, default=15.0, help_text="SELL Maximum SL distance from price (pips)")
     sell_trailing_step_pips = models.DecimalField(max_digits=10, decimal_places=2, default=0.5, help_text="SELL Minimum step to update SL (pips)")
     
-    # Lot & Risk (calculated based on investment)
-    lot_size = models.DecimalField(max_digits=10, decimal_places=2, default=0.05, help_text="Lot Size per order (auto-calculated)")
+    # Lot size removed - now calculated dynamically by EA based on account balance
     
     # Breakeven Trailing Settings (replaces Breakeven TP)
     enable_breakeven_trailing = models.BooleanField(default=True, help_text="Enable Breakeven Trailing for all trades")
@@ -184,12 +182,6 @@ class EASettings(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
-    # FIXED SETTINGS: $250 investment, 0.20 lot, 0.20 min recovery, 1000 max recovery
-    FIXED_LOT_SIZE = 0.20
-    FIXED_INVESTMENT = 250
-    FIXED_RECOVERY_LOT_MIN = 0.20
-    FIXED_RECOVERY_LOT_MAX = 1000
     
     # Default settings per symbol
     SYMBOL_DEFAULTS = {
@@ -248,13 +240,8 @@ class EASettings(models.Model):
         self.sell_trailing_start_pips = defaults['sell_trailing_start_pips']
         self.sell_initial_sl_pips = defaults['sell_initial_sl_pips']
         
-        # Apply FIXED lot sizes
-        self.investment_amount = self.FIXED_INVESTMENT
-        self.lot_size = self.FIXED_LOT_SIZE
-        self.buy_be_recovery_lot_min = self.FIXED_RECOVERY_LOT_MIN
-        self.sell_be_recovery_lot_min = self.FIXED_RECOVERY_LOT_MIN
-        self.buy_be_recovery_lot_max = self.FIXED_RECOVERY_LOT_MAX
-        self.sell_be_recovery_lot_max = self.FIXED_RECOVERY_LOT_MAX
+        # Apply default lot sizes (no longer fixed)
+        # Investment amount and lot sizes are now dynamic based on account balance
 
     def __str__(self):
         return f"{self.symbol} - {self.license.license_key[:12]}..."
@@ -290,6 +277,13 @@ class TradeData(models.Model):
     
     # Open Positions JSON (detailed)
     open_positions = models.JSONField(default=list, blank=True)
+    
+    # Pending Orders JSON
+    pending_orders = models.JSONField(default=list, blank=True)
+    total_pending_orders = models.IntegerField(default=0)
+    
+    # Trading Mode
+    trading_mode = models.CharField(max_length=50, default='Normal')
     
     # Timestamps
     last_update = models.DateTimeField(auto_now=True)

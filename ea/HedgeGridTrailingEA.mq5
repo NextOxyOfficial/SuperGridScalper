@@ -1,23 +1,85 @@
 //+------------------------------------------------------------------+
-//|                                      HedgeGridTrailingEA.mq5    |
-//|                    Hedging Grid with Trailing Stop EA (XAUUSD)  |
-//|                          Developed by Alimul Islam              |
-//|                          Contact: +8801957045438                |
+//|                                        HedgeGridTrailingEA.mq5   |
+//|                      Hedging Grid with Trailing Stop EA          |
+//|                          Developed by Alimul Islam               |
+//|                          Contact: +8801957045438                 |
 //+------------------------------------------------------------------+
 #property copyright "Developed by Alimul Islam"
 #property link      "+8801957045438"
-#property version   "2.0"
+#property version   "1.0"
 #property strict
 
 #include <Trade\Trade.mqh>
 
 CTrade trade;
 
-//--- License Input (Only visible setting)
+//--- License Settings
+input group "=== License Settings ==="
 input string    LicenseKey        = "";    // License Key
-input bool      SkipLicenseCheck  = false; // Skip License Check (for testing)
 
-//--- Server URL (Hardcoded - not visible to user)
+//--- Input Parameters
+input group "=== BUY Grid Range Settings ==="
+input double    BuyRangeStart     = 4400;      // BUY Range Start Price
+input double    BuyRangeEnd       = 4000;      // BUY Range End Price
+input double    BuyGapPips        = 3.0;       // BUY Gap between orders (Pips)
+input int       MaxBuyOrders      = 4;        // Maximum BUY orders at a time
+
+input group "=== BUY TP/SL/Trailing Settings ==="
+input double    BuyTakeProfitPips    = 50.0;   // BUY Take Profit (Pips, 0=disabled)
+input double    BuyStopLossPips      = 0.0;    // BUY Stop Loss (Pips, 0=disabled)
+input double    BuyTrailingStartPips = 3.0;    // BUY Start trailing after X pips profit
+input double    BuyInitialSLPips     = 2.0;    // BUY Initial SL distance when trailing starts
+input double    BuyTrailingRatio     = 0.5;    // BUY SL movement ratio (0.5 = 0.5 pip per 1 pip)
+input double    BuyMaxSLDistance     = 15.0;   // BUY Maximum SL distance from price (pips)
+input double    BuyTrailingStepPips  = 0.5;    // BUY Minimum step to update SL (pips)
+
+input group "=== SELL Grid Range Settings ==="
+input double    SellRangeStart    = 4400;      // SELL Range Start Price
+input double    SellRangeEnd      = 4000;      // SELL Range End Price
+input double    SellGapPips       = 3.0;       // SELL Gap between orders (Pips)
+input int       MaxSellOrders     = 4;        // Maximum SELL orders at a time
+
+input group "=== SELL TP/SL/Trailing Settings ==="
+input double    SellTakeProfitPips    = 50.0;  // SELL Take Profit (Pips, 0=disabled)
+input double    SellStopLossPips      = 0.0;   // SELL Stop Loss (Pips, 0=disabled)
+input double    SellTrailingStartPips = 3.0;   // SELL Start trailing after X pips profit
+input double    SellInitialSLPips     = 2.0;   // SELL Initial SL distance when trailing starts
+input double    SellTrailingRatio     = 0.5;   // SELL SL movement ratio (0.5 = 0.5 pip per 1 pip)
+input double    SellMaxSLDistance     = 15.0;  // SELL Maximum SL distance from price (pips)
+input double    SellTrailingStepPips  = 0.5;   // SELL Minimum step to update SL (pips)
+
+input group "=== Lot & Risk ==="
+input double    LotSize           = 0.25;      // Lot Size per order
+input bool      ManageAllTrades   = true;      // Manage ALL trades (ignore magic number)
+
+input group "=== BUY Breakeven Recovery (After Max Trades) ==="
+input bool      EnableBuyBERecovery       = true;    // Enable BUY Recovery Orders
+input double    BuyBERecoveryLotMin       = 0.25;    // BUY: Minimum lot for recovery
+input double    BuyBERecoveryLotMax       = 5.00;    // BUY: Maximum lot for recovery
+input double    BuyBERecoveryLotIncrease  = 10.0;    // BUY: Lot increase % per order
+input int       MaxBuyBERecoveryOrders    = 30;      // BUY: Max recovery orders
+// Note: Recovery gap uses same BuyGapPips as grid orders
+
+input group "=== SELL Breakeven Recovery (After Max Trades) ==="
+input bool      EnableSellBERecovery      = true;    // Enable SELL Recovery Orders
+input double    SellBERecoveryLotMin      = 0.25;    // SELL: Minimum lot for recovery
+input double    SellBERecoveryLotMax      = 5.00;    // SELL: Maximum lot for recovery
+input double    SellBERecoveryLotIncrease = 10.0;    // SELL: Lot increase % per order
+input int       MaxSellBERecoveryOrders   = 30;      // SELL: Max recovery orders
+// Note: Recovery gap uses same SellGapPips as grid orders
+
+input group "=== Recovery Mode Trailing Settings ==="
+input double    RecoveryTakeProfitPips    = 100.0;   // Recovery TP (pips)
+input double    RecoveryTrailingStartPips = 1.0;     // Recovery: Start trailing after X pips profit
+input double    RecoveryTrailingRatio     = 0.5;     // Recovery: SL movement ratio (0.5 pip per 1 pip)
+input double    RecoveryMaxSLDistance     = 12.0;    // Recovery: Maximum SL distance (pips)
+input double    RecoveryInitialSLPips     = 1.0;     // Recovery: Initial SL when trailing starts
+
+input group "=== EA Settings ==="
+input int       MagicNumber       = 999888;    // Magic Number
+input string    OrderComment      = "HedgeGrid"; // Order Comment
+
+//--- Server URL (Hidden from user)
 string    LicenseServer     = "http://127.0.0.1:8000";
 
 //--- License Status (Global)
@@ -26,79 +88,12 @@ string g_LicenseMessage = "";
 int g_DaysRemaining = 0;
 string g_PlanName = "";
 datetime g_LastVerification = 0;
-bool g_SettingsLoaded = false;
-
-//--- All Settings Loaded from Server (Hidden from user)
-// BUY Grid Range Settings
-double    BuyRangeStart     = 0;
-double    BuyRangeEnd       = 0;
-double    BuyGapPips        = 0;
-int       MaxBuyOrders      = 0;
-
-// BUY TP/SL/Trailing Settings
-double    BuyTakeProfitPips    = 0;
-double    BuyStopLossPips      = 0;
-double    BuyTrailingStartPips = 0;
-double    BuyInitialSLPips     = 0;
-double    BuyTrailingRatio     = 0;
-double    BuyMaxSLDistance     = 0;
-double    BuyTrailingStepPips  = 0;
-
-// SELL Grid Range Settings
-double    SellRangeStart    = 0;
-double    SellRangeEnd      = 0;
-double    SellGapPips       = 0;
-int       MaxSellOrders     = 0;
-
-// SELL TP/SL/Trailing Settings
-double    SellTakeProfitPips    = 0;
-double    SellStopLossPips      = 0;
-double    SellTrailingStartPips = 0;
-double    SellInitialSLPips     = 0;
-double    SellTrailingRatio     = 0;
-double    SellMaxSLDistance     = 0;
-double    SellTrailingStepPips  = 0;
-
-// FIXED Lot & Risk Settings ($250 investment)
-double    LotSize           = 0.20;  // FIXED: 0.20 lot
-
-// Breakeven Trailing Settings (replaces Breakeven TP)
-bool      EnableBreakevenTrailing     = true;
-double    BreakevenBuyTrailingPips    = 2;     // Pips above avg price to start trailing
-double    BreakevenSellTrailingPips   = 2;     // Pips below avg price to start trailing
-double    BreakevenTrailingStartPips  = 10;    // Start trailing after X pips profit
-double    BreakevenInitialSLPips      = 5;     // Initial SL distance when trailing starts
-double    BreakevenTrailingRatio      = 0.5;   // SL movement ratio (0.5 = move SL 50% of price movement)
-double    BreakevenMaxSLDistance      = 15;    // Maximum SL distance from current price
-double    BreakevenTrailingStepPips   = 0.5;   // Minimum step to update SL
-bool      ManageAllTrades             = true;
-
-// BUY Breakeven Recovery - FIXED settings
-bool      EnableBuyBERecovery       = true;
-double    BuyBERecoveryLotMin       = 0.20;   // FIXED: 0.20 min
-double    BuyBERecoveryLotMax       = 1000;   // FIXED: 1000 max
-double    BuyBERecoveryLotIncrease  = 10.0;
-int       MaxBuyBERecoveryOrders    = 30;
-
-// SELL Breakeven Recovery - FIXED settings
-bool      EnableSellBERecovery      = true;
-double    SellBERecoveryLotMin      = 0.20;   // FIXED: 0.20 min
-double    SellBERecoveryLotMax      = 1000;   // FIXED: 1000 max
-double    SellBERecoveryLotIncrease = 10.0;
-int       MaxSellBERecoveryOrders   = 30;
-
-// EA Internal Settings
-int       MagicNumber       = 999888;  // Gold EA magic number
-string    OrderComment      = "SGS";
+datetime g_LastLicenseCheck = 0;
+int LICENSE_CHECK_INTERVAL = 3600; // Check license every hour (3600 seconds)
 
 //--- Global Variables
 double pip = 1.0;
-datetime lastCheckTime = 0;
 double normalizedLotSize = 0.0;
-datetime g_LastLicenseCheck = 0;
-datetime g_LastTradeDataUpdate = 0;
-int LICENSE_CHECK_INTERVAL = 3600; // Check license every hour (3600 seconds)
-int TRADE_DATA_UPDATE_INTERVAL = 5; // Send trade data every 5 seconds
 
 // Virtual grid tracking (no pending orders)
 double nextBuyPrice = 0;
@@ -114,9 +109,280 @@ int prevSellCount = 0;
 double nextBuyBERecoveryPrice = 0;
 double nextSellBERecoveryPrice = 0;
 
-// Track logged position tickets to avoid duplicate logs
-ulong g_LoggedPositions[];
-int g_LoggedPositionsCount = 0;
+// Trading Log
+#define MAX_LOG_ENTRIES 10
+string g_TradingLog[MAX_LOG_ENTRIES];
+int g_LogCount = 0;
+
+//+------------------------------------------------------------------+
+//| Add entry to trading log                                          |
+//+------------------------------------------------------------------+
+void AddToLog(string message, string logType = "INFO")
+{
+    // Shift existing entries down
+    for(int i = MAX_LOG_ENTRIES - 1; i > 0; i--)
+    {
+        g_TradingLog[i] = g_TradingLog[i-1];
+    }
+    
+    // Add new entry at top with timestamp
+    string timeStr = TimeToString(TimeCurrent(), TIME_MINUTES|TIME_SECONDS);
+    g_TradingLog[0] = timeStr + " | " + message;
+    
+    if(g_LogCount < MAX_LOG_ENTRIES) g_LogCount++;
+    
+    // Also print to Experts tab
+    Print(message);
+    
+    // Send log to backend server
+    SendLogToServer(message, logType);
+}
+
+//+------------------------------------------------------------------+
+//| Send log entry to backend server                                  |
+//+------------------------------------------------------------------+
+void SendLogToServer(string message, string logType)
+{
+    // Skip if no license key
+    if(StringLen(LicenseKey) == 0) return;
+    
+    // Build JSON request
+    string jsonRequest = "{";
+    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
+    jsonRequest += "\"log_type\":\"" + logType + "\",";
+    jsonRequest += "\"message\":\"" + message + "\",";
+    jsonRequest += "\"details\":{\"symbol\":\"" + _Symbol + "\",\"account\":\"" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + "\"}";
+    jsonRequest += "}";
+    
+    // Prepare request
+    string url = LicenseServer + "/api/action-log/";
+    string headers = "Content-Type: application/json\r\n";
+    char postData[];
+    char result[];
+    string resultHeaders;
+    
+    // Convert string to char array
+    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
+    
+    // Make HTTP request (async - don't wait for response)
+    int timeout = 1000; // 1 second timeout
+    WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
+}
+
+//+------------------------------------------------------------------+
+//| Send trade data to backend server                                 |
+//+------------------------------------------------------------------+
+datetime g_LastTradeDataUpdate = 0;
+
+void SendTradeDataToServer()
+{
+    // Skip if no license key
+    if(StringLen(LicenseKey) == 0) 
+    {
+        Print("Trade data not sent: No license key");
+        return;
+    }
+    
+    // Only send every 5 seconds to avoid overloading
+    if(TimeCurrent() - g_LastTradeDataUpdate < 5) return;
+    g_LastTradeDataUpdate = TimeCurrent();
+    
+    Print("Sending trade data to server...");
+    
+    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+    
+    // Build positions array
+    string positionsJson = "[";
+    int posCount = 0;
+    int total = PositionsTotal();
+    
+    double totalBuyLots = 0, totalSellLots = 0;
+    double totalBuyProfit = 0, totalSellProfit = 0;
+    int buyCount = 0, sellCount = 0;
+    
+    for(int i = 0; i < total; i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(!ManageAllTrades && PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        double lots = PositionGetDouble(POSITION_VOLUME);
+        double profit = PositionGetDouble(POSITION_PROFIT);
+        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+        double sl = PositionGetDouble(POSITION_SL);
+        double tp = PositionGetDouble(POSITION_TP);
+        
+        if(posType == POSITION_TYPE_BUY)
+        {
+            buyCount++;
+            totalBuyLots += lots;
+            totalBuyProfit += profit;
+        }
+        else
+        {
+            sellCount++;
+            totalSellLots += lots;
+            totalSellProfit += profit;
+        }
+        
+        if(posCount > 0) positionsJson += ",";
+        positionsJson += "{";
+        positionsJson += "\"ticket\":" + IntegerToString(ticket) + ",";
+        positionsJson += "\"type\":\"" + (posType == POSITION_TYPE_BUY ? "BUY" : "SELL") + "\",";
+        positionsJson += "\"lots\":" + DoubleToString(lots, 2) + ",";
+        positionsJson += "\"open_price\":" + DoubleToString(openPrice, digits) + ",";
+        positionsJson += "\"sl\":" + DoubleToString(sl, digits) + ",";
+        positionsJson += "\"tp\":" + DoubleToString(tp, digits) + ",";
+        positionsJson += "\"profit\":" + DoubleToString(profit, 2);
+        positionsJson += "}";
+        posCount++;
+    }
+    positionsJson += "]";
+    
+    // Build pending orders array
+    string pendingJson = "[";
+    int pendingCount = 0;
+    int totalOrders = OrdersTotal();
+    
+    for(int i = 0; i < totalOrders; i++)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(!ManageAllTrades && OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        double lots = OrderGetDouble(ORDER_VOLUME_CURRENT);
+        double price = OrderGetDouble(ORDER_PRICE_OPEN);
+        double sl = OrderGetDouble(ORDER_SL);
+        double tp = OrderGetDouble(ORDER_TP);
+        
+        string typeStr = "";
+        if(orderType == ORDER_TYPE_BUY_LIMIT) typeStr = "BUY_LIMIT";
+        else if(orderType == ORDER_TYPE_SELL_LIMIT) typeStr = "SELL_LIMIT";
+        else if(orderType == ORDER_TYPE_BUY_STOP) typeStr = "BUY_STOP";
+        else if(orderType == ORDER_TYPE_SELL_STOP) typeStr = "SELL_STOP";
+        else continue;
+        
+        if(pendingCount > 0) pendingJson += ",";
+        pendingJson += "{";
+        pendingJson += "\"ticket\":" + IntegerToString(ticket) + ",";
+        pendingJson += "\"type\":\"" + typeStr + "\",";
+        pendingJson += "\"lots\":" + DoubleToString(lots, 2) + ",";
+        pendingJson += "\"price\":" + DoubleToString(price, digits) + ",";
+        pendingJson += "\"sl\":" + DoubleToString(sl, digits) + ",";
+        pendingJson += "\"tp\":" + DoubleToString(tp, digits);
+        pendingJson += "}";
+        pendingCount++;
+    }
+    pendingJson += "]";
+    
+    // Build main JSON request
+    string jsonRequest = "{";
+    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
+    jsonRequest += "\"account_balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + ",";
+    jsonRequest += "\"account_equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + ",";
+    jsonRequest += "\"account_profit\":" + DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2) + ",";
+    jsonRequest += "\"account_margin\":" + DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN), 2) + ",";
+    jsonRequest += "\"account_free_margin\":" + DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2) + ",";
+    jsonRequest += "\"total_buy_positions\":" + IntegerToString(buyCount) + ",";
+    jsonRequest += "\"total_sell_positions\":" + IntegerToString(sellCount) + ",";
+    jsonRequest += "\"total_buy_lots\":" + DoubleToString(totalBuyLots, 2) + ",";
+    jsonRequest += "\"total_sell_lots\":" + DoubleToString(totalSellLots, 2) + ",";
+    jsonRequest += "\"total_buy_profit\":" + DoubleToString(totalBuyProfit, 2) + ",";
+    jsonRequest += "\"total_sell_profit\":" + DoubleToString(totalSellProfit, 2) + ",";
+    jsonRequest += "\"total_pending_orders\":" + IntegerToString(pendingCount) + ",";
+    
+    // Determine trading mode
+    bool buyInRecovery = (EnableBuyBERecovery && currentBuyCount >= MaxBuyOrders);
+    bool sellInRecovery = (EnableSellBERecovery && currentSellCount >= MaxSellOrders);
+    string tradingMode = "Normal";
+    if(buyInRecovery && sellInRecovery) tradingMode = "Recovery (BUY+SELL)";
+    else if(buyInRecovery) tradingMode = "Sell Recovery Mode Activated";
+    else if(sellInRecovery) tradingMode = "Buy Recovery Mode Activated!";
+    jsonRequest += "\"trading_mode\":\"" + tradingMode + "\",";
+    
+    jsonRequest += "\"symbol\":\"" + _Symbol + "\",";
+    jsonRequest += "\"current_price\":" + DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_BID), digits) + ",";
+    jsonRequest += "\"open_positions\":" + positionsJson + ",";
+    jsonRequest += "\"pending_orders\":" + pendingJson;
+    jsonRequest += "}";
+    
+    // Prepare request
+    string url = LicenseServer + "/api/trade-data/update/";
+    string headers = "Content-Type: application/json\r\n";
+    char postData[];
+    char result[];
+    string resultHeaders;
+    
+    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
+    
+    int timeout = 2000;
+    int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
+    
+    // Debug: Log response status
+    if(response != 200)
+    {
+        Print("Trade data send failed: HTTP ", response, " | URL: ", url);
+    }
+    else
+    {
+        string responseStr = CharArrayToString(result);
+        if(StringFind(responseStr, "success") < 0)
+        {
+            Print("Trade data send error: ", responseStr);
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Update trading log display on chart                               |
+//+------------------------------------------------------------------+
+void UpdateTradingLogDisplay()
+{
+    int startY = 400; // Starting Y position
+    int xPos = 10;    // X position (left side)
+    
+    // Create header
+    string headerName = "EA_LogHeader";
+    ObjectCreate(0, headerName, OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, headerName, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, headerName, OBJPROP_XDISTANCE, xPos);
+    ObjectSetInteger(0, headerName, OBJPROP_YDISTANCE, startY);
+    ObjectSetString(0, headerName, OBJPROP_TEXT, "═══ TRADING LOG ═══");
+    ObjectSetInteger(0, headerName, OBJPROP_COLOR, clrGold);
+    ObjectSetInteger(0, headerName, OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, headerName, OBJPROP_FONT, "Consolas");
+    
+    startY += 16;
+    
+    // Display log entries
+    for(int i = 0; i < MAX_LOG_ENTRIES; i++)
+    {
+        string objName = "EA_Log_" + IntegerToString(i);
+        ObjectCreate(0, objName, OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, objName, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, objName, OBJPROP_XDISTANCE, xPos);
+        ObjectSetInteger(0, objName, OBJPROP_YDISTANCE, startY + (i * 14));
+        
+        string logText = (i < g_LogCount) ? g_TradingLog[i] : "";
+        ObjectSetString(0, objName, OBJPROP_TEXT, logText);
+        
+        // Color based on content
+        color logColor = clrWhite;
+        if(StringFind(logText, "BUY") >= 0) logColor = clrLime;
+        else if(StringFind(logText, "SELL") >= 0) logColor = clrCoral;
+        else if(StringFind(logText, "TRAIL") >= 0) logColor = clrYellow;
+        else if(StringFind(logText, "FAILED") >= 0 || StringFind(logText, "ERROR") >= 0) logColor = clrRed;
+        else if(StringFind(logText, "TP HIT") >= 0 || StringFind(logText, "PROFIT") >= 0) logColor = clrAqua;
+        
+        ObjectSetInteger(0, objName, OBJPROP_COLOR, logColor);
+        ObjectSetInteger(0, objName, OBJPROP_FONTSIZE, 8);
+        ObjectSetString(0, objName, OBJPROP_FONT, "Consolas");
+    }
+}
 
 //+------------------------------------------------------------------+
 //| License Verification Function                                     |
@@ -224,234 +490,6 @@ bool VerifyLicense()
 }
 
 //+------------------------------------------------------------------+
-//| Load EA Settings from Server                                       |
-//+------------------------------------------------------------------+
-bool LoadSettingsFromServer()
-{
-    // Get MT5 account number
-    long accountNumber = AccountInfoInteger(ACCOUNT_LOGIN);
-    string mt5Account = IntegerToString(accountNumber);
-    
-    // Build JSON request - include symbol for symbol-specific settings
-    string jsonRequest = "{";
-    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
-    jsonRequest += "\"mt5_account\":\"" + mt5Account + "\",";
-    jsonRequest += "\"symbol\":\"" + _Symbol + "\"";  // Send current symbol
-    jsonRequest += "}";
-    
-    // Prepare request
-    string url = LicenseServer + "/api/settings/";
-    string headers = "Content-Type: application/json\r\n";
-    char postData[];
-    char result[];
-    string resultHeaders;
-    
-    // Convert string to char array
-    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
-    
-    // Make HTTP request
-    ResetLastError();
-    int timeout = 5000;
-    int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
-    
-    if(response == -1)
-    {
-        int err = GetLastError();
-        Print("ERROR: Failed to load settings from server. Error: ", err);
-        Print("Make sure ", url, " is added to Tools > Options > Expert Advisors > Allow WebRequest");
-        return false;
-    }
-    
-    // Parse response
-    string responseStr = CharArrayToString(result);
-    Print("Server response: ", StringSubstr(responseStr, 0, 200));  // Debug: show first 200 chars
-    
-    // Check if successful
-    if(StringFind(responseStr, "\"success\": true") < 0 && StringFind(responseStr, "\"success\":true") < 0)
-    {
-        Print("Settings load failed. Response: ", responseStr);
-        return false;
-    }
-    
-    // Parse settings - BUY Grid
-    BuyRangeStart = ExtractDoubleValue(responseStr, "buy_range_start");
-    BuyRangeEnd = ExtractDoubleValue(responseStr, "buy_range_end");
-    BuyGapPips = ExtractDoubleValue(responseStr, "buy_gap_pips");
-    MaxBuyOrders = (int)ExtractDoubleValue(responseStr, "max_buy_orders");
-    
-    Print("PARSED: BuyRange=", BuyRangeEnd, "-", BuyRangeStart, " | Gap=", BuyGapPips, " | MaxBuy=", MaxBuyOrders);
-    
-    // BUY TP/SL/Trailing
-    BuyTakeProfitPips = ExtractDoubleValue(responseStr, "buy_take_profit_pips");
-    BuyStopLossPips = ExtractDoubleValue(responseStr, "buy_stop_loss_pips");
-    BuyTrailingStartPips = ExtractDoubleValue(responseStr, "buy_trailing_start_pips");
-    BuyInitialSLPips = ExtractDoubleValue(responseStr, "buy_initial_sl_pips");
-    BuyTrailingRatio = ExtractDoubleValue(responseStr, "buy_trailing_ratio");
-    BuyMaxSLDistance = ExtractDoubleValue(responseStr, "buy_max_sl_distance");
-    BuyTrailingStepPips = ExtractDoubleValue(responseStr, "buy_trailing_step_pips");
-    
-    // SELL Grid
-    SellRangeStart = ExtractDoubleValue(responseStr, "sell_range_start");
-    SellRangeEnd = ExtractDoubleValue(responseStr, "sell_range_end");
-    SellGapPips = ExtractDoubleValue(responseStr, "sell_gap_pips");
-    MaxSellOrders = (int)ExtractDoubleValue(responseStr, "max_sell_orders");
-    
-    // SELL TP/SL/Trailing
-    SellTakeProfitPips = ExtractDoubleValue(responseStr, "sell_take_profit_pips");
-    SellStopLossPips = ExtractDoubleValue(responseStr, "sell_stop_loss_pips");
-    SellTrailingStartPips = ExtractDoubleValue(responseStr, "sell_trailing_start_pips");
-    SellInitialSLPips = ExtractDoubleValue(responseStr, "sell_initial_sl_pips");
-    SellTrailingRatio = ExtractDoubleValue(responseStr, "sell_trailing_ratio");
-    SellMaxSLDistance = ExtractDoubleValue(responseStr, "sell_max_sl_distance");
-    SellTrailingStepPips = ExtractDoubleValue(responseStr, "sell_trailing_step_pips");
-    
-    // Lot & Risk
-    LotSize = ExtractDoubleValue(responseStr, "lot_size");
-    Print("PARSED: LotSize=", LotSize);
-    
-    // Breakeven Trailing (replaces Breakeven TP)
-    EnableBreakevenTrailing = ExtractBoolValue(responseStr, "enable_breakeven_trailing");
-    BreakevenBuyTrailingPips = ExtractDoubleValue(responseStr, "breakeven_buy_trailing_pips");
-    BreakevenSellTrailingPips = ExtractDoubleValue(responseStr, "breakeven_sell_trailing_pips");
-    BreakevenTrailingStartPips = ExtractDoubleValue(responseStr, "breakeven_trailing_start_pips");
-    BreakevenInitialSLPips = ExtractDoubleValue(responseStr, "breakeven_initial_sl_pips");
-    BreakevenTrailingRatio = ExtractDoubleValue(responseStr, "breakeven_trailing_ratio");
-    BreakevenMaxSLDistance = ExtractDoubleValue(responseStr, "breakeven_max_sl_distance");
-    BreakevenTrailingStepPips = ExtractDoubleValue(responseStr, "breakeven_trailing_step_pips");
-    ManageAllTrades = ExtractBoolValue(responseStr, "manage_all_trades");
-    
-    // BUY Recovery
-    EnableBuyBERecovery = ExtractBoolValue(responseStr, "enable_buy_be_recovery");
-    BuyBERecoveryLotMin = ExtractDoubleValue(responseStr, "buy_be_recovery_lot_min");
-    BuyBERecoveryLotMax = ExtractDoubleValue(responseStr, "buy_be_recovery_lot_max");
-    BuyBERecoveryLotIncrease = ExtractDoubleValue(responseStr, "buy_be_recovery_lot_increase");
-    MaxBuyBERecoveryOrders = (int)ExtractDoubleValue(responseStr, "max_buy_be_recovery_orders");
-    
-    // SELL Recovery
-    EnableSellBERecovery = ExtractBoolValue(responseStr, "enable_sell_be_recovery");
-    SellBERecoveryLotMin = ExtractDoubleValue(responseStr, "sell_be_recovery_lot_min");
-    SellBERecoveryLotMax = ExtractDoubleValue(responseStr, "sell_be_recovery_lot_max");
-    SellBERecoveryLotIncrease = ExtractDoubleValue(responseStr, "sell_be_recovery_lot_increase");
-    MaxSellBERecoveryOrders = (int)ExtractDoubleValue(responseStr, "max_sell_be_recovery_orders");
-    
-    g_SettingsLoaded = true;
-    
-    // IMPORTANT: Recalculate normalizedLotSize with the new LotSize from server
-    double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-    double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-    double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-    
-    if(lotStep <= 0) lotStep = 0.01;
-    
-    normalizedLotSize = MathFloor(LotSize / lotStep) * lotStep;
-    if(normalizedLotSize < minLot) normalizedLotSize = minLot;
-    if(normalizedLotSize > maxLot) normalizedLotSize = maxLot;
-    
-    Print("==============================================");
-    Print("=== SETTINGS LOADED FROM SERVER ===");
-    Print("Symbol: ", _Symbol, " | Pip: ", pip);
-    Print("BUY Range: ", BuyRangeStart, " - ", BuyRangeEnd);
-    Print("BUY Gap: ", BuyGapPips, " pips (", BuyGapPips * pip, " price)");
-    Print("SELL Range: ", SellRangeStart, " - ", SellRangeEnd);
-    Print("SELL Gap: ", SellGapPips, " pips (", SellGapPips * pip, " price)");
-    Print("LotSize from server: ", LotSize, " | Normalized: ", normalizedLotSize);
-    Print("MaxBuy: ", MaxBuyOrders, " | MaxSell: ", MaxSellOrders);
-    Print("BUY TP: ", BuyTakeProfitPips, " pips | BUY SL: ", BuyStopLossPips, " pips");
-    Print("SELL TP: ", SellTakeProfitPips, " pips | SELL SL: ", SellStopLossPips, " pips");
-    Print("ManageAllTrades: ", ManageAllTrades ? "YES" : "NO");
-    Print("==============================================");
-    
-    SendActionLog("MODE", "Settings loaded | Lot: " + DoubleToString(normalizedLotSize, 2) + " | Gap: " + DoubleToString(BuyGapPips, 0) + " pips | Range: " + DoubleToString(BuyRangeEnd, 0) + "-" + DoubleToString(BuyRangeStart, 0));
-    
-    return true;
-}
-
-//+------------------------------------------------------------------+
-//| Send Action Log to Server                                          |
-//+------------------------------------------------------------------+
-void SendActionLog(string logType, string message, string details = "{}")
-{
-    // Skip in Strategy Tester (WebRequest disabled)
-    if(MQLInfoInteger(MQL_TESTER))
-        return;
-    
-    string jsonRequest = "{";
-    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
-    jsonRequest += "\"log_type\":\"" + logType + "\",";
-    jsonRequest += "\"message\":\"" + message + "\",";
-    jsonRequest += "\"details\":" + details;
-    jsonRequest += "}";
-    
-    string url = LicenseServer + "/api/action-log/";
-    string headers = "Content-Type: application/json\r\n";
-    char postData[];
-    char result[];
-    string resultHeaders;
-    
-    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
-    
-    ResetLastError();
-    WebRequest("POST", url, headers, 1000, postData, result, resultHeaders);
-}
-
-//+------------------------------------------------------------------+
-//| Log Trading Event (Real-time logging)                              |
-//+------------------------------------------------------------------+
-void LogEvent(string eventType, string message)
-{
-    string timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
-    string logLine = "[" + timestamp + "] [" + eventType + "] " + message;
-    Print(logLine);
-    
-    // Also send to server (will be skipped in tester)
-    SendActionLog(eventType, message);
-}
-
-//+------------------------------------------------------------------+
-//| Extract double value from JSON                                     |
-//+------------------------------------------------------------------+
-double ExtractDoubleValue(string json, string key)
-{
-    string searchKey = "\"" + key + "\"";
-    int keyPos = StringFind(json, searchKey);
-    if(keyPos < 0) return 0;
-    
-    int colonPos = StringFind(json, ":", keyPos);
-    if(colonPos < 0) return 0;
-    
-    int endPos = StringFind(json, ",", colonPos);
-    if(endPos < 0) endPos = StringFind(json, "}", colonPos);
-    
-    string valueStr = StringSubstr(json, colonPos + 1, endPos - colonPos - 1);
-    StringTrimLeft(valueStr);
-    StringTrimRight(valueStr);
-    
-    return StringToDouble(valueStr);
-}
-
-//+------------------------------------------------------------------+
-//| Extract bool value from JSON                                       |
-//+------------------------------------------------------------------+
-bool ExtractBoolValue(string json, string key)
-{
-    string searchKey = "\"" + key + "\"";
-    int keyPos = StringFind(json, searchKey);
-    if(keyPos < 0) return false;
-    
-    int colonPos = StringFind(json, ":", keyPos);
-    if(colonPos < 0) return false;
-    
-    int endPos = StringFind(json, ",", colonPos);
-    if(endPos < 0) endPos = StringFind(json, "}", colonPos);
-    
-    string valueStr = StringSubstr(json, colonPos + 1, endPos - colonPos - 1);
-    StringTrimLeft(valueStr);
-    StringTrimRight(valueStr);
-    
-    return (valueStr == "true" || valueStr == "True" || valueStr == "1");
-}
-
-//+------------------------------------------------------------------+
 //| Create License Status Panel on Chart (Top Right Corner)           |
 //+------------------------------------------------------------------+
 void CreateLicenseLabel()
@@ -459,10 +497,7 @@ void CreateLicenseLabel()
     // Delete old license objects
     ObjectDelete(0, "EA_LicenseTitle");
     ObjectDelete(0, "EA_LicenseStatus");
-    ObjectDelete(0, "EA_LicensePlan");
-    ObjectDelete(0, "EA_LicenseDays");
     ObjectDelete(0, "EA_LicenseAccount");
-    ObjectDelete(0, "EA_LicenseKey");
     
     int xPos = 10;
     int yStart = 20;
@@ -481,7 +516,7 @@ void CreateLicenseLabel()
         ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_YDISTANCE, yStart);
         ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_FONTSIZE, 9);
         ObjectSetString(0, "EA_LicenseTitle", OBJPROP_FONT, "Arial Bold");
-        ObjectSetString(0, "EA_LicenseTitle", OBJPROP_TEXT, "SUPER GRID SCALPER");
+        ObjectSetString(0, "EA_LicenseTitle", OBJPROP_TEXT, "HEDGE GRID SCALPER");
         ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_COLOR, clrGold);
         ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
         
@@ -558,157 +593,71 @@ int OnInit()
 {
     trade.SetExpertMagicNumber(MagicNumber);
     
-    // === DETECT PIP VALUE FIRST (before loading settings) ===
+    // Auto-detect pip value based on symbol digits
+    // For XAUUSD: price 4000.00 (2 digits) -> 1 pip = 1.0 (4000 to 4001 = 1 pip)
+    // For XAUUSD: price 4000.00 (2 digits) -> 1 pip = 0.1 if broker uses 2 decimal places for cents
+    // For Forex: EURUSD 1.12345 (5 digits) -> 1 pip = 0.0001
+    // For JPY pairs: USDJPY 150.123 (3 digits) -> 1 pip = 0.01
+    
     int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
     string symbolName = _Symbol;
     
+    // Check if it's a gold/metal symbol
     if(StringFind(symbolName, "XAU") >= 0 || StringFind(symbolName, "GOLD") >= 0)
     {
-        pip = 1.0;  // Gold: 2600 -> 2601 = 1 pip
-        Print("Gold detected: pip = 1.0");
+        // For Gold: 1 pip = 1.0 (4000 to 4001 = 1 pip)
+        pip = 1.0;
     }
-    else if(StringFind(symbolName, "BTC") >= 0)
+    else if(StringFind(symbolName, "XAG") >= 0 || StringFind(symbolName, "SILVER") >= 0)
     {
-        pip = 10.0;
+        // For Silver: 1 pip = 0.01
+        pip = 0.01;
     }
     else if(digits == 2)
     {
+        // 2 decimal places (like some indices or metals): 1 pip = 1.0
         pip = 1.0;
     }
     else if(digits == 3)
     {
+        // 3 decimal places (JPY pairs): 1 pip = 0.01
         pip = 0.01;
+    }
+    else if(digits == 4)
+    {
+        // 4 decimal places: 1 pip = 0.0001
+        pip = 0.0001;
     }
     else if(digits == 5)
     {
+        // 5 decimal places (most forex): 1 pip = 0.0001 (last digit is pipette)
         pip = 0.0001;
     }
     else
     {
-        pip = 1.0;  // Default for Gold EA
+        // Default fallback based on digits
+        pip = MathPow(10, -(digits - 1));
     }
     
-    Print("Symbol: ", _Symbol, " | Digits: ", digits, " | Pip: ", pip);
+    Print("Symbol: ", symbolName, " | Digits: ", digits, " | Pip Value: ", DoubleToString(pip, digits));
     
-    // Check if running in Strategy Tester
-    bool isTesting = MQLInfoInteger(MQL_TESTER);
+    // === MANDATORY LICENSE VERIFICATION ===
+    Print("=== Verifying License ===");
     
-    if(isTesting)
+    if(!VerifyLicense())
     {
-        Print("=== RUNNING IN STRATEGY TESTER ===");
-        Print("WebRequest is disabled in tester. Using optimized settings.");
-        
-        // Set default values for testing
-        g_LicenseValid = true;
-        g_LicenseMessage = "TESTER MODE - No license check";
-        g_SettingsLoaded = true;
-        
-        // BUY Grid Settings (Optimized for XAUUSD)
-        BuyRangeStart = 3400;        // BUY Range Start Price
-        BuyRangeEnd = 2600;          // BUY Range End Price
-        BuyGapPips = 3.0;            // BUY Gap between orders (Pips)
-        MaxBuyOrders = 5;            // Maximum BUY orders at a time
-        
-        // BUY TP/SL/Trailing Settings
-        BuyTakeProfitPips = 50.0;    // BUY Take Profit (Pips)
-        BuyStopLossPips = 0.0;       // BUY Stop Loss (Pips, 0=disabled)
-        BuyTrailingStartPips = 10.0;  // BUY Start trailing after X pips profit
-        BuyInitialSLPips = 5.0;      // BUY Initial SL distance when trailing starts
-        BuyTrailingRatio = 0.5;      // BUY SL movement ratio
-        BuyMaxSLDistance = 15.0;     // BUY Maximum SL distance from price
-        BuyTrailingStepPips = 0.5;   // BUY Minimum step to update SL
-        
-        // SELL Grid Settings (Optimized for XAUUSD)
-        SellRangeStart = 2600;       // SELL Range Start Price
-        SellRangeEnd = 3400;         // SELL Range End Price
-        SellGapPips = 3.0;           // SELL Gap between orders (Pips)
-        MaxSellOrders = 5;           // Maximum SELL orders at a time
-        
-        // SELL TP/SL/Trailing Settings
-        SellTakeProfitPips = 50.0;   // SELL Take Profit (Pips)
-        SellStopLossPips = 0.0;      // SELL Stop Loss (Pips, 0=disabled)
-        SellTrailingStartPips = 10.0; // SELL Start trailing after X pips profit
-        SellInitialSLPips = 5.0;     // SELL Initial SL distance when trailing starts
-        SellTrailingRatio = 0.5;     // SELL SL movement ratio
-        SellMaxSLDistance = 15.0;    // SELL Maximum SL distance from price
-        SellTrailingStepPips = 0.5;  // SELL Minimum step to update SL
-        
-        // Lot Size
-        LotSize = 0.20;              // Lot Size per order
-        
-        // Breakeven Trailing Settings
-        EnableBreakevenTrailing = true;       // Enable Breakeven Trailing for all trades
-        BreakevenBuyTrailingPips = 2.0;       // Breakeven trigger for BUY (pips above avg price)
-        BreakevenSellTrailingPips = 2.0;      // Breakeven trigger for SELL (pips below avg price)
-        BreakevenTrailingStartPips = 10.0;    // Start trailing after X pips profit
-        BreakevenInitialSLPips = 5.0;         // Initial SL distance when trailing starts
-        BreakevenTrailingRatio = 0.5;         // SL movement ratio
-        BreakevenMaxSLDistance = 15.0;        // Maximum SL distance from price
-        BreakevenTrailingStepPips = 0.5;      // Minimum step to update SL
-        ManageAllTrades = true;               // Manage ALL trades (ignore magic number)
-        
-        // BUY Recovery Settings
-        EnableBuyBERecovery = true;  // Enable BUY Recovery Orders
-        BuyBERecoveryLotMin = 0.20;   // BUY: Minimum lot for recovery
-        BuyBERecoveryLotMax = 1000;   // BUY: Maximum lot for recovery
-        BuyBERecoveryLotIncrease = 10.0; // BUY: Lot increase % per order
-        MaxBuyBERecoveryOrders = 30; // BUY: Max recovery orders
-        
-        // SELL Recovery Settings
-        EnableSellBERecovery = true; // Enable SELL Recovery Orders
-        SellBERecoveryLotMin = 0.20; // SELL: Minimum lot for recovery
-        SellBERecoveryLotMax = 1000;  // SELL: Maximum lot for recovery
-        SellBERecoveryLotIncrease = 10.0; // SELL: Lot increase % per order
-        MaxSellBERecoveryOrders = 30; // SELL: Max recovery orders
-        
-        Print("Test settings loaded: Lot=", LotSize, " MaxBuy=", MaxBuyOrders, " MaxSell=", MaxSellOrders);
-        Print("BUY Range: ", BuyRangeStart, " - ", BuyRangeEnd, " | SELL Range: ", SellRangeStart, " - ", SellRangeEnd);
-        Print("Recovery: BUY Lot Min=", BuyBERecoveryLotMin, " | SELL Lot Min=", SellBERecoveryLotMin);
-    }
-    else
-    {
-        // === LICENSE VERIFICATION ===
-        if(SkipLicenseCheck)
-        {
-            Print("=== LICENSE CHECK SKIPPED (Testing Mode) ===");
-            g_LicenseValid = true;
-            g_LicenseMessage = "TESTING MODE - License check bypassed";
-            g_PlanName = "TEST";
-            g_DaysRemaining = 999;
-        }
-        else
-        {
-            Print("=== Verifying License ===");
-            
-            if(!VerifyLicense())
-            {
-                Print("LICENSE ERROR: ", g_LicenseMessage);
-                Alert("License Error: ", g_LicenseMessage);
-                CreateLicenseLabel();
-                return(INIT_FAILED);
-            }
-            
-            Print("LICENSE VERIFIED: ", g_LicenseMessage);
-        }
-        
+        Print("LICENSE ERROR: ", g_LicenseMessage);
+        Alert("License Error: ", g_LicenseMessage);
         CreateLicenseLabel();
-        
-        // Send connection log
-        SendActionLog("CONNECT", "EA connected to " + _Symbol + " | Account: " + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)));
-        
-        // === LOAD SETTINGS FROM SERVER ===
-        Print("=== Loading Settings from Server ===");
-        if(!LoadSettingsFromServer())
-        {
-            Print("WARNING: Could not load settings from server. Using default values.");
-        }
-        
-        // Initialize license check timer
-        g_LastLicenseCheck = TimeCurrent();
+        return(INIT_FAILED);
     }
+    
+    Print("LICENSE VERIFIED: ", g_LicenseMessage);
+    CreateLicenseLabel();
+    g_LastLicenseCheck = TimeCurrent();
     // === END LICENSE VERIFICATION ===
     
-    // Validate input parameters
+    // Validate input parameters first
     if(BuyGapPips <= 0 || SellGapPips <= 0)
     {
         Print("ERROR: Gap must be greater than 0! BuyGap=", BuyGapPips, " SellGap=", SellGapPips);
@@ -744,11 +693,10 @@ int OnInit()
     double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
     double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
     
-    if(lotStep <= 0)
-    {
-        Print("ERROR: Invalid lot step from broker: ", lotStep);
-        return(INIT_FAILED);
-    }
+    // Use defaults if broker info not available yet
+    if(minLot <= 0) minLot = 0.01;
+    if(maxLot <= 0) maxLot = 100.0;
+    if(lotStep <= 0) lotStep = 0.01;
     
     // Normalize lot size to broker's lot step
     normalizedLotSize = MathFloor(LotSize / lotStep) * lotStep;
@@ -769,6 +717,13 @@ int OnInit()
         Print("INFO: Lot size normalized from ", LotSize, " to ", normalizedLotSize, " (Lot Step: ", lotStep, ")");
     }
     
+    // Final safety check - ensure lot size is never 0
+    if(normalizedLotSize <= 0)
+    {
+        normalizedLotSize = 0.01;
+        Print("WARNING: Lot size was 0, set to default 0.01");
+    }
+    
     // Create on-chart developer credit
     CreateDeveloperLabel();
     
@@ -779,7 +734,7 @@ int OnInit()
     Print("BUY TP: ", BuyTakeProfitPips, " | SL: ", BuyStopLossPips, " | Trail Start: ", BuyTrailingStartPips);
     Print("SELL Range: ", SellRangeStart, " to ", SellRangeEnd, " | Gap: ", SellGapPips, " pips | Max: ", MaxSellOrders);
     Print("SELL TP: ", SellTakeProfitPips, " | SL: ", SellStopLossPips, " | Trail Start: ", SellTrailingStartPips);
-    Print("Breakeven TP: ", EnableBreakevenTP ? "ENABLED" : "DISABLED", " | Manage All: ", ManageAllTrades ? "YES" : "NO");
+    Print("Manage All: ", ManageAllTrades ? "YES" : "NO", " | Recovery Trailing: ENABLED");
     Print("Mode: PENDING ORDERS (Buy Limit / Sell Limit - No slippage)");
     
     // Scan for existing positions
@@ -796,36 +751,27 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-    // Log disconnection
-    string reasonStr = "";
-    switch(reason)
+    // Only delete orders when EA is actually being removed, not on timeframe change
+    if(reason == REASON_REMOVE || reason == REASON_CHARTCLOSE || reason == REASON_PROGRAM)
     {
-        case REASON_PROGRAM: reasonStr = "EA removed"; break;
-        case REASON_REMOVE: reasonStr = "EA removed from chart"; break;
-        case REASON_RECOMPILE: reasonStr = "EA recompiled"; break;
-        case REASON_CHARTCHANGE: reasonStr = "Symbol/timeframe changed"; break;
-        case REASON_CHARTCLOSE: reasonStr = "Chart closed"; break;
-        case REASON_PARAMETERS: reasonStr = "Parameters changed"; break;
-        case REASON_ACCOUNT: reasonStr = "Account changed"; break;
-        case REASON_TEMPLATE: reasonStr = "Template applied"; break;
-        case REASON_INITFAILED: reasonStr = "Init failed"; break;
-        case REASON_CLOSE: reasonStr = "Terminal closed"; break;
-        default: reasonStr = "Unknown reason"; break;
-    }
-    SendActionLog("DISCONNECT", "EA disconnected: " + reasonStr);
-    
-    // Delete all pending orders placed by this EA
-    int total = OrdersTotal();
-    for(int i = total - 1; i >= 0; i--)
-    {
-        ulong ticket = OrderGetTicket(i);
-        if(ticket > 0)
+        Print("=== EA Removed - Deleting pending orders ===");
+        // Delete all pending orders placed by this EA
+        int total = OrdersTotal();
+        for(int i = total - 1; i >= 0; i--)
         {
-            if(OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == MagicNumber)
+            ulong ticket = OrderGetTicket(i);
+            if(ticket > 0)
             {
-                trade.OrderDelete(ticket);
+                if(OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == MagicNumber)
+                {
+                    trade.OrderDelete(ticket);
+                }
             }
         }
+    }
+    else
+    {
+        Print("=== EA Reinitialized (Timeframe change) - Keeping orders ===");
     }
     
     // Remove all chart objects
@@ -849,7 +795,14 @@ void OnDeinit(const int reason)
     ObjectDelete(0, "EA_PriceInfo");
     ObjectDelete(0, "EA_TotalProfit");
     
-    Print("=== Hedge Grid Trailing EA Stopped (Pending orders deleted) ===");
+    // Delete trading log objects
+    ObjectDelete(0, "EA_LogHeader");
+    for(int i = 0; i < MAX_LOG_ENTRIES; i++)
+    {
+        ObjectDelete(0, "EA_Log_" + IntegerToString(i));
+    }
+    
+    Print("=== Hedge Grid Trailing EA Stopped ===");
 }
 
 //+------------------------------------------------------------------+
@@ -860,8 +813,8 @@ void OnTick()
     // Check if running in Strategy Tester
     bool isTesting = MQLInfoInteger(MQL_TESTER);
     
-    // === PERIODIC LICENSE CHECK (Skip in tester or if bypass enabled) ===
-    if(!isTesting && !SkipLicenseCheck && TimeCurrent() - g_LastLicenseCheck > LICENSE_CHECK_INTERVAL)
+    // === PERIODIC LICENSE CHECK ===
+    if(TimeCurrent() - g_LastLicenseCheck > LICENSE_CHECK_INTERVAL)
     {
         g_LastLicenseCheck = TimeCurrent();
         Print("=== Periodic License Check ===");
@@ -875,13 +828,11 @@ void OnTick()
             return; // Stop processing
         }
         
-        // Also reload settings in case admin changed them
-        LoadSettingsFromServer();
         CreateLicenseLabel();
     }
     
-    // === CHECK LICENSE BEFORE TRADING (Skip in tester or if bypass enabled) ===
-    if(!isTesting && !SkipLicenseCheck && !g_LicenseValid)
+    // === CHECK LICENSE BEFORE TRADING ===
+    if(!g_LicenseValid)
     {
         Comment("LICENSE INVALID - EA STOPPED\n", g_LicenseMessage);
         return; // Don't trade if license invalid
@@ -890,39 +841,19 @@ void OnTick()
     // Count current positions
     CountOpenPositions();
     
-    // Debug: Print status every 60 seconds in tester
-    static datetime lastDebugPrint = 0;
-    if(isTesting && TimeCurrent() - lastDebugPrint > 60)
-    {
-        lastDebugPrint = TimeCurrent();
-        Print("[DEBUG] Tick at ", TimeToString(TimeCurrent()), " | BUY:", currentBuyCount, "/", MaxBuyOrders, " | SELL:", currentSellCount, "/", MaxSellOrders);
-        Print("[DEBUG] Price: ", SymbolInfoDouble(_Symbol, SYMBOL_BID), " | BuyRange: ", BuyRangeEnd, "-", BuyRangeStart, " | SellRange: ", SellRangeStart, "-", SellRangeEnd);
-    }
-    
-    // Detect position changes
-    // Position CLOSED
+    // Detect if a position was closed - reposition pending orders
     if(currentBuyCount < prevBuyCount || currentSellCount < prevSellCount)
     {
         // A position was closed - reposition pending orders to current price grid
-        if(currentBuyCount < prevBuyCount)
+        if(currentBuyCount < prevBuyCount && currentBuyCount < MaxBuyOrders)
         {
-            int closed = prevBuyCount - currentBuyCount;
-            LogEvent("CLOSE", "BUY position closed | " + IntegerToString(closed) + " position(s) | Remaining: " + IntegerToString(currentBuyCount) + "/" + IntegerToString(MaxBuyOrders));
-            if(currentBuyCount < MaxBuyOrders)
-            {
-                LogEvent("MODE", "NORMAL MODE - Repositioning BUY grid");
-                RepositionPendingOrders(ORDER_TYPE_BUY_LIMIT);
-            }
+            Print("[POSITION CLOSED] BUY positions: ", prevBuyCount, " -> ", currentBuyCount, " | Repositioning grid...");
+            RepositionPendingOrders(ORDER_TYPE_BUY_LIMIT);
         }
-        if(currentSellCount < prevSellCount)
+        if(currentSellCount < prevSellCount && currentSellCount < MaxSellOrders)
         {
-            int closed = prevSellCount - currentSellCount;
-            LogEvent("CLOSE", "SELL position closed | " + IntegerToString(closed) + " position(s) | Remaining: " + IntegerToString(currentSellCount) + "/" + IntegerToString(MaxSellOrders));
-            if(currentSellCount < MaxSellOrders)
-            {
-                LogEvent("MODE", "NORMAL MODE - Repositioning SELL grid");
-                RepositionPendingOrders(ORDER_TYPE_SELL_LIMIT);
-            }
+            Print("[POSITION CLOSED] SELL positions: ", prevSellCount, " -> ", currentSellCount, " | Repositioning grid...");
+            RepositionPendingOrders(ORDER_TYPE_SELL_LIMIT);
         }
     }
     
@@ -942,14 +873,23 @@ void OnTick()
     // Apply trailing stop to positions (regular orders)
     ApplyTrailingStop();
     
-    // Apply breakeven trailing if enabled
-    if(EnableBreakevenTrailing)
-    {
-        ApplyBreakevenTrailing();
-    }
+    // Apply breakeven TP (now handled by recovery trailing)
+    ApplyBreakevenTP();
     
     // Update on-screen display
     UpdateInfoPanel();
+    
+    // Update trading log display
+    UpdateTradingLogDisplay();
+    
+    // Send trade data to backend (for frontend dashboard)
+    static datetime lastDebugTime = 0;
+    if(TimeCurrent() - lastDebugTime > 30) // Debug every 30 seconds
+    {
+        lastDebugTime = TimeCurrent();
+        Print("DEBUG: License Key Length = ", StringLen(LicenseKey), " | Server = ", LicenseServer);
+    }
+    SendTradeDataToServer();
 }
 
 //+------------------------------------------------------------------+
@@ -1035,11 +975,25 @@ void ManagePendingGrid()
     
     // ===== BUY LIMIT ORDERS =====
     // Only place if we have room and price is in range
-    if(currentBuyCount < MaxBuyOrders && bidPrice <= buyStart && bidPrice >= buyEnd)
+    bool buyInRange = (bidPrice <= buyStart && bidPrice >= buyEnd);
+    bool buyHasRoom = (currentBuyCount < MaxBuyOrders);
+    
+    // Debug every 15 seconds
+    static datetime lastDebug = 0;
+    if(TimeCurrent() - lastDebug > 15)
+    {
+        lastDebug = TimeCurrent();
+        Print("=== ORDER CHECK ===");
+        Print("Bid=", bidPrice, " | BuyRange=", buyEnd, "-", buyStart, " | InRange=", buyInRange ? "YES" : "NO");
+        Print("BuyPos=", currentBuyCount, "/", MaxBuyOrders, " | BuyPending=", buyLimitCount, " | HasRoom=", buyHasRoom ? "YES" : "NO");
+        Print("OrdersNeeded=", MaxBuyOrders - totalBuyOrders, " | Lot=", normalizedLotSize);
+    }
+    
+    if(buyHasRoom && buyInRange)
     {
         int ordersNeeded = MaxBuyOrders - totalBuyOrders;
         
-        if(ordersNeeded > 0)
+        if(ordersNeeded > 0 && normalizedLotSize > 0)
         {
             // Find the LOWEST existing buy position/order to base new orders from
             double lowestBuyLevel = bidPrice;
@@ -1092,10 +1046,13 @@ void ManagePendingGrid()
                     
                     if(trade.BuyLimit(normalizedLotSize, buyLimitPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
                     {
-                        Print("[BUY LIMIT] @ ", DoubleToString(buyLimitPrice, digits), 
-                              " | Gap from ", DoubleToString(lowestBuyLevel, digits));
+                        AddToLog("BUY LIMIT @ " + DoubleToString(buyLimitPrice, digits) + " | Lot: " + DoubleToString(normalizedLotSize, 2), "OPEN_BUY");
                         nextBuyPrice = buyLimitPrice;
                         placed++;
+                    }
+                    else
+                    {
+                        AddToLog("BUY LIMIT FAILED @ " + DoubleToString(buyLimitPrice, digits) + " | Error: " + trade.ResultRetcodeDescription());
                     }
                 }
             }
@@ -1114,7 +1071,7 @@ void ManagePendingGrid()
     {
         int ordersNeeded = MaxSellOrders - totalSellOrders;
         
-        if(ordersNeeded > 0)
+        if(ordersNeeded > 0 && normalizedLotSize > 0)
         {
             // Find the HIGHEST existing sell position/order to base new orders from
             double highestSellLevel = askPrice;
@@ -1167,10 +1124,13 @@ void ManagePendingGrid()
                     
                     if(trade.SellLimit(normalizedLotSize, sellLimitPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
                     {
-                        Print("[SELL LIMIT] @ ", DoubleToString(sellLimitPrice, digits), 
-                              " | Gap from ", DoubleToString(highestSellLevel, digits));
+                        AddToLog("SELL LIMIT @ " + DoubleToString(sellLimitPrice, digits) + " | Lot: " + DoubleToString(normalizedLotSize, 2), "OPEN_SELL");
                         nextSellPrice = sellLimitPrice;
                         placed++;
+                    }
+                    else
+                    {
+                        AddToLog("SELL LIMIT FAILED @ " + DoubleToString(sellLimitPrice, digits) + " | Error: " + trade.ResultRetcodeDescription());
                     }
                 }
             }
@@ -1327,8 +1287,8 @@ void ModifyPendingOrdersToGrid(double bidPrice, double askPrice, double buyGap, 
             }
         }
         
-        // Move furthest order to closest available grid level (if more than 1 gap away)
-        if(furthestBuyTicket > 0 && maxBuyDistance > buyGap * 1.0)
+        // Move furthest order to closest available grid level (only if more than 3 gaps away)
+        if(furthestBuyTicket > 0 && maxBuyDistance > buyGap * 3.0)
         {
             // Try to find an available level starting from closest
             bool foundLevel = false;
@@ -1402,8 +1362,8 @@ void ModifyPendingOrdersToGrid(double bidPrice, double askPrice, double buyGap, 
             }
         }
         
-        // Move furthest order to closest available grid level (if more than 1 gap away)
-        if(furthestSellTicket > 0 && maxSellDistance > sellGap * 1.0)
+        // Move furthest order to closest available grid level (only if more than 3 gaps away)
+        if(furthestSellTicket > 0 && maxSellDistance > sellGap * 3.0)
         {
             // Try to find an available level starting from closest
             for(int level = 1; level <= 5; level++)
@@ -1640,8 +1600,8 @@ void CheckBERecoveryOrders()
     // Only activate when enabled, max buy orders reached and we have positions
     if(EnableBuyBERecovery && currentBuyCount >= MaxBuyOrders && buyAvgPrice > 0)
     {
-        // Calculate breakeven TP for all BUY positions
-        double buyBE_TP = NormalizeDouble(buyAvgPrice + (BreakevenBuyTPPips * pip), digits);
+        // Calculate recovery TP for all BUY positions (use RecoveryTakeProfitPips from average)
+        double buyBE_TP = NormalizeDouble(buyAvgPrice + (RecoveryTakeProfitPips * pip), digits);
         
         // Set ALL existing BUY positions to breakeven TP
         SetAllPositionsTP(POSITION_TYPE_BUY, buyBE_TP);
@@ -1737,8 +1697,8 @@ void CheckBERecoveryOrders()
     // Only activate when enabled, max sell orders reached and we have positions
     if(EnableSellBERecovery && currentSellCount >= MaxSellOrders && sellAvgPrice > 0)
     {
-        // Calculate breakeven TP for all SELL positions
-        double sellBE_TP = NormalizeDouble(sellAvgPrice - (BreakevenSellTPPips * pip), digits);
+        // Calculate recovery TP for all SELL positions (use RecoveryTakeProfitPips from average)
+        double sellBE_TP = NormalizeDouble(sellAvgPrice - (RecoveryTakeProfitPips * pip), digits);
         
         // Set ALL existing SELL positions to breakeven TP
         SetAllPositionsTP(POSITION_TYPE_SELL, sellBE_TP);
@@ -1836,7 +1796,7 @@ void CheckBERecoveryOrders()
 //+------------------------------------------------------------------+
 void ApplyTrailingStop()
 {
-    // Skip trailing stop in recovery mode - no SL allowed during recovery
+    // Check if in recovery mode
     bool buyInRecovery = (EnableBuyBERecovery && currentBuyCount >= MaxBuyOrders);
     bool sellInRecovery = (EnableSellBERecovery && currentSellCount >= MaxSellOrders);
     
@@ -1850,13 +1810,20 @@ void ApplyTrailingStop()
         if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
         
         // Check magic number only if not managing all trades
-        if(!ManageAllTrades && PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        long posMagic = PositionGetInteger(POSITION_MAGIC);
+        if(!ManageAllTrades && posMagic != MagicNumber) 
+        {
+            // Debug: Show skipped positions
+            static datetime lastSkipDebug = 0;
+            if(TimeCurrent() - lastSkipDebug > 60)
+            {
+                lastSkipDebug = TimeCurrent();
+                Print("SKIPPING position #", ticket, " | Magic: ", posMagic, " | EA Magic: ", MagicNumber, " | ManageAll: ", ManageAllTrades);
+            }
+            continue;
+        }
         
         ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-        
-        // Skip trailing stop for positions in recovery mode
-        if(posType == POSITION_TYPE_BUY && buyInRecovery) continue;
-        if(posType == POSITION_TYPE_SELL && sellInRecovery) continue;
         
         double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
         double currentSL = PositionGetDouble(POSITION_SL);
@@ -1866,12 +1833,31 @@ void ApplyTrailingStop()
                               SymbolInfoDouble(_Symbol, SYMBOL_BID) : 
                               SymbolInfoDouble(_Symbol, SYMBOL_ASK);
         
-        // Get settings based on position type
-        double trailingStartPips = (posType == POSITION_TYPE_BUY) ? BuyTrailingStartPips : SellTrailingStartPips;
-        double initialSLPips = (posType == POSITION_TYPE_BUY) ? BuyInitialSLPips : SellInitialSLPips;
-        double trailingRatio = (posType == POSITION_TYPE_BUY) ? BuyTrailingRatio : SellTrailingRatio;
-        double maxSLDistance = (posType == POSITION_TYPE_BUY) ? BuyMaxSLDistance : SellMaxSLDistance;
-        double trailingStepPips = (posType == POSITION_TYPE_BUY) ? BuyTrailingStepPips : SellTrailingStepPips;
+        // Determine if this position is in recovery mode
+        bool isRecoveryMode = (posType == POSITION_TYPE_BUY && buyInRecovery) || 
+                              (posType == POSITION_TYPE_SELL && sellInRecovery);
+        
+        // Get settings based on position type AND recovery mode
+        double trailingStartPips, initialSLPips, trailingRatio, maxSLDistance, trailingStepPips;
+        
+        if(isRecoveryMode)
+        {
+            // Use recovery settings
+            trailingStartPips = RecoveryTrailingStartPips;
+            initialSLPips = RecoveryInitialSLPips;
+            trailingRatio = RecoveryTrailingRatio;
+            maxSLDistance = RecoveryMaxSLDistance;
+            trailingStepPips = 0.5; // Use fixed step for recovery
+        }
+        else
+        {
+            // Use normal settings based on position type
+            trailingStartPips = (posType == POSITION_TYPE_BUY) ? BuyTrailingStartPips : SellTrailingStartPips;
+            initialSLPips = (posType == POSITION_TYPE_BUY) ? BuyInitialSLPips : SellInitialSLPips;
+            trailingRatio = (posType == POSITION_TYPE_BUY) ? BuyTrailingRatio : SellTrailingRatio;
+            maxSLDistance = (posType == POSITION_TYPE_BUY) ? BuyMaxSLDistance : SellMaxSLDistance;
+            trailingStepPips = (posType == POSITION_TYPE_BUY) ? BuyTrailingStepPips : SellTrailingStepPips;
+        }
         
         // Calculate profit in pips
         double profitPips = 0;
@@ -1882,6 +1868,16 @@ void ApplyTrailingStop()
         else
         {
             profitPips = (openPrice - currentPrice) / pip;
+        }
+        
+        // Debug trailing every 30 seconds
+        static datetime lastTrailDebug = 0;
+        if(TimeCurrent() - lastTrailDebug > 30)
+        {
+            lastTrailDebug = TimeCurrent();
+            string posTypeStr = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+            Print("TRAIL DEBUG: ", posTypeStr, " #", ticket, " | Profit: ", DoubleToString(profitPips, 2), 
+                  " pips | Start: ", trailingStartPips, " | Recovery: ", isRecoveryMode ? "YES" : "NO");
         }
         
         // Check if profit reached trailing start threshold
@@ -1936,9 +1932,8 @@ void ApplyTrailingStop()
                 if(trade.PositionModify(ticket, newSL, currentTP))
                 {
                     string posTypeStr = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
-                    Print("Trailing SL applied to ", posTypeStr, " #", ticket, 
-                          " | SL: ", DoubleToString(newSL, 2), 
-                          " | Profit: ", DoubleToString(profitPips, 2), " pips");
+                    string modeStr = isRecoveryMode ? " [RECOVERY]" : "";
+                    AddToLog("TRAIL " + posTypeStr + modeStr + " SL: " + DoubleToString(newSL, 2) + " | +" + DoubleToString(profitPips, 1) + " pips", "TRAILING");
                 }
             }
         }
@@ -2113,16 +2108,14 @@ void CreateDeveloperLabel()
 }
 
 //+------------------------------------------------------------------+
-//| Apply Breakeven Trailing to All Trades (when max orders reached)  |
+//| Apply Breakeven TP to All Trades (ONLY when max orders reached)   |
 //+------------------------------------------------------------------+
-void ApplyBreakevenTrailing()
+void ApplyBreakevenTP()
 {
-    // ONLY apply breakeven trailing when max orders are reached (recovery mode)
-    // This replaces the breakeven TP with a trailing stop system
+    // ONLY apply breakeven TP when max orders are reached (recovery mode)
+    // Before max orders, each position keeps its individual TP from grid settings
     
     int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-    double bidPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-    double askPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     
     // Calculate average price and total lots for BUY positions
     double buyTotalLots = 0;
@@ -2163,131 +2156,67 @@ void ApplyBreakevenTrailing()
         }
     }
     
-    // Apply breakeven trailing for BUY positions - ONLY if max orders reached
+    // Calculate breakeven TP for BUY positions - ONLY if max orders reached
     if(buyCount >= MaxBuyOrders && buyTotalLots > 0)
     {
         double buyAvgPrice = buyWeightedPrice / buyTotalLots;
-        double breakevenTrigger = buyAvgPrice + (BreakevenBuyTrailingPips * pip);
+        double buyBreakevenTP = NormalizeDouble(buyAvgPrice + (RecoveryTakeProfitPips * pip), digits);
         
-        // Check if price has reached breakeven trigger point
-        if(bidPrice >= breakevenTrigger)
+        // Apply to all BUY positions
+        for(int i = 0; i < total; i++)
         {
-            // Apply trailing logic to all BUY positions
-            for(int i = 0; i < total; i++)
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(!ManageAllTrades && PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if(posType != POSITION_TYPE_BUY) continue;
+            
+            double currentTP = PositionGetDouble(POSITION_TP);
+            double currentSL = PositionGetDouble(POSITION_SL);
+            
+            // Only update if TP is different
+            if(MathAbs(currentTP - buyBreakevenTP) > pip * 0.1)
             {
-                ulong ticket = PositionGetTicket(i);
-                if(ticket <= 0) continue;
-                
-                if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-                if(!ManageAllTrades && PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-                
-                ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-                if(posType != POSITION_TYPE_BUY) continue;
-                
-                double currentSL = PositionGetDouble(POSITION_SL);
-                double currentTP = PositionGetDouble(POSITION_TP);
-                double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-                
-                // Calculate profit in pips
-                double profitPips = (bidPrice - openPrice) / pip;
-                
-                // Start trailing if profit exceeds threshold
-                if(profitPips >= BreakevenTrailingStartPips)
+                if(trade.PositionModify(ticket, currentSL, buyBreakevenTP))
                 {
-                    // Calculate new SL based on trailing ratio
-                    double trailDistance = BreakevenInitialSLPips * pip;
-                    double maxSLDistance = BreakevenMaxSLDistance * pip;
-                    
-                    // Adjust trail distance based on profit
-                    if(profitPips > BreakevenTrailingStartPips)
-                    {
-                        double excessProfit = (profitPips - BreakevenTrailingStartPips) * pip;
-                        trailDistance = BreakevenInitialSLPips * pip - (excessProfit * BreakevenTrailingRatio);
-                        
-                        // Ensure minimum trail distance
-                        if(trailDistance < pip) trailDistance = pip;
-                        if(trailDistance > maxSLDistance) trailDistance = maxSLDistance;
-                    }
-                    
-                    double newSL = NormalizeDouble(bidPrice - trailDistance, digits);
-                    
-                    // Only update if new SL is higher than current (or no SL set)
-                    if(currentSL == 0 || (newSL > currentSL && (newSL - currentSL) >= BreakevenTrailingStepPips * pip))
-                    {
-                        if(trade.PositionModify(ticket, newSL, currentTP))
-                        {
-                            LogEvent("BREAKEVEN_TRAIL", "BUY #" + IntegerToString(ticket) + 
-                                     " | Avg: " + DoubleToString(buyAvgPrice, 2) + 
-                                     " | Profit: " + DoubleToString(profitPips, 1) + " pips" +
-                                     " | New SL: " + DoubleToString(newSL, 2) +
-                                     " | Trail Dist: " + DoubleToString(trailDistance/pip, 1) + " pips");
-                        }
-                    }
+                    Print("[BREAKEVEN TP] BUY #", ticket, " | Avg: ", DoubleToString(buyAvgPrice, 2), 
+                          " | TP: ", DoubleToString(buyBreakevenTP, 2));
                 }
             }
         }
     }
     
-    // Apply breakeven trailing for SELL positions - ONLY if max orders reached
+    // Calculate breakeven TP for SELL positions - ONLY if max orders reached
     if(sellCount >= MaxSellOrders && sellTotalLots > 0)
     {
         double sellAvgPrice = sellWeightedPrice / sellTotalLots;
-        double breakevenTrigger = sellAvgPrice - (BreakevenSellTrailingPips * pip);
+        double sellBreakevenTP = NormalizeDouble(sellAvgPrice - (RecoveryTakeProfitPips * pip), digits);
         
-        // Check if price has reached breakeven trigger point
-        if(askPrice <= breakevenTrigger)
+        // Apply to all SELL positions
+        for(int i = 0; i < total; i++)
         {
-            // Apply trailing logic to all SELL positions
-            for(int i = 0; i < total; i++)
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(!ManageAllTrades && PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if(posType != POSITION_TYPE_SELL) continue;
+            
+            double currentTP = PositionGetDouble(POSITION_TP);
+            double currentSL = PositionGetDouble(POSITION_SL);
+            
+            // Only update if TP is different
+            if(MathAbs(currentTP - sellBreakevenTP) > pip * 0.1)
             {
-                ulong ticket = PositionGetTicket(i);
-                if(ticket <= 0) continue;
-                
-                if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-                if(!ManageAllTrades && PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-                
-                ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-                if(posType != POSITION_TYPE_SELL) continue;
-                
-                double currentSL = PositionGetDouble(POSITION_SL);
-                double currentTP = PositionGetDouble(POSITION_TP);
-                double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-                
-                // Calculate profit in pips
-                double profitPips = (openPrice - askPrice) / pip;
-                
-                // Start trailing if profit exceeds threshold
-                if(profitPips >= BreakevenTrailingStartPips)
+                if(trade.PositionModify(ticket, currentSL, sellBreakevenTP))
                 {
-                    // Calculate new SL based on trailing ratio
-                    double trailDistance = BreakevenInitialSLPips * pip;
-                    double maxSLDistance = BreakevenMaxSLDistance * pip;
-                    
-                    // Adjust trail distance based on profit
-                    if(profitPips > BreakevenTrailingStartPips)
-                    {
-                        double excessProfit = (profitPips - BreakevenTrailingStartPips) * pip;
-                        trailDistance = BreakevenInitialSLPips * pip - (excessProfit * BreakevenTrailingRatio);
-                        
-                        // Ensure minimum trail distance
-                        if(trailDistance < pip) trailDistance = pip;
-                        if(trailDistance > maxSLDistance) trailDistance = maxSLDistance;
-                    }
-                    
-                    double newSL = NormalizeDouble(askPrice + trailDistance, digits);
-                    
-                    // Only update if new SL is lower than current (or no SL set)
-                    if(currentSL == 0 || (newSL < currentSL && (currentSL - newSL) >= BreakevenTrailingStepPips * pip))
-                    {
-                        if(trade.PositionModify(ticket, newSL, currentTP))
-                        {
-                            LogEvent("BREAKEVEN_TRAIL", "SELL #" + IntegerToString(ticket) + 
-                                     " | Avg: " + DoubleToString(sellAvgPrice, 2) + 
-                                     " | Profit: " + DoubleToString(profitPips, 1) + " pips" +
-                                     " | New SL: " + DoubleToString(newSL, 2) +
-                                     " | Trail Dist: " + DoubleToString(trailDistance/pip, 1) + " pips");
-                        }
-                    }
+                    Print("[BREAKEVEN TP] SELL #", ticket, " | Avg: ", DoubleToString(sellAvgPrice, 2), 
+                          " | TP: ", DoubleToString(sellBreakevenTP, 2));
                 }
             }
         }
@@ -2299,6 +2228,28 @@ void ApplyBreakevenTrailing()
 //+------------------------------------------------------------------+
 void UpdateInfoPanel()
 {
+    // Delete panel objects (not license/dev labels)
+    ObjectDelete(0, "EA_ModeStatus");
+    ObjectDelete(0, "EA_SellHeader");
+    ObjectDelete(0, "EA_SellMode");
+    ObjectDelete(0, "EA_SellCount");
+    ObjectDelete(0, "EA_SellAvg");
+    ObjectDelete(0, "EA_SellBE");
+    ObjectDelete(0, "EA_SellNext");
+    ObjectDelete(0, "EA_SellProfit");
+    ObjectDelete(0, "EA_SellRecovery");
+    ObjectDelete(0, "EA_BuyHeader");
+    ObjectDelete(0, "EA_BuyMode");
+    ObjectDelete(0, "EA_BuyCount");
+    ObjectDelete(0, "EA_BuyAvg");
+    ObjectDelete(0, "EA_BuyBE");
+    ObjectDelete(0, "EA_BuyNext");
+    ObjectDelete(0, "EA_BuyProfit");
+    ObjectDelete(0, "EA_BuyRecovery");
+    ObjectDelete(0, "EA_PriceHeader");
+    ObjectDelete(0, "EA_PriceInfo");
+    ObjectDelete(0, "EA_TotalProfit");
+    
     int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
     double bidPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
     double askPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
@@ -2425,10 +2376,10 @@ void UpdateInfoPanel()
     ObjectSetString(0, "EA_SellAvg", OBJPROP_FONT, "Arial");
     sellYPos += 14;
     
-    // SELL Breakeven TP Target
-    double sellBE_TP = (sellAvgPrice > 0) ? sellAvgPrice - (BreakevenSellTPPips * pip) : 0;
-    string sellBEInfo = StringFormat("BE TP: %s (-%.1f pips)", 
-        sellBE_TP > 0 ? DoubleToString(sellBE_TP, digits) : "N/A", BreakevenSellTPPips);
+    // SELL Recovery TP Target
+    double sellBE_TP = (sellAvgPrice > 0) ? sellAvgPrice - (RecoveryTakeProfitPips * pip) : 0;
+    string sellBEInfo = StringFormat("Recovery TP: %s (-%.0f pips)", 
+        sellBE_TP > 0 ? DoubleToString(sellBE_TP, digits) : "N/A", RecoveryTakeProfitPips);
     ObjectCreate(0, "EA_SellBE", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_SellBE", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_SellBE", OBJPROP_XDISTANCE, 10);
@@ -2536,10 +2487,10 @@ void UpdateInfoPanel()
     ObjectSetString(0, "EA_BuyAvg", OBJPROP_FONT, "Arial");
     buyYPos += 14;
     
-    // BUY Breakeven TP Target
-    double buyBE_TP = (buyAvgPrice > 0) ? buyAvgPrice + (BreakevenBuyTPPips * pip) : 0;
-    string buyBEInfo = StringFormat("BE TP: %s (+%.1f pips)", 
-        buyBE_TP > 0 ? DoubleToString(buyBE_TP, digits) : "N/A", BreakevenBuyTPPips);
+    // BUY Recovery TP Target
+    double buyBE_TP = (buyAvgPrice > 0) ? buyAvgPrice + (RecoveryTakeProfitPips * pip) : 0;
+    string buyBEInfo = StringFormat("Recovery TP: %s (+%.0f pips)", 
+        buyBE_TP > 0 ? DoubleToString(buyBE_TP, digits) : "N/A", RecoveryTakeProfitPips);
     ObjectCreate(0, "EA_BuyBE", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_BuyBE", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_BuyBE", OBJPROP_XDISTANCE, rightX);

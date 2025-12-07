@@ -160,8 +160,13 @@ def get_plans(request):
     plans = SubscriptionPlan.objects.filter(is_active=True).values(
         'id', 'name', 'description', 'price', 'duration_days', 'max_accounts'
     )
+    plans_list = list(plans)
+    # Convert Decimal to float for JSON serialization
+    for plan in plans_list:
+        plan['price'] = float(plan['price'])
     return JsonResponse({
-        'plans': list(plans)
+        'success': True,
+        'plans': plans_list
     })
 
 
@@ -284,10 +289,13 @@ def login(request):
         settings = lic.ea_settings.filter(symbol='BTCUSD').first() or lic.ea_settings.first()
         if settings:
             ea_settings = {
-                'investment_amount': float(settings.investment_amount),
-                'lot_size': float(settings.lot_size),
+                'symbol': settings.symbol,
                 'max_buy_orders': settings.max_buy_orders,
                 'max_sell_orders': settings.max_sell_orders,
+                'buy_range_start': float(settings.buy_range_start),
+                'buy_range_end': float(settings.buy_range_end),
+                'sell_range_start': float(settings.sell_range_start),
+                'sell_range_end': float(settings.sell_range_end),
             }
         else:
             ea_settings = None
@@ -343,10 +351,13 @@ def get_licenses(request):
         settings = lic.ea_settings.filter(symbol='BTCUSD').first() or lic.ea_settings.first()
         if settings:
             ea_settings = {
-                'investment_amount': float(settings.investment_amount),
-                'lot_size': float(settings.lot_size),
+                'symbol': settings.symbol,
                 'max_buy_orders': settings.max_buy_orders,
                 'max_sell_orders': settings.max_sell_orders,
+                'buy_range_start': float(settings.buy_range_start),
+                'buy_range_end': float(settings.buy_range_end),
+                'sell_range_start': float(settings.sell_range_start),
+                'sell_range_end': float(settings.sell_range_end),
             }
         else:
             ea_settings = None
@@ -432,10 +443,13 @@ def subscribe(request):
         settings = lic.ea_settings.filter(symbol='BTCUSD').first() or lic.ea_settings.first()
         if settings:
             ea_settings = {
-                'investment_amount': float(settings.investment_amount),
-                'lot_size': float(settings.lot_size),
+                'symbol': settings.symbol,
                 'max_buy_orders': settings.max_buy_orders,
                 'max_sell_orders': settings.max_sell_orders,
+                'buy_range_start': float(settings.buy_range_start),
+                'buy_range_end': float(settings.buy_range_end),
+                'sell_range_start': float(settings.sell_range_start),
+                'sell_range_end': float(settings.sell_range_end),
             }
         else:
             ea_settings = None
@@ -510,7 +524,7 @@ def get_ea_settings(request):
     settings, created = EASettings.objects.get_or_create(
         license=license,
         symbol=symbol,
-        defaults={'investment_amount': 100}
+        defaults={}
     )
     
     # If newly created, apply symbol-specific defaults
@@ -548,9 +562,7 @@ def get_ea_settings(request):
             'sell_trailing_ratio': float(settings.sell_trailing_ratio),
             'sell_max_sl_distance': float(settings.sell_max_sl_distance),
             'sell_trailing_step_pips': float(settings.sell_trailing_step_pips),
-            # Lot & Risk
-            'investment_amount': float(settings.investment_amount),
-            'lot_size': float(settings.lot_size),
+            # Lot size is now calculated dynamically by EA based on account balance
             # Breakeven Trailing
             'enable_breakeven_trailing': settings.enable_breakeven_trailing,
             'breakeven_buy_trailing_pips': float(settings.breakeven_buy_trailing_pips),
@@ -619,8 +631,15 @@ def update_trade_data(request):
     trade_data.symbol = data.get('symbol', '')
     trade_data.current_price = Decimal(str(data.get('current_price', 0)))
     
-    # Update open positions
+    # Update open positions and pending orders
     trade_data.open_positions = data.get('open_positions', [])
+    trade_data.pending_orders = data.get('pending_orders', [])
+    trade_data.total_pending_orders = data.get('total_pending_orders', 0)
+    trade_data.trading_mode = data.get('trading_mode', 'Normal')
+    
+    # Update last_update timestamp
+    from django.utils import timezone
+    trade_data.last_update = timezone.now()
     
     trade_data.save()
     
@@ -666,9 +685,12 @@ def get_trade_data(request):
                 'total_sell_lots': float(trade_data.total_sell_lots),
                 'total_buy_profit': float(trade_data.total_buy_profit),
                 'total_sell_profit': float(trade_data.total_sell_profit),
+                'total_pending_orders': getattr(trade_data, 'total_pending_orders', 0),
+                'trading_mode': getattr(trade_data, 'trading_mode', 'Normal'),
                 'symbol': trade_data.symbol,
                 'current_price': float(trade_data.current_price),
                 'open_positions': trade_data.open_positions,
+                'pending_orders': getattr(trade_data, 'pending_orders', []),
                 'last_update': trade_data.last_update.isoformat(),
             }
         })
@@ -679,54 +701,10 @@ def get_trade_data(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def update_investment(request):
-    """Update investment amount and calculate EA settings based on default template"""
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
-    
-    license_key = data.get('license_key', '').strip().upper()
-    investment = Decimal(str(data.get('investment_amount', 100)))
-    
-    if not license_key:
-        return JsonResponse({'success': False, 'message': 'License key is required'})
-    
-    if investment < 100:
-        return JsonResponse({'success': False, 'message': 'Minimum investment is $100'})
-    
-    try:
-        license = License.objects.get(license_key=license_key)
-    except License.DoesNotExist:
-        return JsonResponse({'success': False, 'message': 'Invalid license key'})
-    
-    # Get or create settings for BTCUSD (primary symbol)
-    settings, created = EASettings.objects.get_or_create(
-        license=license,
-        symbol='BTCUSD',
-        defaults={'investment_amount': investment}
-    )
-    
-    # Save investment amount
-    settings.investment_amount = investment
-    
-    # Recalculate lot sizes based on investment
-    settings.recalculate_lots()
-    
-    settings.save()
-    
+    """DEPRECATED: Investment amount is no longer used. EA calculates lot size from account balance."""
     return JsonResponse({
-        'success': True,
-        'message': 'Investment settings updated',
-        'settings': {
-            'investment_amount': float(settings.investment_amount),
-            'lot_size': float(settings.lot_size),
-            'buy_be_recovery_lot_min': float(settings.buy_be_recovery_lot_min),
-            'sell_be_recovery_lot_min': float(settings.sell_be_recovery_lot_min),
-            'max_buy_orders': settings.max_buy_orders,
-            'max_sell_orders': settings.max_sell_orders,
-            'max_buy_be_recovery_orders': settings.max_buy_be_recovery_orders,
-            'max_sell_be_recovery_orders': settings.max_sell_be_recovery_orders,
-        }
+        'success': False,
+        'message': 'This endpoint is deprecated. EA now calculates lot size from account balance automatically.'
     })
 
 
