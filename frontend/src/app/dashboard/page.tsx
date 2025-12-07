@@ -26,17 +26,32 @@ export default function DashboardHome() {
   const [purchaseSuccess, setPurchaseSuccess] = useState<any>(null);
   const [message, setMessage] = useState({ type: '', text: '' });
 
+  const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     fetchPlans();
-    // Fetch trade data for all licenses
+    // Fetch trade data for all licenses initially
     fetchAllLicensesTradeData();
-  }, [licenses]);
+    
+    // Start polling for all licenses data (only when no license is selected)
+    if (!selectedLicense && licenses.length > 0) {
+      allLicensesPollingRef.current = setInterval(() => {
+        fetchAllLicensesTradeData();
+      }, 3000); // Poll every 3 seconds
+    }
+    
+    return () => {
+      if (allLicensesPollingRef.current) {
+        clearInterval(allLicensesPollingRef.current);
+      }
+    };
+  }, [licenses, selectedLicense]);
   
   const fetchAllLicensesTradeData = async () => {
     if (!licenses || licenses.length === 0) return;
     
     const dataMap: {[key: string]: any} = {};
-    for (const lic of licenses) {
+    await Promise.all(licenses.map(async (lic) => {
       try {
         const res = await fetch(`${API_URL}/trade-data/?license_key=${lic.license_key}`);
         const data = await res.json();
@@ -46,7 +61,7 @@ export default function DashboardHome() {
       } catch (e) {
         console.error('Failed to fetch trade data for', lic.license_key);
       }
-    }
+    }));
     setAllTradeData(dataMap);
   };
 
@@ -609,7 +624,13 @@ export default function DashboardHome() {
       </details>
       
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-gray-800">Your Licenses</h3>
+        <div className="flex items-center gap-3">
+          <h3 className="text-lg font-semibold text-gray-800">Your Licenses</h3>
+          <span className="flex items-center gap-1.5 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+            Live
+          </span>
+        </div>
         <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{licenses.length} license(s)</span>
       </div>
       
