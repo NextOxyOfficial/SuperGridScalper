@@ -18,6 +18,15 @@ db.sqlite3
 *.pyc
 local_settings.py
 media/
+staticfiles/
+
+# Database
+*.sql
+*.dump
+*.sqlite3
+*.db
+migrations/
+!migrations/__init__.py
 
 # Environment
 .env

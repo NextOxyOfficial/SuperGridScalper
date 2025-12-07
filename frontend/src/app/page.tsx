@@ -29,6 +29,7 @@ export default function Home() {
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [mt5Account, setMt5Account] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [licenseResult, setLicenseResult] = useState<LicenseResult | null>(null)
@@ -68,7 +69,8 @@ export default function Home() {
       const response = await axios.post(`${API_URL}/subscribe/`, {
         email,
         password,
-        plan_id: selectedPlan?.id
+        plan_id: selectedPlan?.id,
+        mt5_account: mt5Account
       })
 
       if (response.data.success) {
@@ -95,6 +97,7 @@ export default function Home() {
     setShowModal(false)
     setEmail('')
     setPassword('')
+    setMt5Account('')
     setError('')
     setLicenseResult(null)
     setSelectedPlan(null)
@@ -145,6 +148,18 @@ export default function Home() {
                       minLength={6}
                       required
                     />
+                  </div>
+                  <div>
+                    <label className="block text-gray-300 mb-2">MT5 Account Number</label>
+                    <input
+                      type="text"
+                      value={mt5Account}
+                      onChange={(e) => setMt5Account(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                      placeholder="Your MT5 account number"
+                      required
+                    />
+                    <p className="text-gray-500 text-xs mt-1">License will be bound to this account only</p>
                   </div>
 
                   {error && (

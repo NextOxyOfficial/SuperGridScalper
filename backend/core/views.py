@@ -254,9 +254,13 @@ def subscribe(request):
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
     plan_id = data.get('plan_id')
+    mt5_account = data.get('mt5_account', '').strip()
     
     if not email or not password or not plan_id:
         return JsonResponse({'success': False, 'message': 'Email, password, and plan are required'})
+    
+    if not mt5_account:
+        return JsonResponse({'success': False, 'message': 'MT5 account number is required'})
     
     # Authenticate or create user
     user = authenticate(username=email, password=password)
@@ -279,10 +283,11 @@ def subscribe(request):
     except SubscriptionPlan.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Invalid plan selected'})
     
-    # Create license
+    # Create license with MT5 account bound
     license = License.objects.create(
         user=user,
-        plan=plan
+        plan=plan,
+        mt5_account=mt5_account
     )
     
     return JsonResponse({
@@ -292,7 +297,8 @@ def subscribe(request):
             'license_key': license.license_key,
             'plan': plan.name,
             'expires_at': license.expires_at.isoformat(),
-            'days_remaining': license.days_remaining()
+            'days_remaining': license.days_remaining(),
+            'mt5_account': license.mt5_account
         },
         'user': {
             'id': user.id,

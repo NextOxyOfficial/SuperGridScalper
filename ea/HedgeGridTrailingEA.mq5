@@ -16,7 +16,7 @@ CTrade trade;
 //--- License Verification Settings
 input group "=== LICENSE ACTIVATION ==="
 input string    LicenseKey        = "";           // License Key (XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX)
-input string    LicenseServer     = "http://localhost:8000";  // License Server URL
+input string    LicenseServer     = "http://127.0.0.1:8000";  // License Server URL
 
 //--- License Status (Global)
 bool g_LicenseValid = false;
