@@ -279,8 +279,6 @@ bool LoadSettingsFromServer()
     BuyGapPips = ExtractDoubleValue(responseStr, "buy_gap_pips");
     MaxBuyOrders = (int)ExtractDoubleValue(responseStr, "max_buy_orders");
     
-    Print("PARSED: BuyRange=", BuyRangeEnd, "-", BuyRangeStart, " | Gap=", BuyGapPips, " | MaxBuy=", MaxBuyOrders);
-    
     // BUY TP/SL/Trailing
     BuyTakeProfitPips = ExtractDoubleValue(responseStr, "buy_take_profit_pips");
     BuyStopLossPips = ExtractDoubleValue(responseStr, "buy_stop_loss_pips");
@@ -335,6 +333,14 @@ bool LoadSettingsFromServer()
     MaxSellBERecoveryOrders = (int)ExtractDoubleValue(responseStr, "max_sell_be_recovery_orders");
     
     g_SettingsLoaded = true;
+    
+    // Debug: Show loaded values
+    Print("=== LOADED FROM SERVER ===");
+    Print("BUY Range: ", BuyRangeEnd, " - ", BuyRangeStart, " | Gap: ", BuyGapPips, " | Max: ", MaxBuyOrders);
+    Print("BUY TP: ", BuyTakeProfitPips, " | Trail Start: ", BuyTrailingStartPips, " | Initial SL: ", BuyInitialSLPips);
+    Print("SELL Range: ", SellRangeEnd, " - ", SellRangeStart, " | Gap: ", SellGapPips, " | Max: ", MaxSellOrders);
+    Print("SELL TP: ", SellTakeProfitPips, " | Trail Start: ", SellTrailingStartPips, " | Initial SL: ", SellInitialSLPips);
+    Print("Lot Size: ", LotSize, " | Breakeven Trailing: ", EnableBreakevenTrailing ? "ON" : "OFF");
     
     // IMPORTANT: Recalculate normalizedLotSize with the new LotSize from server
     double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);

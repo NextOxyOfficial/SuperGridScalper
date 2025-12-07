@@ -231,8 +231,17 @@ class EASettingsAdmin(admin.ModelAdmin):
     )
     
     def save_model(self, request, obj, form, change):
-        # Apply fixed lot sizes and symbol defaults when saving
-        obj.apply_symbol_defaults()
+        # Only apply defaults for NEW records, not when editing existing ones
+        if not change:  # This is a new record
+            obj.apply_symbol_defaults()
+        else:  # This is editing an existing record
+            # Only apply fixed lot sizes, keep user's custom settings
+            obj.investment_amount = obj.FIXED_INVESTMENT
+            obj.lot_size = obj.FIXED_LOT_SIZE
+            obj.buy_be_recovery_lot_min = obj.FIXED_RECOVERY_LOT_MIN
+            obj.sell_be_recovery_lot_min = obj.FIXED_RECOVERY_LOT_MIN
+            obj.buy_be_recovery_lot_max = obj.FIXED_RECOVERY_LOT_MAX
+            obj.sell_be_recovery_lot_max = obj.FIXED_RECOVERY_LOT_MAX
         super().save_model(request, obj, form, change)
 
     def get_mt5_account(self, obj):
