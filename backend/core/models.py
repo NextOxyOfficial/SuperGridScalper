@@ -157,10 +157,15 @@ class EASettings(models.Model):
     # Lot & Risk (calculated based on investment)
     lot_size = models.DecimalField(max_digits=10, decimal_places=2, default=0.05, help_text="Lot Size per order (auto-calculated)")
     
-    # Breakeven TP Settings
-    enable_breakeven_tp = models.BooleanField(default=True, help_text="Enable Breakeven TP for all trades")
-    breakeven_buy_tp_pips = models.DecimalField(max_digits=10, decimal_places=2, default=2.0, help_text="Breakeven TP for BUY (pips above avg price)")
-    breakeven_sell_tp_pips = models.DecimalField(max_digits=10, decimal_places=2, default=2.0, help_text="Breakeven TP for SELL (pips below avg price)")
+    # Breakeven Trailing Settings (replaces Breakeven TP)
+    enable_breakeven_trailing = models.BooleanField(default=True, help_text="Enable Breakeven Trailing for all trades")
+    breakeven_buy_trailing_pips = models.DecimalField(max_digits=10, decimal_places=2, default=2.0, help_text="Breakeven trigger for BUY (pips above avg price)")
+    breakeven_sell_trailing_pips = models.DecimalField(max_digits=10, decimal_places=2, default=2.0, help_text="Breakeven trigger for SELL (pips below avg price)")
+    breakeven_trailing_start_pips = models.DecimalField(max_digits=10, decimal_places=2, default=10.0, help_text="Start trailing after X pips profit")
+    breakeven_initial_sl_pips = models.DecimalField(max_digits=10, decimal_places=2, default=5.0, help_text="Initial SL distance when trailing starts")
+    breakeven_trailing_ratio = models.DecimalField(max_digits=10, decimal_places=2, default=0.5, help_text="SL movement ratio (0.5 = move SL 50% of price movement)")
+    breakeven_max_sl_distance = models.DecimalField(max_digits=10, decimal_places=2, default=15.0, help_text="Maximum SL distance from current price")
+    breakeven_trailing_step_pips = models.DecimalField(max_digits=10, decimal_places=2, default=0.5, help_text="Minimum step to update SL")
     manage_all_trades = models.BooleanField(default=True, help_text="Manage ALL trades (ignore magic number)")
     
     # BUY Breakeven Recovery
@@ -180,18 +185,76 @@ class EASettings(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    def recalculate_lots(self):
-        """Recalculate lot sizes based on current investment"""
-        # Base: 0.01 lot per $100 for BTC, 0.05 lot per $100 for Gold
-        if self.symbol == 'BTCUSD':
-            base_lot = 0.01
-        else:
-            base_lot = 0.05
+    # FIXED SETTINGS: $250 investment, 0.20 lot, 0.20 min recovery, 1000 max recovery
+    FIXED_LOT_SIZE = 0.20
+    FIXED_INVESTMENT = 250
+    FIXED_RECOVERY_LOT_MIN = 0.20
+    FIXED_RECOVERY_LOT_MAX = 1000
+    
+    # Default settings per symbol
+    SYMBOL_DEFAULTS = {
+        'XAUUSD': {
+            'buy_range_start': 3400,
+            'buy_range_end': 2600,
+            'buy_gap_pips': 3,
+            'max_buy_orders': 5,
+            'buy_take_profit_pips': 50,
+            'buy_trailing_start_pips': 3,
+            'buy_initial_sl_pips': 2,
+            'sell_range_start': 2600,
+            'sell_range_end': 3400,
+            'sell_gap_pips': 3,
+            'max_sell_orders': 5,
+            'sell_take_profit_pips': 50,
+            'sell_trailing_start_pips': 3,
+            'sell_initial_sl_pips': 2,
+        },
+        'BTCUSD': {
+            'buy_range_start': 120000,
+            'buy_range_end': 80000,
+            'buy_gap_pips': 30,
+            'max_buy_orders': 5,
+            'buy_take_profit_pips': 50,
+            'buy_trailing_start_pips': 10,
+            'buy_initial_sl_pips': 5,
+            'sell_range_start': 80000,
+            'sell_range_end': 120000,
+            'sell_gap_pips': 30,
+            'max_sell_orders': 5,
+            'sell_take_profit_pips': 50,
+            'sell_trailing_start_pips': 10,
+            'sell_initial_sl_pips': 5,
+        }
+    }
+    
+    def apply_symbol_defaults(self):
+        """Apply default settings based on symbol with FIXED lot sizes"""
+        defaults = self.SYMBOL_DEFAULTS.get(self.symbol, self.SYMBOL_DEFAULTS['XAUUSD'])
         
-        multiplier = float(self.investment_amount) / 100
-        self.lot_size = round(base_lot * multiplier, 2)
-        self.buy_be_recovery_lot_min = round(base_lot * multiplier, 2)
-        self.sell_be_recovery_lot_min = round(base_lot * multiplier, 2)
+        # Apply symbol-specific grid settings
+        self.buy_range_start = defaults['buy_range_start']
+        self.buy_range_end = defaults['buy_range_end']
+        self.buy_gap_pips = defaults['buy_gap_pips']
+        self.max_buy_orders = defaults['max_buy_orders']
+        self.buy_take_profit_pips = defaults['buy_take_profit_pips']
+        self.buy_trailing_start_pips = defaults['buy_trailing_start_pips']
+        self.buy_initial_sl_pips = defaults['buy_initial_sl_pips']
+        
+        self.sell_range_start = defaults['sell_range_start']
+        self.sell_range_end = defaults['sell_range_end']
+        self.sell_gap_pips = defaults['sell_gap_pips']
+        self.max_sell_orders = defaults['max_sell_orders']
+        self.sell_take_profit_pips = defaults['sell_take_profit_pips']
+        self.sell_trailing_start_pips = defaults['sell_trailing_start_pips']
+        self.sell_initial_sl_pips = defaults['sell_initial_sl_pips']
+        
+        # Apply FIXED lot sizes
+        self.investment_amount = self.FIXED_INVESTMENT
+        self.lot_size = self.FIXED_LOT_SIZE
+        self.buy_be_recovery_lot_min = self.FIXED_RECOVERY_LOT_MIN
+        self.sell_be_recovery_lot_min = self.FIXED_RECOVERY_LOT_MIN
+        self.buy_be_recovery_lot_max = self.FIXED_RECOVERY_LOT_MAX
+        self.sell_be_recovery_lot_max = self.FIXED_RECOVERY_LOT_MAX
 
     def __str__(self):
         return f"{self.symbol} - {self.license.license_key[:12]}..."

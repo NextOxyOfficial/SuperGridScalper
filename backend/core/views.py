@@ -272,24 +272,24 @@ def login(request):
     if user is None:
         return JsonResponse({'success': False, 'message': 'Invalid email or password'})
     
-    # Get all user's licenses
-    licenses = License.objects.filter(user=user).select_related('plan')
+    # Get all user's licenses with EA settings
+    licenses = License.objects.filter(user=user).select_related('plan').prefetch_related('ea_settings')
     
     if not licenses.exists():
         return JsonResponse({'success': False, 'message': 'No license found for this account'})
     
     license_list = []
     for lic in licenses:
-        # Get EA settings if exists
-        try:
-            settings = lic.ea_settings
+        # Get EA settings (BTCUSD preferred, or any)
+        settings = lic.ea_settings.filter(symbol='BTCUSD').first() or lic.ea_settings.first()
+        if settings:
             ea_settings = {
                 'investment_amount': float(settings.investment_amount),
                 'lot_size': float(settings.lot_size),
                 'max_buy_orders': settings.max_buy_orders,
                 'max_sell_orders': settings.max_sell_orders,
             }
-        except:
+        else:
             ea_settings = None
         
         license_list.append({
@@ -311,6 +311,59 @@ def login(request):
             'email': user.email,
             'name': user.first_name
         },
+        'licenses': license_list
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def get_licenses(request):
+    """Get all licenses for a user with fresh EA settings"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    email = data.get('email', '').strip().lower()
+    
+    if not email:
+        return JsonResponse({'success': False, 'message': 'Email is required'})
+    
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'User not found'})
+    
+    # Get all user's licenses with EA settings
+    licenses = License.objects.filter(user=user).select_related('plan').prefetch_related('ea_settings')
+    
+    license_list = []
+    for lic in licenses:
+        # Get EA settings (BTCUSD preferred, or any)
+        settings = lic.ea_settings.filter(symbol='BTCUSD').first() or lic.ea_settings.first()
+        if settings:
+            ea_settings = {
+                'investment_amount': float(settings.investment_amount),
+                'lot_size': float(settings.lot_size),
+                'max_buy_orders': settings.max_buy_orders,
+                'max_sell_orders': settings.max_sell_orders,
+            }
+        else:
+            ea_settings = None
+        
+        license_list.append({
+            'license_key': lic.license_key,
+            'plan': lic.plan.name,
+            'status': lic.status,
+            'activated_at': lic.activated_at.isoformat(),
+            'expires_at': lic.expires_at.isoformat(),
+            'days_remaining': lic.days_remaining(),
+            'mt5_account': lic.mt5_account,
+            'ea_settings': ea_settings
+        })
+    
+    return JsonResponse({
+        'success': True,
         'licenses': license_list
     })
 
@@ -372,18 +425,19 @@ def subscribe(request):
     )
     
     # Get ALL user's licenses to return
-    all_licenses = License.objects.filter(user=user).select_related('plan')
+    all_licenses = License.objects.filter(user=user).select_related('plan').prefetch_related('ea_settings')
     license_list = []
     for lic in all_licenses:
-        try:
-            settings = lic.ea_settings
+        # Get the first EA settings (BTCUSD preferred, or any)
+        settings = lic.ea_settings.filter(symbol='BTCUSD').first() or lic.ea_settings.first()
+        if settings:
             ea_settings = {
                 'investment_amount': float(settings.investment_amount),
                 'lot_size': float(settings.lot_size),
                 'max_buy_orders': settings.max_buy_orders,
                 'max_sell_orders': settings.max_sell_orders,
             }
-        except:
+        else:
             ea_settings = None
         
         license_list.append({
@@ -459,10 +513,11 @@ def get_ea_settings(request):
         defaults={'investment_amount': 100}
     )
     
-    # If newly created, recalculate lots based on investment
+    # If newly created, apply symbol-specific defaults
     if created:
-        settings.recalculate_lots()
+        settings.apply_symbol_defaults()
         settings.save()
+        print(f"Created new EASettings for {symbol} with defaults: Gap={settings.buy_gap_pips}, Range={settings.buy_range_end}-{settings.buy_range_start}")
     
     return JsonResponse({
         'success': True,
@@ -496,10 +551,15 @@ def get_ea_settings(request):
             # Lot & Risk
             'investment_amount': float(settings.investment_amount),
             'lot_size': float(settings.lot_size),
-            # Breakeven TP
-            'enable_breakeven_tp': settings.enable_breakeven_tp,
-            'breakeven_buy_tp_pips': float(settings.breakeven_buy_tp_pips),
-            'breakeven_sell_tp_pips': float(settings.breakeven_sell_tp_pips),
+            # Breakeven Trailing
+            'enable_breakeven_trailing': settings.enable_breakeven_trailing,
+            'breakeven_buy_trailing_pips': float(settings.breakeven_buy_trailing_pips),
+            'breakeven_sell_trailing_pips': float(settings.breakeven_sell_trailing_pips),
+            'breakeven_trailing_start_pips': float(settings.breakeven_trailing_start_pips),
+            'breakeven_initial_sl_pips': float(settings.breakeven_initial_sl_pips),
+            'breakeven_trailing_ratio': float(settings.breakeven_trailing_ratio),
+            'breakeven_max_sl_distance': float(settings.breakeven_max_sl_distance),
+            'breakeven_trailing_step_pips': float(settings.breakeven_trailing_step_pips),
             'manage_all_trades': settings.manage_all_trades,
             # BUY Recovery
             'enable_buy_be_recovery': settings.enable_buy_be_recovery,

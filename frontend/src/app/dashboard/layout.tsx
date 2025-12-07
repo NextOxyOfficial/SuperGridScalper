@@ -17,8 +17,7 @@ function DashboardNav() {
 
   const tabs = [
     { name: 'Dashboard', href: '/dashboard' },
-    { name: 'Settings', href: '/dashboard/settings' },
-    { name: 'Download', href: '/dashboard/download' },
+    { name: 'Download EA', href: '/dashboard/download' },
   ];
 
   // Simple nav for license selection page

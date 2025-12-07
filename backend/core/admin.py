@@ -165,15 +165,28 @@ class LicenseVerificationLogAdmin(admin.ModelAdmin):
 
 @admin.register(EASettings)
 class EASettingsAdmin(admin.ModelAdmin):
-    list_display = ['get_mt5_account', 'symbol', 'investment_amount', 'lot_size', 'max_buy_orders', 'max_sell_orders', 'updated_at']
+    list_display = ['get_mt5_account', 'symbol', 'lot_size', 'buy_gap_pips', 'buy_range_display', 'max_buy_orders', 'updated_at']
     list_filter = ['symbol']
     search_fields = ['license__license_key', 'license__mt5_account']
-    autocomplete_fields = ['license']
+    list_editable = ['buy_gap_pips', 'max_buy_orders']  # Quick edit from list view
+    
+    # Lot size is auto-calculated, so make it readonly
+    readonly_fields = ['lot_size', 'buy_be_recovery_lot_min', 'sell_be_recovery_lot_min', 'license', 'symbol']
+    
+    # Disable adding new settings - they are created automatically when EA connects
+    def has_add_permission(self, request):
+        return False
     
     fieldsets = (
-        ('License & Symbol', {'fields': ('license', 'symbol')}),
-        ('Investment', {'fields': ('investment_amount',)}),
-        ('BUY Settings', {
+        ('License & Symbol (Read-only)', {
+            'fields': ('license', 'symbol'),
+            'description': 'Settings are created automatically when EA connects. Edit existing settings below.'
+        }),
+        ('💰 Lot Size (Auto-calculated)', {
+            'fields': ('lot_size',),
+            'description': 'Lot size: $100 = 0.06 lot (calculated from investment)'
+        }),
+        ('📈 BUY Grid Settings', {
             'fields': (
                 ('buy_range_start', 'buy_range_end'),
                 ('buy_gap_pips', 'max_buy_orders'),
@@ -182,7 +195,7 @@ class EASettingsAdmin(admin.ModelAdmin):
                 ('buy_trailing_ratio', 'buy_max_sl_distance', 'buy_trailing_step_pips'),
             )
         }),
-        ('SELL Settings', {
+        ('📉 SELL Grid Settings', {
             'fields': (
                 ('sell_range_start', 'sell_range_end'),
                 ('sell_gap_pips', 'max_sell_orders'),
@@ -191,38 +204,44 @@ class EASettingsAdmin(admin.ModelAdmin):
                 ('sell_trailing_ratio', 'sell_max_sl_distance', 'sell_trailing_step_pips'),
             )
         }),
-        ('Risk Management', {
-            'fields': ('lot_size',)
-        }),
-        ('Breakeven', {
+        ('🎯 Breakeven Trailing', {
             'fields': (
-                'enable_breakeven_tp',
-                ('breakeven_buy_tp_pips', 'breakeven_sell_tp_pips'),
+                'enable_breakeven_trailing',
+                ('breakeven_buy_trailing_pips', 'breakeven_sell_trailing_pips'),
+                ('breakeven_trailing_start_pips', 'breakeven_initial_sl_pips'),
+                ('breakeven_trailing_ratio', 'breakeven_max_sl_distance'),
+                'breakeven_trailing_step_pips',
                 'manage_all_trades',
             ),
-            'classes': ('collapse',)
         }),
-        ('BUY Recovery', {
+        ('🔄 BUY Recovery', {
             'fields': (
                 'enable_buy_be_recovery',
                 ('buy_be_recovery_lot_min', 'buy_be_recovery_lot_max'),
                 ('buy_be_recovery_lot_increase', 'max_buy_be_recovery_orders'),
             ),
-            'classes': ('collapse',)
         }),
-        ('SELL Recovery', {
+        ('🔄 SELL Recovery', {
             'fields': (
                 'enable_sell_be_recovery',
                 ('sell_be_recovery_lot_min', 'sell_be_recovery_lot_max'),
                 ('sell_be_recovery_lot_increase', 'max_sell_be_recovery_orders'),
             ),
-            'classes': ('collapse',)
         }),
     )
+    
+    def save_model(self, request, obj, form, change):
+        # Apply fixed lot sizes and symbol defaults when saving
+        obj.apply_symbol_defaults()
+        super().save_model(request, obj, form, change)
 
     def get_mt5_account(self, obj):
         return obj.license.mt5_account or '-'
     get_mt5_account.short_description = 'MT5 Account'
+    
+    def buy_range_display(self, obj):
+        return f"{int(obj.buy_range_end)} - {int(obj.buy_range_start)}"
+    buy_range_display.short_description = 'BUY Range'
 
 
 @admin.register(TradeData)

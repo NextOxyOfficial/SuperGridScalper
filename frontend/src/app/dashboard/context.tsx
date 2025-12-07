@@ -28,6 +28,24 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // Fetch fresh licenses from server
+  const fetchLicensesFromServer = async (email: string) => {
+    try {
+      const res = await fetch(`${API_URL}/licenses/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLicenses(data.licenses);
+        localStorage.setItem('licenses', JSON.stringify(data.licenses));
+      }
+    } catch (e) {
+      console.error('Failed to fetch licenses from server');
+    }
+  };
+
   useEffect(() => {
     const userData = localStorage.getItem('user');
     const licensesData = localStorage.getItem('licenses');
@@ -38,11 +56,18 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       return;
     }
     
-    setUser(JSON.parse(userData));
+    const parsedUser = JSON.parse(userData);
+    setUser(parsedUser);
     
+    // Load from localStorage first, then refresh from server
     if (licensesData) {
       const lics = JSON.parse(licensesData);
       setLicenses(lics);
+    }
+    
+    // Fetch fresh data from server
+    if (parsedUser?.email) {
+      fetchLicensesFromServer(parsedUser.email);
     }
     
     if (selectedLicenseData) {
