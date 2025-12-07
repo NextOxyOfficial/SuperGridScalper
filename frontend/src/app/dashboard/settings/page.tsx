@@ -11,16 +11,40 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
+  // Fetch fresh settings on page load
+  const refreshSettings = async () => {
+    if (!selectedLicense) return;
+    try {
+      const res = await fetch(`${API_URL}/settings/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ license_key: selectedLicense.license_key, mt5_account: '', symbol: 'BTCUSD' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSettings(data.settings);
+        setInvestment(data.settings.investment_amount || 1000);
+      }
+    } catch (e) {
+      console.error('Failed to refresh settings');
+    }
+  };
+
   useEffect(() => {
     if (!selectedLicense) {
       router.push('/dashboard');
       return;
     }
     
+    // Fetch fresh settings from server
+    refreshSettings();
+  }, [selectedLicense]);
+  
+  useEffect(() => {
     if (settings?.investment_amount) {
       setInvestment(settings.investment_amount);
     }
-  }, [selectedLicense, settings]);
+  }, [settings]);
 
   const updateInvestment = async () => {
     if (!selectedLicense) return;
@@ -36,8 +60,17 @@ export default function SettingsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setSettings(data.settings);
-        setMessage({ type: 'success', text: 'Settings updated!' });
+        // Refresh settings from server to get updated values
+        const settingsRes = await fetch(`${API_URL}/settings/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ license_key: selectedLicense.license_key, mt5_account: '', symbol: 'BTCUSD' })
+        });
+        const settingsData = await settingsRes.json();
+        if (settingsData.success) {
+          setSettings(settingsData.settings);
+        }
+        setMessage({ type: 'success', text: 'Settings updated! EA will reload in 5 seconds.' });
       } else {
         setMessage({ type: 'error', text: data.message });
       }
@@ -45,7 +78,7 @@ export default function SettingsPage() {
       setMessage({ type: 'error', text: 'Failed to update' });
     }
     setSaving(false);
-    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   };
 
   if (!selectedLicense) {
@@ -64,13 +97,13 @@ export default function SettingsPage() {
             </div>
             <div>
               <p className="text-indigo-200 text-sm mb-1">Calculated Lot Size</p>
-              <p className="text-3xl font-bold">{(investment * 0.05 / 100).toFixed(2)}</p>
-              <p className="text-xs text-indigo-200">0.05 lot per $100</p>
+              <p className="text-3xl font-bold">{settings?.lot_size || (investment * 0.05 / 100).toFixed(2)}</p>
+              <p className="text-xs text-indigo-200">Based on investment</p>
             </div>
             <div>
               <p className="text-indigo-200 text-sm mb-1">Recovery Lot Min</p>
-              <p className="text-3xl font-bold">{(investment * 0.05 / 100).toFixed(2)}</p>
-              <p className="text-xs text-indigo-200">0.05 lot per $100</p>
+              <p className="text-3xl font-bold">{settings?.buy_be_recovery_lot_min || (investment * 0.05 / 100).toFixed(2)}</p>
+              <p className="text-xs text-indigo-200">Based on investment</p>
             </div>
           </div>
         </div>
@@ -139,51 +172,6 @@ export default function SettingsPage() {
               </div>
             </div>
             
-            <div className="mt-6 grid md:grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-semibold text-gray-800 mb-3">Buy Grid Settings</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-gray-500">Range Start</span>
-                    <span className="font-mono">{settings.buy_range_start}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-gray-500">Range End</span>
-                    <span className="font-mono">{settings.buy_range_end}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-gray-500">Gap Pips</span>
-                    <span className="font-mono">{settings.buy_gap_pips}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-gray-500">Take Profit</span>
-                    <span className="font-mono">{settings.buy_take_profit_pips} pips</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div>
-                <h4 className="font-semibold text-gray-800 mb-3">Sell Grid Settings</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-gray-500">Range Start</span>
-                    <span className="font-mono">{settings.sell_range_start}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-gray-500">Range End</span>
-                    <span className="font-mono">{settings.sell_range_end}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-gray-500">Gap Pips</span>
-                    <span className="font-mono">{settings.sell_gap_pips}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-gray-500">Take Profit</span>
-                    <span className="font-mono">{settings.sell_take_profit_pips} pips</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>

@@ -66,12 +66,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     fetchSettings(lic.license_key);
   };
 
-  const fetchSettings = async (licenseKey: string) => {
+  const fetchSettings = async (licenseKey: string, symbol: string = 'BTCUSD') => {
     try {
       const res = await fetch(`${API_URL}/settings/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ license_key: licenseKey, mt5_account: '' })
+        body: JSON.stringify({ license_key: licenseKey, mt5_account: '', symbol: symbol })
       });
       const data = await res.json();
       if (data.success) {

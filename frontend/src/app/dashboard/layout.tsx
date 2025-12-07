@@ -16,8 +16,7 @@ function DashboardNav() {
   };
 
   const tabs = [
-    { name: 'Overview', href: '/dashboard' },
-    { name: 'Trading', href: '/dashboard/trading' },
+    { name: 'Dashboard', href: '/dashboard' },
     { name: 'Settings', href: '/dashboard/settings' },
     { name: 'Download', href: '/dashboard/download' },
   ];

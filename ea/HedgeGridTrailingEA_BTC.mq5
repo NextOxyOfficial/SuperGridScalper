@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
-//|                                        HedgeGridTrailingEA.mq5   |
-//|                      Hedging Grid with Trailing Stop EA          |
+//|                                    HedgeGridTrailingEA_BTC.mq5   |
+//|                  Hedging Grid with Trailing Stop EA (BTCUSD)     |
 //|                          Developed by Alimul Islam               |
 //|                          Contact: +8801957045438                 |
 //+------------------------------------------------------------------+
@@ -82,8 +82,8 @@ double    SellBERecoveryLotIncrease = 0;
 int       MaxSellBERecoveryOrders   = 0;
 
 // EA Internal Settings
-int       MagicNumber       = 999888;
-string    OrderComment      = "SGS";
+int       MagicNumber       = 999889;  // Different magic for BTC
+string    OrderComment      = "SGS_BTC";
 
 //--- Global Variables
 double pip = 1.0;
@@ -91,7 +91,7 @@ datetime lastCheckTime = 0;
 double normalizedLotSize = 0.0;
 datetime g_LastLicenseCheck = 0;
 datetime g_LastTradeDataUpdate = 0;
-int LICENSE_CHECK_INTERVAL = 3600; // Check license every hour (3600 seconds)
+int LICENSE_CHECK_INTERVAL = 5; // Check license every 5 seconds (for testing - change to 3600 for production)
 int TRADE_DATA_UPDATE_INTERVAL = 5; // Send trade data every 5 seconds
 
 // Virtual grid tracking (no pending orders)
@@ -233,6 +233,9 @@ bool LoadSettingsFromServer()
     jsonRequest += "\"symbol\":\"" + _Symbol + "\"";  // Send current symbol
     jsonRequest += "}";
     
+    Print(">>> Requesting settings for symbol: ", _Symbol);
+    Print(">>> Request: ", jsonRequest);
+    
     // Prepare request
     string url = LicenseServer + "/api/settings/";
     string headers = "Content-Type: application/json\r\n";
@@ -256,6 +259,9 @@ bool LoadSettingsFromServer()
     
     // Parse response
     string responseStr = CharArrayToString(result);
+    
+    // Debug: Show first 500 chars of response
+    Print(">>> Server response (first 500 chars): ", StringSubstr(responseStr, 0, 500));
     
     // Check if successful
     if(StringFind(responseStr, "\"success\": true") < 0 && StringFind(responseStr, "\"success\":true") < 0)
@@ -318,7 +324,8 @@ bool LoadSettingsFromServer()
     MaxSellBERecoveryOrders = (int)ExtractDoubleValue(responseStr, "max_sell_be_recovery_orders");
     
     g_SettingsLoaded = true;
-    Print("Settings loaded from server successfully!");
+    Print("=== Settings loaded from server successfully! ===");
+    Print(">>> LOT SIZE: ", LotSize, " <<<");
     Print("BuyRange: ", BuyRangeStart, " - ", BuyRangeEnd, " | SellRange: ", SellRangeStart, " - ", SellRangeEnd);
     Print("LotSize: ", LotSize, " | MaxBuy: ", MaxBuyOrders, " | MaxSell: ", MaxSellOrders);
     Print("BUY SL: ", BuyStopLossPips, " pips | BUY TP: ", BuyTakeProfitPips, " pips");
@@ -708,72 +715,89 @@ int OnInit()
     // Check if running in Strategy Tester
     bool isTesting = MQLInfoInteger(MQL_TESTER);
     
-    if(isTesting)
+    // For BTC EA: Use hardcoded settings for testing without license
+    // Set to false when you want to use license verification and load from server
+    bool skipLicenseForTesting = true;  // Use hardcoded BTC settings (no license needed)
+    
+    if(isTesting || skipLicenseForTesting)
     {
-        Print("=== RUNNING IN STRATEGY TESTER ===");
-        Print("WebRequest is disabled in tester. Using optimized settings.");
+        if(isTesting)
+            Print("=== RUNNING IN STRATEGY TESTER ===");
+        else
+            Print("=== RUNNING IN LIVE MODE (License check skipped for testing) ===");
+        
+        Print("Using hardcoded BTCUSD settings.");
         
         // Set default values for testing
         g_LicenseValid = true;
-        g_LicenseMessage = "TESTER MODE - No license check";
+        g_LicenseMessage = "TEST MODE - No license check";
         g_SettingsLoaded = true;
         
-        // BUY Grid Settings (Optimized for XAUUSD)
-        BuyRangeStart = 4400;        // BUY Range Start Price
-        BuyRangeEnd = 4000;          // BUY Range End Price
-        BuyGapPips = 3.0;            // BUY Gap between orders (Pips)
+        // BUY Grid Settings (Optimized for BTCUSD)
+        // BTC pip = 10 (99000 -> 99010 = 1 pip)
+        // Current BTC price ~99000-101000, so set wide range
+        BuyRangeStart = 110000;      // BUY Range Start Price (top of range)
+        BuyRangeEnd = 90000;         // BUY Range End Price (bottom of range)
+        BuyGapPips = 30.0;           // BUY Gap between orders (30 pips = $300)
         MaxBuyOrders = 4;            // Maximum BUY orders at a time
         
         // BUY TP/SL/Trailing Settings
-        BuyTakeProfitPips = 50.0;    // BUY Take Profit (Pips)
+        BuyTakeProfitPips = 50.0;    // BUY Take Profit (50 pips = $500)
         BuyStopLossPips = 0.0;       // BUY Stop Loss (Pips, 0=disabled)
-        BuyTrailingStartPips = 3.0;  // BUY Start trailing after X pips profit
-        BuyInitialSLPips = 2.0;      // BUY Initial SL distance when trailing starts
+        BuyTrailingStartPips = 10.0; // BUY Start trailing after 10 pips ($100) profit
+        BuyInitialSLPips = 5.0;      // BUY Initial SL distance when trailing starts
         BuyTrailingRatio = 0.5;      // BUY SL movement ratio
-        BuyMaxSLDistance = 15.0;     // BUY Maximum SL distance from price
-        BuyTrailingStepPips = 0.5;   // BUY Minimum step to update SL
+        BuyMaxSLDistance = 50.0;     // BUY Maximum SL distance from price
+        BuyTrailingStepPips = 2.0;   // BUY Minimum step to update SL
         
-        // SELL Grid Settings (Optimized for XAUUSD)
-        SellRangeStart = 4400;       // SELL Range Start Price
-        SellRangeEnd = 4000;         // SELL Range End Price
-        SellGapPips = 3.0;           // SELL Gap between orders (Pips)
+        // SELL Grid Settings (Optimized for BTCUSD)
+        // SELL LIMIT placed above current price
+        SellRangeStart = 90000;      // SELL Range Start Price (bottom of range)
+        SellRangeEnd = 110000;       // SELL Range End Price (top of range)
+        SellGapPips = 30.0;          // SELL Gap between orders (30 pips = $300)
         MaxSellOrders = 4;           // Maximum SELL orders at a time
         
         // SELL TP/SL/Trailing Settings
-        SellTakeProfitPips = 50.0;   // SELL Take Profit (Pips)
+        SellTakeProfitPips = 50.0;   // SELL Take Profit (50 pips = $500)
         SellStopLossPips = 0.0;      // SELL Stop Loss (Pips, 0=disabled)
-        SellTrailingStartPips = 3.0; // SELL Start trailing after X pips profit
-        SellInitialSLPips = 2.0;     // SELL Initial SL distance when trailing starts
+        SellTrailingStartPips = 10.0;// SELL Start trailing after 10 pips ($100) profit
+        SellInitialSLPips = 5.0;     // SELL Initial SL distance when trailing starts
         SellTrailingRatio = 0.5;     // SELL SL movement ratio
-        SellMaxSLDistance = 15.0;    // SELL Maximum SL distance from price
-        SellTrailingStepPips = 0.5;  // SELL Minimum step to update SL
+        SellMaxSLDistance = 50.0;    // SELL Maximum SL distance from price
+        SellTrailingStepPips = 2.0;  // SELL Minimum step to update SL
         
-        // Lot Size
-        LotSize = 0.25;              // Lot Size per order
+        // Lot Size - adjust based on your investment
+        // For $2300 investment: 0.23 lot (0.01 per $100)
+        LotSize = 0.23;              // Lot Size per order
         
         // Breakeven TP Settings
         EnableBreakevenTP = true;    // Enable Breakeven TP for all trades
-        BreakevenBuyTPPips = 2.0;    // Breakeven TP for BUY (pips above avg price)
-        BreakevenSellTPPips = 2.0;   // Breakeven TP for SELL (pips below avg price)
+        BreakevenBuyTPPips = 5.0;    // Breakeven TP for BUY (5 pips = $50 above avg price)
+        BreakevenSellTPPips = 5.0;   // Breakeven TP for SELL (5 pips = $50 below avg price)
         ManageAllTrades = true;      // Manage ALL trades (ignore magic number)
         
         // BUY Recovery Settings
         EnableBuyBERecovery = true;  // Enable BUY Recovery Orders
-        BuyBERecoveryLotMin = 1.0;   // BUY: Minimum lot for recovery
-        BuyBERecoveryLotMax = 5.0;   // BUY: Maximum lot for recovery
+        BuyBERecoveryLotMin = 0.01;  // BUY: Minimum lot for recovery
+        BuyBERecoveryLotMax = 0.1;   // BUY: Maximum lot for recovery
         BuyBERecoveryLotIncrease = 10.0; // BUY: Lot increase % per order
         MaxBuyBERecoveryOrders = 30; // BUY: Max recovery orders
         
         // SELL Recovery Settings
         EnableSellBERecovery = true; // Enable SELL Recovery Orders
-        SellBERecoveryLotMin = 0.25; // SELL: Minimum lot for recovery
-        SellBERecoveryLotMax = 5.0;  // SELL: Maximum lot for recovery
+        SellBERecoveryLotMin = 0.01; // SELL: Minimum lot for recovery
+        SellBERecoveryLotMax = 0.1;  // SELL: Maximum lot for recovery
         SellBERecoveryLotIncrease = 10.0; // SELL: Lot increase % per order
         MaxSellBERecoveryOrders = 30; // SELL: Max recovery orders
         
-        Print("Test settings loaded: Lot=", LotSize, " MaxBuy=", MaxBuyOrders, " MaxSell=", MaxSellOrders);
-        Print("BUY Range: ", BuyRangeStart, " - ", BuyRangeEnd, " | SELL Range: ", SellRangeStart, " - ", SellRangeEnd);
+        Print("=== BTCUSD Test Settings Loaded ===");
+        Print("Pip Value: 10.0 (99000 -> 99010 = 1 pip, 99000 -> 99020 = 2 pips)");
+        Print("Test settings: Lot=", LotSize, " MaxBuy=", MaxBuyOrders, " MaxSell=", MaxSellOrders);
+        Print("BUY Range: ", BuyRangeEnd, " - ", BuyRangeStart, " (BUY LIMIT placed below price)");
+        Print("SELL Range: ", SellRangeStart, " - ", SellRangeEnd, " (SELL LIMIT placed above price)");
+        Print("Gap: ", BuyGapPips, " pips = $", BuyGapPips * 10, " | TP: ", BuyTakeProfitPips, " pips = $", BuyTakeProfitPips * 10);
         Print("Recovery: BUY Lot Min=", BuyBERecoveryLotMin, " | SELL Lot Min=", SellBERecoveryLotMin);
+        Print("NOTE: Pending orders will be placed. They trigger when price reaches them.");
     }
     else
     {
@@ -817,8 +841,20 @@ int OnInit()
     int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
     string symbolName = _Symbol;
     
-    // Check if it's a gold/metal symbol
-    if(StringFind(symbolName, "XAU") >= 0 || StringFind(symbolName, "GOLD") >= 0)
+    // Check if it's a crypto symbol (BTC, ETH, etc.)
+    if(StringFind(symbolName, "BTC") >= 0 || StringFind(symbolName, "BITCOIN") >= 0)
+    {
+        // For BTC: 89200 -> 89210 = 1 pip (10 points = 1 pip)
+        // Price like 89200.00 (2 digits) -> 1 pip = 10.0
+        pip = 10.0;
+        Print("BTC detected: Using pip = 10.0 (89200 -> 89210 = 1 pip)");
+    }
+    else if(StringFind(symbolName, "ETH") >= 0)
+    {
+        // For ETH: Similar to BTC, 1 pip = 1.0
+        pip = 1.0;
+    }
+    else if(StringFind(symbolName, "XAU") >= 0 || StringFind(symbolName, "GOLD") >= 0)
     {
         // For Gold: 1 pip = 1.0 (4000 to 4001 = 1 pip)
         pip = 1.0;
@@ -890,10 +926,14 @@ int OnInit()
     double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
     double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
     
+    Print(">>> BROKER LOT INFO: Min=", minLot, " Max=", maxLot, " Step=", lotStep);
+    Print(">>> CONFIGURED LOT: ", LotSize);
+    
     if(lotStep <= 0)
     {
         Print("ERROR: Invalid lot step from broker: ", lotStep);
-        return(INIT_FAILED);
+        lotStep = 0.01;  // Use default if broker returns invalid
+        Print("Using default lot step: ", lotStep);
     }
     
     // Normalize lot size to broker's lot step
@@ -1054,13 +1094,29 @@ void OnTick()
     // Count current positions
     CountOpenPositions();
     
-    // Debug: Print status every 60 seconds in tester
+    // Debug: Print status every 60 seconds
     static datetime lastDebugPrint = 0;
-    if(isTesting && TimeCurrent() - lastDebugPrint > 60)
+    if(TimeCurrent() - lastDebugPrint > 60)
     {
         lastDebugPrint = TimeCurrent();
-        Print("[DEBUG] Tick at ", TimeToString(TimeCurrent()), " | BUY:", currentBuyCount, "/", MaxBuyOrders, " | SELL:", currentSellCount, "/", MaxSellOrders);
-        Print("[DEBUG] Price: ", SymbolInfoDouble(_Symbol, SYMBOL_BID), " | BuyRange: ", BuyRangeEnd, "-", BuyRangeStart, " | SellRange: ", SellRangeStart, "-", SellRangeEnd);
+        double bidPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+        double askPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+        double buyStart = MathMax(BuyRangeStart, BuyRangeEnd);
+        double buyEnd = MathMin(BuyRangeStart, BuyRangeEnd);
+        double sellStart = MathMin(SellRangeStart, SellRangeEnd);
+        double sellEnd = MathMax(SellRangeStart, SellRangeEnd);
+        
+        Print("[DEBUG] Tick at ", TimeToString(TimeCurrent()));
+        Print("[DEBUG] BID: ", bidPrice, " | ASK: ", askPrice, " | Pip: ", pip);
+        Print("[DEBUG] BUY Range: ", buyEnd, " - ", buyStart, " | In Range: ", (bidPrice <= buyStart && bidPrice >= buyEnd) ? "YES" : "NO");
+        Print("[DEBUG] SELL Range: ", sellStart, " - ", sellEnd, " | In Range: ", (askPrice >= sellStart && askPrice <= sellEnd) ? "YES" : "NO");
+        Print("[DEBUG] BUY Positions: ", currentBuyCount, "/", MaxBuyOrders, " | SELL Positions: ", currentSellCount, "/", MaxSellOrders);
+        Print("[DEBUG] License Valid: ", g_LicenseValid, " | Settings Loaded: ", g_SettingsLoaded);
+        
+        // Count pending orders
+        int buyLimitCount = 0, sellLimitCount = 0;
+        CountPendingOrders(buyLimitCount, sellLimitCount);
+        Print("[DEBUG] Pending Orders - BUY LIMIT: ", buyLimitCount, " | SELL LIMIT: ", sellLimitCount);
     }
     
     // Detect position changes
@@ -1177,16 +1233,16 @@ void SetInitialSLTP()
             }
         }
         
-        // Only modify if TP changed
-        if(newTP != currentTP)
+        // Only modify if something changed
+        if(newSL != currentSL || newTP != currentTP)
         {
             if(trade.PositionModify(ticket, newSL, newTP))
             {
                 string typeStr = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
                 LogEvent("MODIFY", typeStr + " #" + IntegerToString(ticket) + 
+                         " | Initial SL: " + DoubleToString(newSL, digits) + 
                          " | TP: " + DoubleToString(newTP, digits) +
-                         " | Open: " + DoubleToString(openPrice, digits) +
-                         " | SL: Trailing only");
+                         " | Open: " + DoubleToString(openPrice, digits));
             }
         }
     }
@@ -1264,7 +1320,7 @@ void ManagePendingGrid()
     double sellStart = MathMin(SellRangeStart, SellRangeEnd);
     double sellEnd = MathMax(SellRangeStart, SellRangeEnd);
     
-    // Count existing pending orders
+    // Count existing pending orders FIRST
     int buyLimitCount = 0;
     int sellLimitCount = 0;
     CountPendingOrders(buyLimitCount, sellLimitCount);
@@ -1273,9 +1329,28 @@ void ManagePendingGrid()
     int totalBuyOrders = currentBuyCount + buyLimitCount;
     int totalSellOrders = currentSellCount + sellLimitCount;
     
+    // Debug: Log grid check every 10 seconds for testing
+    static datetime lastGridDebug = 0;
+    if(TimeCurrent() - lastGridDebug > 10)
+    {
+        lastGridDebug = TimeCurrent();
+        Print("========== GRID DEBUG ==========");
+        Print("BID: ", bidPrice, " | ASK: ", askPrice);
+        Print("BUY Range: ", buyEnd, " - ", buyStart, " | Price in range: ", (bidPrice <= buyStart && bidPrice >= buyEnd) ? "YES" : "NO");
+        Print("SELL Range: ", sellStart, " - ", sellEnd, " | Price in range: ", (askPrice >= sellStart && askPrice <= sellEnd) ? "YES" : "NO");
+        Print("Pip: ", pip, " | BuyGap: ", buyGapPrice, " | SellGap: ", sellGapPrice);
+        Print("LotSize: ", LotSize, " | NormalizedLot: ", normalizedLotSize);
+        Print("BUY: Positions=", currentBuyCount, "/", MaxBuyOrders, " | Pending=", buyLimitCount, " | Total=", totalBuyOrders);
+        Print("SELL: Positions=", currentSellCount, "/", MaxSellOrders, " | Pending=", sellLimitCount, " | Total=", totalSellOrders);
+        Print("=================================");
+    }
+    
     // ===== BUY LIMIT ORDERS =====
     // Only place if we have room and price is in range
-    if(currentBuyCount < MaxBuyOrders && bidPrice <= buyStart && bidPrice >= buyEnd)
+    bool buyInRange = (bidPrice <= buyStart && bidPrice >= buyEnd);
+    bool buyHasRoom = (currentBuyCount < MaxBuyOrders);
+    
+    if(buyHasRoom && buyInRange)
     {
         int ordersNeeded = MaxBuyOrders - totalBuyOrders;
         
@@ -1331,6 +1406,8 @@ void ManagePendingGrid()
                     double sl = 0;
                     double tp = (BuyTakeProfitPips > 0) ? NormalizeDouble(buyLimitPrice + (BuyTakeProfitPips * pip), digits) : 0;
                     
+                    Print("[ORDER] Attempting BUY LIMIT @ ", buyLimitPrice, " | Lot: ", normalizedLotSize, " | TP: ", tp);
+                    
                     if(trade.BuyLimit(normalizedLotSize, buyLimitPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
                     {
                         LogEvent("PENDING", "BUY LIMIT placed @ " + DoubleToString(buyLimitPrice, digits) + 
@@ -1338,6 +1415,10 @@ void ManagePendingGrid()
                                  " | TP: " + DoubleToString(tp, digits) + " | SL: Trailing only");
                         nextBuyPrice = buyLimitPrice;
                         placed++;
+                    }
+                    else
+                    {
+                        Print("[ORDER ERROR] BUY LIMIT failed @ ", buyLimitPrice, " | Error: ", GetLastError(), " | ", trade.ResultRetcodeDescription());
                     }
                 }
             }
@@ -1418,6 +1499,8 @@ void ManagePendingGrid()
                     double sl = 0;
                     double tp = (SellTakeProfitPips > 0) ? NormalizeDouble(sellLimitPrice - (SellTakeProfitPips * pip), digits) : 0;
                     
+                    Print("[ORDER] Attempting SELL LIMIT @ ", sellLimitPrice, " | Lot: ", normalizedLotSize, " | TP: ", tp);
+                    
                     if(trade.SellLimit(normalizedLotSize, sellLimitPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
                     {
                         LogEvent("PENDING", "SELL LIMIT placed @ " + DoubleToString(sellLimitPrice, digits) + 
@@ -1425,6 +1508,10 @@ void ManagePendingGrid()
                                  " | TP: " + DoubleToString(tp, digits) + " | SL: Trailing only");
                         nextSellPrice = sellLimitPrice;
                         placed++;
+                    }
+                    else
+                    {
+                        Print("[ORDER ERROR] SELL LIMIT failed @ ", sellLimitPrice, " | Error: ", GetLastError(), " | ", trade.ResultRetcodeDescription());
                     }
                 }
             }

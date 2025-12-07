@@ -419,7 +419,7 @@ def subscribe(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def get_ea_settings(request):
-    """Get EA settings for a license"""
+    """Get EA settings for a license and symbol"""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -427,6 +427,13 @@ def get_ea_settings(request):
     
     license_key = data.get('license_key', '').strip().upper()
     mt5_account = data.get('mt5_account', '').strip()
+    symbol = data.get('symbol', 'XAUUSD').strip().upper()  # Default to XAUUSD
+    
+    # Normalize symbol name (handle variations like GOLD, BITCOIN)
+    if 'XAU' in symbol or 'GOLD' in symbol:
+        symbol = 'XAUUSD'
+    elif 'BTC' in symbol or 'BITCOIN' in symbol:
+        symbol = 'BTCUSD'
     
     if not license_key:
         return JsonResponse({'success': False, 'message': 'License key is required'})
@@ -445,12 +452,17 @@ def get_ea_settings(request):
     if mt5_account and license.mt5_account and license.mt5_account != mt5_account:
         return JsonResponse({'success': False, 'message': f'License bound to different account'})
     
-    # Get or create EA settings
-    try:
-        settings = license.ea_settings
-    except EASettings.DoesNotExist:
-        # Create default settings
-        settings = EASettings.objects.create(license=license)
+    # Get or create EA settings for this symbol
+    settings, created = EASettings.objects.get_or_create(
+        license=license,
+        symbol=symbol,
+        defaults={'investment_amount': 100}
+    )
+    
+    # If newly created, recalculate lots based on investment
+    if created:
+        settings.recalculate_lots()
+        settings.save()
     
     return JsonResponse({
         'success': True,
@@ -627,17 +639,18 @@ def update_investment(request):
     except License.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Invalid license key'})
     
-    # Get or create settings
-    settings, created = EASettings.objects.get_or_create(license=license)
+    # Get or create settings for BTCUSD (primary symbol)
+    settings, created = EASettings.objects.get_or_create(
+        license=license,
+        symbol='BTCUSD',
+        defaults={'investment_amount': investment}
+    )
     
     # Save investment amount
     settings.investment_amount = investment
     
-    # Apply defaults from template and recalculate lot sizes
-    if created:
-        settings.apply_defaults_from_template()
-    else:
-        settings.recalculate_lots()
+    # Recalculate lot sizes based on investment
+    settings.recalculate_lots()
     
     settings.save()
     
