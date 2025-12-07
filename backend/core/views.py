@@ -5,7 +5,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from .models import License, LicenseVerificationLog, SubscriptionPlan, EASettings, TradeData
+from .models import License, LicenseVerificationLog, SubscriptionPlan, EASettings, TradeData, EAActionLog
 from decimal import Decimal
 import json
 
@@ -211,6 +211,49 @@ def register(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def register(request):
+    """Register a new user"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    first_name = data.get('first_name', '').strip()
+    
+    if not email or not password:
+        return JsonResponse({'success': False, 'message': 'Email and password are required'})
+    
+    if len(password) < 6:
+        return JsonResponse({'success': False, 'message': 'Password must be at least 6 characters'})
+    
+    # Check if user already exists
+    if User.objects.filter(email=email).exists():
+        return JsonResponse({'success': False, 'message': 'An account with this email already exists. Please login.'})
+    
+    # Create new user
+    user = User.objects.create_user(
+        username=email,
+        email=email,
+        password=password,
+        first_name=first_name
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Account created successfully!',
+        'user': {
+            'id': user.id,
+            'email': user.email,
+            'name': user.first_name
+        },
+        'licenses': []  # New user has no licenses yet
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def login(request):
     """Login user"""
     try:
@@ -286,26 +329,34 @@ def subscribe(request):
     plan_id = data.get('plan_id')
     mt5_account = data.get('mt5_account', '').strip()
     
-    if not email or not password or not plan_id:
-        return JsonResponse({'success': False, 'message': 'Email, password, and plan are required'})
+    if not email or not plan_id:
+        return JsonResponse({'success': False, 'message': 'Email and plan are required'})
     
     if not mt5_account:
         return JsonResponse({'success': False, 'message': 'MT5 account number is required'})
     
-    # Authenticate or create user
-    user = authenticate(username=email, password=password)
-    
-    if user is None:
-        # Check if user exists
-        if User.objects.filter(email=email).exists():
-            return JsonResponse({'success': False, 'message': 'Invalid password for existing account'})
+    # Check if this is an existing logged-in user (password = 'existing_user')
+    if password == 'existing_user':
+        # Get user by email (already logged in from dashboard)
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'User not found. Please login again.'})
+    else:
+        # Authenticate or create user (from landing page)
+        user = authenticate(username=email, password=password)
         
-        # Create new user
-        user = User.objects.create_user(
-            username=email,
-            email=email,
-            password=password
-        )
+        if user is None:
+            # Check if user exists
+            if User.objects.filter(email=email).exists():
+                return JsonResponse({'success': False, 'message': 'Invalid password for existing account'})
+            
+            # Create new user
+            user = User.objects.create_user(
+                username=email,
+                email=email,
+                password=password
+            )
     
     # Get plan
     try:
@@ -314,25 +365,53 @@ def subscribe(request):
         return JsonResponse({'success': False, 'message': 'Invalid plan selected'})
     
     # Create license with MT5 account bound
-    license = License.objects.create(
+    new_license = License.objects.create(
         user=user,
         plan=plan,
         mt5_account=mt5_account
     )
     
+    # Get ALL user's licenses to return
+    all_licenses = License.objects.filter(user=user).select_related('plan')
+    license_list = []
+    for lic in all_licenses:
+        try:
+            settings = lic.ea_settings
+            ea_settings = {
+                'investment_amount': float(settings.investment_amount),
+                'lot_size': float(settings.lot_size),
+                'max_buy_orders': settings.max_buy_orders,
+                'max_sell_orders': settings.max_sell_orders,
+            }
+        except:
+            ea_settings = None
+        
+        license_list.append({
+            'license_key': lic.license_key,
+            'plan': lic.plan.name,
+            'status': lic.status,
+            'activated_at': lic.activated_at.isoformat(),
+            'expires_at': lic.expires_at.isoformat(),
+            'days_remaining': lic.days_remaining(),
+            'mt5_account': lic.mt5_account,
+            'ea_settings': ea_settings
+        })
+    
     return JsonResponse({
         'success': True,
         'message': 'Subscription successful! Your license key has been generated.',
         'license': {
-            'license_key': license.license_key,
+            'license_key': new_license.license_key,
             'plan': plan.name,
-            'expires_at': license.expires_at.isoformat(),
-            'days_remaining': license.days_remaining(),
-            'mt5_account': license.mt5_account
+            'expires_at': new_license.expires_at.isoformat(),
+            'days_remaining': new_license.days_remaining(),
+            'mt5_account': new_license.mt5_account
         },
+        'licenses': license_list,
         'user': {
             'id': user.id,
-            'email': user.email
+            'email': user.email,
+            'name': user.first_name
         }
     })
 
@@ -528,14 +607,14 @@ def get_trade_data(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def update_investment(request):
-    """Update investment amount and calculate EA settings"""
+    """Update investment amount and calculate EA settings based on default template"""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
     
     license_key = data.get('license_key', '').strip().upper()
-    investment = Decimal(str(data.get('investment_amount', 1000)))
+    investment = Decimal(str(data.get('investment_amount', 100)))
     
     if not license_key:
         return JsonResponse({'success': False, 'message': 'License key is required'})
@@ -554,18 +633,11 @@ def update_investment(request):
     # Save investment amount
     settings.investment_amount = investment
     
-    # Calculate settings based on investment
-    settings.lot_size = max(Decimal('0.01'), (investment / 10000).quantize(Decimal('0.01')))
-    settings.max_buy_orders = min(20, max(2, int(investment / 500)))
-    settings.max_sell_orders = min(20, max(2, int(investment / 500)))
-    settings.max_buy_be_recovery_orders = min(50, max(5, int(investment / 200)))
-    settings.max_sell_be_recovery_orders = min(50, max(5, int(investment / 200)))
-    
-    # Recovery lot settings
-    settings.buy_be_recovery_lot_min = settings.lot_size
-    settings.buy_be_recovery_lot_max = settings.lot_size * 5
-    settings.sell_be_recovery_lot_min = settings.lot_size
-    settings.sell_be_recovery_lot_max = settings.lot_size * 5
+    # Apply defaults from template and recalculate lot sizes
+    if created:
+        settings.apply_defaults_from_template()
+    else:
+        settings.recalculate_lots()
     
     settings.save()
     
@@ -575,9 +647,81 @@ def update_investment(request):
         'settings': {
             'investment_amount': float(settings.investment_amount),
             'lot_size': float(settings.lot_size),
+            'buy_be_recovery_lot_min': float(settings.buy_be_recovery_lot_min),
+            'sell_be_recovery_lot_min': float(settings.sell_be_recovery_lot_min),
             'max_buy_orders': settings.max_buy_orders,
             'max_sell_orders': settings.max_sell_orders,
             'max_buy_be_recovery_orders': settings.max_buy_be_recovery_orders,
             'max_sell_be_recovery_orders': settings.max_sell_be_recovery_orders,
         }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def add_action_log(request):
+    """Add action log from EA"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    license_key = data.get('license_key', '').strip().upper()
+    log_type = data.get('log_type', 'INFO')
+    message = data.get('message', '')
+    details = data.get('details', {})
+    
+    if not license_key or not message:
+        return JsonResponse({'success': False, 'message': 'License key and message required'})
+    
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license'})
+    
+    # Create log entry
+    EAActionLog.objects.create(
+        license=license,
+        log_type=log_type,
+        message=message,
+        details=details
+    )
+    
+    # Keep only last 200 logs per license
+    old_logs = EAActionLog.objects.filter(license=license).order_by('-created_at')[200:]
+    if old_logs.exists():
+        EAActionLog.objects.filter(id__in=[log.id for log in old_logs]).delete()
+    
+    return JsonResponse({'success': True})
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_action_logs(request):
+    """Get action logs for a license"""
+    license_key = request.GET.get('license_key', '').strip().upper()
+    limit = int(request.GET.get('limit', 50))
+    
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key required'})
+    
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license'})
+    
+    logs = EAActionLog.objects.filter(license=license).order_by('-created_at')[:limit]
+    
+    log_list = []
+    for log in reversed(logs):  # Reverse to get oldest first
+        log_list.append({
+            'type': log.log_type,
+            'message': log.message,
+            'details': log.details,
+            'time': log.created_at.strftime('%H:%M:%S')
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'logs': log_list
     })

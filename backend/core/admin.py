@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, DefaultEASettings
 
 
 # Unregister default User admin and register with search
@@ -20,6 +20,81 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
     list_filter = ['is_active']
     search_fields = ['name']
     list_editable = ['price', 'duration_days', 'max_accounts', 'is_active']
+
+
+@admin.register(DefaultEASettings)
+class DefaultEASettingsAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_active', 'base_investment', 'base_lot_size', 'base_recovery_lot_min', 'lot_example', 'updated_at']
+    list_filter = ['is_active']
+    
+    fieldsets = (
+        ('📋 Template Info', {
+            'fields': ('name', 'is_active'),
+            'description': 'Only one template can be active at a time.'
+        }),
+        ('💰 Lot Calculation (per $100 investment)', {
+            'fields': (('base_investment', 'base_lot_size', 'base_recovery_lot_min'),),
+            'description': 'Lot sizes are calculated: (investment / base_investment) × base_lot_size. Example: $500 investment = 0.25 lot'
+        }),
+        ('📈 BUY Grid Settings', {
+            'fields': (
+                ('buy_range_start', 'buy_range_end'),
+                ('buy_gap_pips', 'max_buy_orders'),
+            ),
+        }),
+        ('📈 BUY TP/SL/Trailing', {
+            'fields': (
+                ('buy_take_profit_pips', 'buy_stop_loss_pips'),
+                ('buy_trailing_start_pips', 'buy_initial_sl_pips'),
+                ('buy_trailing_ratio', 'buy_max_sl_distance', 'buy_trailing_step_pips'),
+            ),
+            'classes': ('collapse',),
+        }),
+        ('📉 SELL Grid Settings', {
+            'fields': (
+                ('sell_range_start', 'sell_range_end'),
+                ('sell_gap_pips', 'max_sell_orders'),
+            ),
+        }),
+        ('📉 SELL TP/SL/Trailing', {
+            'fields': (
+                ('sell_take_profit_pips', 'sell_stop_loss_pips'),
+                ('sell_trailing_start_pips', 'sell_initial_sl_pips'),
+                ('sell_trailing_ratio', 'sell_max_sl_distance', 'sell_trailing_step_pips'),
+            ),
+            'classes': ('collapse',),
+        }),
+        ('🎯 Breakeven TP', {
+            'fields': (
+                'enable_breakeven_tp',
+                ('breakeven_buy_tp_pips', 'breakeven_sell_tp_pips'),
+                'manage_all_trades',
+            ),
+        }),
+        ('🔄 BUY Recovery', {
+            'fields': (
+                'enable_buy_be_recovery',
+                ('buy_be_recovery_lot_max', 'buy_be_recovery_lot_increase'),
+                'max_buy_be_recovery_orders',
+            ),
+        }),
+        ('🔄 SELL Recovery', {
+            'fields': (
+                'enable_sell_be_recovery',
+                ('sell_be_recovery_lot_max', 'sell_be_recovery_lot_increase'),
+                'max_sell_be_recovery_orders',
+            ),
+        }),
+    )
+    
+    def lot_example(self, obj):
+        """Show example lot calculations"""
+        examples = []
+        for inv in [100, 500, 1000, 5000]:
+            lot = obj.calculate_lot_size(inv)
+            examples.append(f"${inv}={lot}")
+        return format_html('<span style="font-size:11px;">{}</span>', ' | '.join(examples))
+    lot_example.short_description = 'Lot Examples'
 
 
 class EASettingsInline(admin.StackedInline):

@@ -317,6 +317,8 @@ bool LoadSettingsFromServer()
     Print("BuyRange: ", BuyRangeStart, " - ", BuyRangeEnd, " | SellRange: ", SellRangeStart, " - ", SellRangeEnd);
     Print("LotSize: ", LotSize, " | MaxBuy: ", MaxBuyOrders, " | MaxSell: ", MaxSellOrders);
     
+    SendActionLog("MODE", "Settings loaded | Lot: " + DoubleToString(LotSize, 2) + " | BUY: " + IntegerToString(MaxBuyOrders) + " | SELL: " + IntegerToString(MaxSellOrders));
+    
     return true;
 }
 
@@ -419,6 +421,30 @@ void SendTradeDataToServer()
     {
         // Silent fail - don't spam logs
     }
+}
+
+//+------------------------------------------------------------------+
+//| Send Action Log to Server                                          |
+//+------------------------------------------------------------------+
+void SendActionLog(string logType, string message, string details = "{}")
+{
+    string jsonRequest = "{";
+    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
+    jsonRequest += "\"log_type\":\"" + logType + "\",";
+    jsonRequest += "\"message\":\"" + message + "\",";
+    jsonRequest += "\"details\":" + details;
+    jsonRequest += "}";
+    
+    string url = LicenseServer + "/api/action-log/";
+    string headers = "Content-Type: application/json\r\n";
+    char postData[];
+    char result[];
+    string resultHeaders;
+    
+    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
+    
+    ResetLastError();
+    WebRequest("POST", url, headers, 1000, postData, result, resultHeaders);
 }
 
 //+------------------------------------------------------------------+
@@ -584,6 +610,9 @@ int OnInit()
     Print("LICENSE VERIFIED: ", g_LicenseMessage);
     CreateLicenseLabel();
     
+    // Send connection log
+    SendActionLog("CONNECT", "EA connected to " + _Symbol + " | Account: " + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)));
+    
     // === LOAD SETTINGS FROM SERVER ===
     Print("=== Loading Settings from Server ===");
     if(!LoadSettingsFromServer())
@@ -733,6 +762,24 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+    // Log disconnection
+    string reasonStr = "";
+    switch(reason)
+    {
+        case REASON_PROGRAM: reasonStr = "EA removed"; break;
+        case REASON_REMOVE: reasonStr = "EA removed from chart"; break;
+        case REASON_RECOMPILE: reasonStr = "EA recompiled"; break;
+        case REASON_CHARTCHANGE: reasonStr = "Symbol/timeframe changed"; break;
+        case REASON_CHARTCLOSE: reasonStr = "Chart closed"; break;
+        case REASON_PARAMETERS: reasonStr = "Parameters changed"; break;
+        case REASON_ACCOUNT: reasonStr = "Account changed"; break;
+        case REASON_TEMPLATE: reasonStr = "Template applied"; break;
+        case REASON_INITFAILED: reasonStr = "Init failed"; break;
+        case REASON_CLOSE: reasonStr = "Terminal closed"; break;
+        default: reasonStr = "Unknown reason"; break;
+    }
+    SendActionLog("DISCONNECT", "EA disconnected: " + reasonStr);
+    
     // Delete all pending orders placed by this EA
     int total = OrdersTotal();
     for(int i = total - 1; i >= 0; i--)
@@ -997,6 +1044,7 @@ void ManagePendingGrid()
                     {
                         Print("[BUY LIMIT] @ ", DoubleToString(buyLimitPrice, digits), 
                               " | Gap from ", DoubleToString(lowestBuyLevel, digits));
+                        SendActionLog("GRID", "BUY LIMIT placed @ " + DoubleToString(buyLimitPrice, digits) + " | Lot: " + DoubleToString(normalizedLotSize, 2));
                         nextBuyPrice = buyLimitPrice;
                         placed++;
                     }
@@ -1072,6 +1120,7 @@ void ManagePendingGrid()
                     {
                         Print("[SELL LIMIT] @ ", DoubleToString(sellLimitPrice, digits), 
                               " | Gap from ", DoubleToString(highestSellLevel, digits));
+                        SendActionLog("GRID", "SELL LIMIT placed @ " + DoubleToString(sellLimitPrice, digits) + " | Lot: " + DoubleToString(normalizedLotSize, 2));
                         nextSellPrice = sellLimitPrice;
                         placed++;
                     }
@@ -1612,6 +1661,7 @@ void CheckBERecoveryOrders()
                         {
                             Print("[BUY RECOVERY] @ ", DoubleToString(nextBuyBERecoveryPrice, digits),
                                   " | Lot: ", DoubleToString(recoveryLot, 2), " (from ", DoubleToString(lastBuyLot, 2), " +", BuyBERecoveryLotIncrease, "%)");
+                            SendActionLog("RECOVERY", "BUY Recovery @ " + DoubleToString(nextBuyBERecoveryPrice, digits) + " | Lot: " + DoubleToString(recoveryLot, 2));
                         }
                     }
                 }
@@ -1709,6 +1759,7 @@ void CheckBERecoveryOrders()
                         {
                             Print("[SELL RECOVERY] @ ", DoubleToString(nextSellBERecoveryPrice, digits),
                                   " | Lot: ", DoubleToString(recoveryLot, 2), " (from ", DoubleToString(lastSellLot, 2), " +", SellBERecoveryLotIncrease, "%)");
+                            SendActionLog("RECOVERY", "SELL Recovery @ " + DoubleToString(nextSellBERecoveryPrice, digits) + " | Lot: " + DoubleToString(recoveryLot, 2));
                         }
                     }
                 }
@@ -1842,6 +1893,7 @@ void ApplyTrailingStop()
                     Print("Trailing SL applied to ", posTypeStr, " #", ticket, 
                           " | SL: ", DoubleToString(newSL, 2), 
                           " | Profit: ", DoubleToString(profitPips, 2), " pips");
+                    SendActionLog("TRAILING", posTypeStr + " #" + IntegerToString(ticket) + " SL moved to " + DoubleToString(newSL, 2) + " | +" + DoubleToString(profitPips, 1) + " pips");
                 }
             }
         }
@@ -2092,6 +2144,7 @@ void ApplyBreakevenTP()
                 {
                     Print("[BREAKEVEN TP] BUY #", ticket, " | Avg: ", DoubleToString(buyAvgPrice, 2), 
                           " | TP: ", DoubleToString(buyBreakevenTP, 2));
+                    SendActionLog("BREAKEVEN", "BUY positions TP set to " + DoubleToString(buyBreakevenTP, 2) + " | Avg: " + DoubleToString(buyAvgPrice, 2));
                 }
             }
         }
@@ -2125,6 +2178,7 @@ void ApplyBreakevenTP()
                 {
                     Print("[BREAKEVEN TP] SELL #", ticket, " | Avg: ", DoubleToString(sellAvgPrice, 2), 
                           " | TP: ", DoubleToString(sellBreakevenTP, 2));
+                    SendActionLog("BREAKEVEN", "SELL positions TP set to " + DoubleToString(sellBreakevenTP, 2) + " | Avg: " + DoubleToString(sellAvgPrice, 2));
                 }
             }
         }
@@ -2132,7 +2186,7 @@ void ApplyBreakevenTP()
 }
 
 //+------------------------------------------------------------------+
-//| Update Info Panel on Chart                                        |
+//| Update Info Panel on Chart - Professional Clean Design            |
 //+------------------------------------------------------------------+
 void UpdateInfoPanel()
 {
@@ -2140,7 +2194,7 @@ void UpdateInfoPanel()
     double bidPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
     double askPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     
-    // Calculate average prices for display
+    // Calculate position data
     double buyAvgPrice = 0, sellAvgPrice = 0;
     double buyTotalLots = 0, sellTotalLots = 0;
     double buyWeightedPrice = 0, sellWeightedPrice = 0;
@@ -2176,300 +2230,245 @@ void UpdateInfoPanel()
     if(buyTotalLots > 0) buyAvgPrice = buyWeightedPrice / buyTotalLots;
     if(sellTotalLots > 0) sellAvgPrice = sellWeightedPrice / sellTotalLots;
     
-    int yPos = 60;
-    
-    // ===== MODE STATUS =====
     bool buyRecoveryActive = (currentBuyCount >= MaxBuyOrders);
     bool sellRecoveryActive = (currentSellCount >= MaxSellOrders);
+    double totalProfit = buyTotalProfit + sellTotalProfit;
     
-    string modeText = "";
-    color modeColor = clrLime;
+    // Layout settings
+    int leftX = 15;
+    int rightX = 200;
+    int yStart = 70;  // Start lower to avoid chart header
+    int rowH = 15;
+    int sectionGap = 8;
     
-    if(buyRecoveryActive || sellRecoveryActive)
-    {
-        if(buyRecoveryActive && sellRecoveryActive)
-            modeText = ">>> BUY & SELL BOTH RECOVERY MODE ACTIVATED <<<";
-        else if(buyRecoveryActive)
-            modeText = ">>> BUY RECOVERY MODE ACTIVATED <<<";
-        else
-            modeText = ">>> SELL RECOVERY MODE ACTIVATED <<<";
-        modeColor = clrOrangeRed;
-    }
-    else
-    {
-        modeText = "=== NORMAL GRID TRADING MODE ===";
-        modeColor = clrLime;
-    }
+    // Delete old header objects
+    ObjectDelete(0, "EA_Header");
+    ObjectDelete(0, "EA_Mode");
     
-    ObjectCreate(0, "EA_ModeStatus", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_ModeStatus", OBJPROP_TEXT, modeText);
-    ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_COLOR, modeColor);
-    ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_FONTSIZE, 10);
-    ObjectSetString(0, "EA_ModeStatus", OBJPROP_FONT, "Arial Bold");
-    yPos += 22;
+    int y = yStart;
     
-    // ===== SELL SECTION (LEFT SIDE) =====
-    int sellYPos = yPos;
+    // ========== PRICE BAR ==========
+    string priceText = StringFormat("BID: %s  |  ASK: %s  |  SPREAD: %.1f", 
+        DoubleToString(bidPrice, digits), 
+        DoubleToString(askPrice, digits),
+        (askPrice - bidPrice) / pip);
+    ObjectCreate(0, "EA_Price", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_Price", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_Price", OBJPROP_XDISTANCE, leftX);
+    ObjectSetInteger(0, "EA_Price", OBJPROP_YDISTANCE, y);
+    ObjectSetString(0, "EA_Price", OBJPROP_TEXT, priceText);
+    ObjectSetInteger(0, "EA_Price", OBJPROP_COLOR, clrYellow);
+    ObjectSetInteger(0, "EA_Price", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_Price", OBJPROP_FONT, "Consolas");
     
-    // SELL Header
-    string sellHeader = "======= SELL ORDERS =======";
-    ObjectCreate(0, "EA_SellHeader", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellHeader", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellHeader", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellHeader", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellHeader", OBJPROP_TEXT, sellHeader);
-    ObjectSetInteger(0, "EA_SellHeader", OBJPROP_COLOR, clrOrangeRed);
-    ObjectSetInteger(0, "EA_SellHeader", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellHeader", OBJPROP_FONT, "Arial Bold");
-    sellYPos += 16;
+    y += rowH + sectionGap;
     
-    // SELL Mode
-    string sellModeText = sellRecoveryActive ? ">> RECOVERY MODE <<" : "Normal Grid Mode";
-    ObjectCreate(0, "EA_SellMode", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellMode", OBJPROP_TEXT, sellModeText);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_COLOR, sellRecoveryActive ? clrOrangeRed : clrLime);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellMode", OBJPROP_FONT, "Arial Bold");
-    sellYPos += 16;
+    // ========== SELL SECTION ==========
+    int sellY = y;
     
-    // SELL Count & Lots
-    string sellCountInfo = StringFormat("Orders: %d / %d | Lots: %.2f", currentSellCount, MaxSellOrders, sellTotalLots);
-    ObjectCreate(0, "EA_SellCount", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellCount", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellCount", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellCount", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellCount", OBJPROP_TEXT, sellCountInfo);
-    ObjectSetInteger(0, "EA_SellCount", OBJPROP_COLOR, clrWhite);
-    ObjectSetInteger(0, "EA_SellCount", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellCount", OBJPROP_FONT, "Arial");
-    sellYPos += 14;
+    // SELL Title
+    ObjectCreate(0, "EA_SellTitle", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_SellTitle", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_SellTitle", OBJPROP_XDISTANCE, leftX);
+    ObjectSetInteger(0, "EA_SellTitle", OBJPROP_YDISTANCE, sellY);
+    ObjectSetString(0, "EA_SellTitle", OBJPROP_TEXT, "SELL");
+    ObjectSetInteger(0, "EA_SellTitle", OBJPROP_COLOR, clrOrangeRed);
+    ObjectSetInteger(0, "EA_SellTitle", OBJPROP_FONTSIZE, 10);
+    ObjectSetString(0, "EA_SellTitle", OBJPROP_FONT, "Arial Bold");
     
-    // SELL Average Price
-    string sellAvgInfo = StringFormat("Avg Entry: %s", sellAvgPrice > 0 ? DoubleToString(sellAvgPrice, digits) : "No positions");
+    // SELL Mode Badge
+    string sellBadge = sellRecoveryActive ? "[REC]" : "[GRID]";
+    ObjectCreate(0, "EA_SellBadge", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_SellBadge", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_SellBadge", OBJPROP_XDISTANCE, leftX + 45);
+    ObjectSetInteger(0, "EA_SellBadge", OBJPROP_YDISTANCE, sellY);
+    ObjectSetString(0, "EA_SellBadge", OBJPROP_TEXT, sellBadge);
+    ObjectSetInteger(0, "EA_SellBadge", OBJPROP_COLOR, sellRecoveryActive ? clrOrangeRed : clrLime);
+    ObjectSetInteger(0, "EA_SellBadge", OBJPROP_FONTSIZE, 8);
+    ObjectSetString(0, "EA_SellBadge", OBJPROP_FONT, "Arial");
+    sellY += rowH;
+    
+    // SELL Orders
+    string sellOrders = StringFormat("Orders: %d/%d  Lots: %.2f", currentSellCount, MaxSellOrders, sellTotalLots);
+    ObjectCreate(0, "EA_SellOrders", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_SellOrders", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_SellOrders", OBJPROP_XDISTANCE, leftX);
+    ObjectSetInteger(0, "EA_SellOrders", OBJPROP_YDISTANCE, sellY);
+    ObjectSetString(0, "EA_SellOrders", OBJPROP_TEXT, sellOrders);
+    ObjectSetInteger(0, "EA_SellOrders", OBJPROP_COLOR, clrWhite);
+    ObjectSetInteger(0, "EA_SellOrders", OBJPROP_FONTSIZE, 8);
+    ObjectSetString(0, "EA_SellOrders", OBJPROP_FONT, "Arial");
+    sellY += rowH;
+    
+    // SELL Avg & Profit
+    string sellAvg = StringFormat("Avg: %s  P/L: ", sellAvgPrice > 0 ? DoubleToString(sellAvgPrice, digits) : "---");
     ObjectCreate(0, "EA_SellAvg", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_SellAvg", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellAvg", OBJPROP_TEXT, sellAvgInfo);
-    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_COLOR, clrWhite);
-    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_FONTSIZE, 9);
+    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_XDISTANCE, leftX);
+    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_YDISTANCE, sellY);
+    ObjectSetString(0, "EA_SellAvg", OBJPROP_TEXT, sellAvg);
+    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_COLOR, clrSilver);
+    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_FONTSIZE, 8);
     ObjectSetString(0, "EA_SellAvg", OBJPROP_FONT, "Arial");
-    sellYPos += 14;
     
-    // SELL Breakeven TP Target
-    double sellBE_TP = (sellAvgPrice > 0) ? sellAvgPrice - (BreakevenSellTPPips * pip) : 0;
-    string sellBEInfo = StringFormat("BE TP: %s (-%.1f pips)", 
-        sellBE_TP > 0 ? DoubleToString(sellBE_TP, digits) : "N/A", BreakevenSellTPPips);
-    ObjectCreate(0, "EA_SellBE", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellBE", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellBE", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellBE", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellBE", OBJPROP_TEXT, sellBEInfo);
-    ObjectSetInteger(0, "EA_SellBE", OBJPROP_COLOR, sellRecoveryActive ? clrLime : clrGray);
-    ObjectSetInteger(0, "EA_SellBE", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellBE", OBJPROP_FONT, "Arial");
-    sellYPos += 14;
+    // SELL Profit value
+    string sellPL = StringFormat("%.2f", sellTotalProfit);
+    ObjectCreate(0, "EA_SellPL", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_SellPL", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_SellPL", OBJPROP_XDISTANCE, leftX + 115);
+    ObjectSetInteger(0, "EA_SellPL", OBJPROP_YDISTANCE, sellY);
+    ObjectSetString(0, "EA_SellPL", OBJPROP_TEXT, sellPL);
+    ObjectSetInteger(0, "EA_SellPL", OBJPROP_COLOR, sellTotalProfit >= 0 ? clrLime : clrRed);
+    ObjectSetInteger(0, "EA_SellPL", OBJPROP_FONTSIZE, 8);
+    ObjectSetString(0, "EA_SellPL", OBJPROP_FONT, "Arial Bold");
+    sellY += rowH;
     
-    // SELL Next Order
-    string sellNextInfo = StringFormat("Next SELL @ %s", nextSellPrice > 0 && !sellRecoveryActive ? DoubleToString(nextSellPrice, digits) : "---");
-    ObjectCreate(0, "EA_SellNext", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellNext", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellNext", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellNext", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellNext", OBJPROP_TEXT, sellNextInfo);
-    ObjectSetInteger(0, "EA_SellNext", OBJPROP_COLOR, !sellRecoveryActive ? clrCyan : clrGray);
-    ObjectSetInteger(0, "EA_SellNext", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellNext", OBJPROP_FONT, "Arial");
-    sellYPos += 14;
-    
-    // SELL Profit
-    string sellProfitInfo = StringFormat("Profit: %.2f", sellTotalProfit);
-    ObjectCreate(0, "EA_SellProfit", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellProfit", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellProfit", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellProfit", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellProfit", OBJPROP_TEXT, sellProfitInfo);
-    ObjectSetInteger(0, "EA_SellProfit", OBJPROP_COLOR, sellTotalProfit >= 0 ? clrLime : clrRed);
-    ObjectSetInteger(0, "EA_SellProfit", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellProfit", OBJPROP_FONT, "Arial");
-    sellYPos += 14;
-    
-    // SELL Recovery Info
-    if(EnableSellBERecovery && sellRecoveryActive)
+    // SELL Next/Recovery
+    if(sellRecoveryActive && EnableSellBERecovery)
     {
         int sellRecFilled = CountRecoveryPositions(POSITION_TYPE_SELL);
-        string sellRecInfo = StringFormat("Recovery: %d/%d | Next @ %s", 
-            sellRecFilled, MaxSellBERecoveryOrders,
-            nextSellBERecoveryPrice > 0 ? DoubleToString(nextSellBERecoveryPrice, digits) : "N/A");
-        ObjectCreate(0, "EA_SellRecovery", OBJ_LABEL, 0, 0, 0);
-        ObjectSetInteger(0, "EA_SellRecovery", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-        ObjectSetInteger(0, "EA_SellRecovery", OBJPROP_XDISTANCE, 10);
-        ObjectSetInteger(0, "EA_SellRecovery", OBJPROP_YDISTANCE, sellYPos);
-        ObjectSetString(0, "EA_SellRecovery", OBJPROP_TEXT, sellRecInfo);
-        ObjectSetInteger(0, "EA_SellRecovery", OBJPROP_COLOR, clrMagenta);
-        ObjectSetInteger(0, "EA_SellRecovery", OBJPROP_FONTSIZE, 9);
-        ObjectSetString(0, "EA_SellRecovery", OBJPROP_FONT, "Arial Bold");
+        string sellRec = StringFormat("Rec: %d/%d  Next: %s", sellRecFilled, MaxSellBERecoveryOrders,
+            nextSellBERecoveryPrice > 0 ? DoubleToString(nextSellBERecoveryPrice, digits) : "---");
+        ObjectCreate(0, "EA_SellNext", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_SellNext", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_SellNext", OBJPROP_XDISTANCE, leftX);
+        ObjectSetInteger(0, "EA_SellNext", OBJPROP_YDISTANCE, sellY);
+        ObjectSetString(0, "EA_SellNext", OBJPROP_TEXT, sellRec);
+        ObjectSetInteger(0, "EA_SellNext", OBJPROP_COLOR, clrMagenta);
+        ObjectSetInteger(0, "EA_SellNext", OBJPROP_FONTSIZE, 8);
+        ObjectSetString(0, "EA_SellNext", OBJPROP_FONT, "Arial");
     }
     else
     {
-        ObjectDelete(0, "EA_SellRecovery");
+        string sellNext = StringFormat("Next: %s", nextSellPrice > 0 ? DoubleToString(nextSellPrice, digits) : "---");
+        ObjectCreate(0, "EA_SellNext", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_SellNext", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_SellNext", OBJPROP_XDISTANCE, leftX);
+        ObjectSetInteger(0, "EA_SellNext", OBJPROP_YDISTANCE, sellY);
+        ObjectSetString(0, "EA_SellNext", OBJPROP_TEXT, sellNext);
+        ObjectSetInteger(0, "EA_SellNext", OBJPROP_COLOR, clrCyan);
+        ObjectSetInteger(0, "EA_SellNext", OBJPROP_FONTSIZE, 8);
+        ObjectSetString(0, "EA_SellNext", OBJPROP_FONT, "Arial");
     }
     
-    // ===== BUY SECTION (RIGHT SIDE) =====
-    int buyYPos = yPos;
-    int rightX = 220; // X position for right side
+    // ========== BUY SECTION ==========
+    int buyY = y;
     
-    // BUY Header
-    string buyHeader = "======= BUY ORDERS =======";
-    ObjectCreate(0, "EA_BuyHeader", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyHeader", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyHeader", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyHeader", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyHeader", OBJPROP_TEXT, buyHeader);
-    ObjectSetInteger(0, "EA_BuyHeader", OBJPROP_COLOR, clrDodgerBlue);
-    ObjectSetInteger(0, "EA_BuyHeader", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyHeader", OBJPROP_FONT, "Arial Bold");
-    buyYPos += 16;
+    // BUY Title
+    ObjectCreate(0, "EA_BuyTitle", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_BuyTitle", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_BuyTitle", OBJPROP_XDISTANCE, rightX);
+    ObjectSetInteger(0, "EA_BuyTitle", OBJPROP_YDISTANCE, buyY);
+    ObjectSetString(0, "EA_BuyTitle", OBJPROP_TEXT, "BUY");
+    ObjectSetInteger(0, "EA_BuyTitle", OBJPROP_COLOR, clrDodgerBlue);
+    ObjectSetInteger(0, "EA_BuyTitle", OBJPROP_FONTSIZE, 10);
+    ObjectSetString(0, "EA_BuyTitle", OBJPROP_FONT, "Arial Bold");
     
-    // BUY Mode
-    string buyModeText = buyRecoveryActive ? ">> RECOVERY MODE <<" : "Normal Grid Mode";
-    ObjectCreate(0, "EA_BuyMode", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyMode", OBJPROP_TEXT, buyModeText);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_COLOR, buyRecoveryActive ? clrOrangeRed : clrLime);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyMode", OBJPROP_FONT, "Arial Bold");
-    buyYPos += 16;
+    // BUY Mode Badge
+    string buyBadge = buyRecoveryActive ? "[REC]" : "[GRID]";
+    ObjectCreate(0, "EA_BuyBadge", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_BuyBadge", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_BuyBadge", OBJPROP_XDISTANCE, rightX + 35);
+    ObjectSetInteger(0, "EA_BuyBadge", OBJPROP_YDISTANCE, buyY);
+    ObjectSetString(0, "EA_BuyBadge", OBJPROP_TEXT, buyBadge);
+    ObjectSetInteger(0, "EA_BuyBadge", OBJPROP_COLOR, buyRecoveryActive ? clrOrangeRed : clrLime);
+    ObjectSetInteger(0, "EA_BuyBadge", OBJPROP_FONTSIZE, 8);
+    ObjectSetString(0, "EA_BuyBadge", OBJPROP_FONT, "Arial");
+    buyY += rowH;
     
-    // BUY Count & Lots
-    string buyCountInfo = StringFormat("Orders: %d / %d | Lots: %.2f", currentBuyCount, MaxBuyOrders, buyTotalLots);
-    ObjectCreate(0, "EA_BuyCount", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyCount", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyCount", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyCount", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyCount", OBJPROP_TEXT, buyCountInfo);
-    ObjectSetInteger(0, "EA_BuyCount", OBJPROP_COLOR, clrWhite);
-    ObjectSetInteger(0, "EA_BuyCount", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyCount", OBJPROP_FONT, "Arial");
-    buyYPos += 14;
+    // BUY Orders
+    string buyOrders = StringFormat("Orders: %d/%d  Lots: %.2f", currentBuyCount, MaxBuyOrders, buyTotalLots);
+    ObjectCreate(0, "EA_BuyOrders", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_BuyOrders", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_BuyOrders", OBJPROP_XDISTANCE, rightX);
+    ObjectSetInteger(0, "EA_BuyOrders", OBJPROP_YDISTANCE, buyY);
+    ObjectSetString(0, "EA_BuyOrders", OBJPROP_TEXT, buyOrders);
+    ObjectSetInteger(0, "EA_BuyOrders", OBJPROP_COLOR, clrWhite);
+    ObjectSetInteger(0, "EA_BuyOrders", OBJPROP_FONTSIZE, 8);
+    ObjectSetString(0, "EA_BuyOrders", OBJPROP_FONT, "Arial");
+    buyY += rowH;
     
-    // BUY Average Price
-    string buyAvgInfo = StringFormat("Avg Entry: %s", buyAvgPrice > 0 ? DoubleToString(buyAvgPrice, digits) : "No positions");
+    // BUY Avg & Profit
+    string buyAvg = StringFormat("Avg: %s  P/L: ", buyAvgPrice > 0 ? DoubleToString(buyAvgPrice, digits) : "---");
     ObjectCreate(0, "EA_BuyAvg", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyAvg", OBJPROP_TEXT, buyAvgInfo);
-    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_COLOR, clrWhite);
-    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_FONTSIZE, 9);
+    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_YDISTANCE, buyY);
+    ObjectSetString(0, "EA_BuyAvg", OBJPROP_TEXT, buyAvg);
+    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_COLOR, clrSilver);
+    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_FONTSIZE, 8);
     ObjectSetString(0, "EA_BuyAvg", OBJPROP_FONT, "Arial");
-    buyYPos += 14;
     
-    // BUY Breakeven TP Target
-    double buyBE_TP = (buyAvgPrice > 0) ? buyAvgPrice + (BreakevenBuyTPPips * pip) : 0;
-    string buyBEInfo = StringFormat("BE TP: %s (+%.1f pips)", 
-        buyBE_TP > 0 ? DoubleToString(buyBE_TP, digits) : "N/A", BreakevenBuyTPPips);
-    ObjectCreate(0, "EA_BuyBE", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyBE", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyBE", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyBE", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyBE", OBJPROP_TEXT, buyBEInfo);
-    ObjectSetInteger(0, "EA_BuyBE", OBJPROP_COLOR, buyRecoveryActive ? clrLime : clrGray);
-    ObjectSetInteger(0, "EA_BuyBE", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyBE", OBJPROP_FONT, "Arial");
-    buyYPos += 14;
+    // BUY Profit value
+    string buyPL = StringFormat("%.2f", buyTotalProfit);
+    ObjectCreate(0, "EA_BuyPL", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_BuyPL", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_BuyPL", OBJPROP_XDISTANCE, rightX + 115);
+    ObjectSetInteger(0, "EA_BuyPL", OBJPROP_YDISTANCE, buyY);
+    ObjectSetString(0, "EA_BuyPL", OBJPROP_TEXT, buyPL);
+    ObjectSetInteger(0, "EA_BuyPL", OBJPROP_COLOR, buyTotalProfit >= 0 ? clrLime : clrRed);
+    ObjectSetInteger(0, "EA_BuyPL", OBJPROP_FONTSIZE, 8);
+    ObjectSetString(0, "EA_BuyPL", OBJPROP_FONT, "Arial Bold");
+    buyY += rowH;
     
-    // BUY Next Order
-    string buyNextInfo = StringFormat("Next BUY @ %s", nextBuyPrice > 0 && !buyRecoveryActive ? DoubleToString(nextBuyPrice, digits) : "---");
-    ObjectCreate(0, "EA_BuyNext", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyNext", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyNext", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyNext", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyNext", OBJPROP_TEXT, buyNextInfo);
-    ObjectSetInteger(0, "EA_BuyNext", OBJPROP_COLOR, !buyRecoveryActive ? clrCyan : clrGray);
-    ObjectSetInteger(0, "EA_BuyNext", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyNext", OBJPROP_FONT, "Arial");
-    buyYPos += 14;
-    
-    // BUY Profit
-    string buyProfitInfo = StringFormat("Profit: %.2f", buyTotalProfit);
-    ObjectCreate(0, "EA_BuyProfit", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyProfit", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyProfit", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyProfit", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyProfit", OBJPROP_TEXT, buyProfitInfo);
-    ObjectSetInteger(0, "EA_BuyProfit", OBJPROP_COLOR, buyTotalProfit >= 0 ? clrLime : clrRed);
-    ObjectSetInteger(0, "EA_BuyProfit", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyProfit", OBJPROP_FONT, "Arial");
-    buyYPos += 14;
-    
-    // BUY Recovery Info
-    if(EnableBuyBERecovery && buyRecoveryActive)
+    // BUY Next/Recovery
+    if(buyRecoveryActive && EnableBuyBERecovery)
     {
         int buyRecFilled = CountRecoveryPositions(POSITION_TYPE_BUY);
-        string buyRecInfo = StringFormat("Recovery: %d/%d | Next @ %s", 
-            buyRecFilled, MaxBuyBERecoveryOrders,
-            nextBuyBERecoveryPrice > 0 ? DoubleToString(nextBuyBERecoveryPrice, digits) : "N/A");
-        ObjectCreate(0, "EA_BuyRecovery", OBJ_LABEL, 0, 0, 0);
-        ObjectSetInteger(0, "EA_BuyRecovery", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-        ObjectSetInteger(0, "EA_BuyRecovery", OBJPROP_XDISTANCE, rightX);
-        ObjectSetInteger(0, "EA_BuyRecovery", OBJPROP_YDISTANCE, buyYPos);
-        ObjectSetString(0, "EA_BuyRecovery", OBJPROP_TEXT, buyRecInfo);
-        ObjectSetInteger(0, "EA_BuyRecovery", OBJPROP_COLOR, clrMagenta);
-        ObjectSetInteger(0, "EA_BuyRecovery", OBJPROP_FONTSIZE, 9);
-        ObjectSetString(0, "EA_BuyRecovery", OBJPROP_FONT, "Arial Bold");
+        string buyRec = StringFormat("Rec: %d/%d  Next: %s", buyRecFilled, MaxBuyBERecoveryOrders,
+            nextBuyBERecoveryPrice > 0 ? DoubleToString(nextBuyBERecoveryPrice, digits) : "---");
+        ObjectCreate(0, "EA_BuyNext", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_BuyNext", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_BuyNext", OBJPROP_XDISTANCE, rightX);
+        ObjectSetInteger(0, "EA_BuyNext", OBJPROP_YDISTANCE, buyY);
+        ObjectSetString(0, "EA_BuyNext", OBJPROP_TEXT, buyRec);
+        ObjectSetInteger(0, "EA_BuyNext", OBJPROP_COLOR, clrMagenta);
+        ObjectSetInteger(0, "EA_BuyNext", OBJPROP_FONTSIZE, 8);
+        ObjectSetString(0, "EA_BuyNext", OBJPROP_FONT, "Arial");
     }
     else
     {
-        ObjectDelete(0, "EA_BuyRecovery");
+        string buyNext = StringFormat("Next: %s", nextBuyPrice > 0 ? DoubleToString(nextBuyPrice, digits) : "---");
+        ObjectCreate(0, "EA_BuyNext", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_BuyNext", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_BuyNext", OBJPROP_XDISTANCE, rightX);
+        ObjectSetInteger(0, "EA_BuyNext", OBJPROP_YDISTANCE, buyY);
+        ObjectSetString(0, "EA_BuyNext", OBJPROP_TEXT, buyNext);
+        ObjectSetInteger(0, "EA_BuyNext", OBJPROP_COLOR, clrCyan);
+        ObjectSetInteger(0, "EA_BuyNext", OBJPROP_FONTSIZE, 8);
+        ObjectSetString(0, "EA_BuyNext", OBJPROP_FONT, "Arial");
     }
     
-    // Update yPos for remaining elements
-    yPos = MathMax(sellYPos, buyYPos) + 10;
-    yPos += 6;
+    // ========== TOTAL PROFIT ==========
+    int finalY = MathMax(sellY, buyY) + sectionGap + 5;
     
-    // ===== PRICE INFO =====
-    string priceHeader = "========== CURRENT PRICE ==========";
-    ObjectCreate(0, "EA_PriceHeader", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_PriceHeader", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_PriceHeader", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_PriceHeader", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_PriceHeader", OBJPROP_TEXT, priceHeader);
-    ObjectSetInteger(0, "EA_PriceHeader", OBJPROP_COLOR, clrWhite);
-    ObjectSetInteger(0, "EA_PriceHeader", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_PriceHeader", OBJPROP_FONT, "Arial Bold");
-    yPos += 18;
+    string totalText = StringFormat("TOTAL P/L: %.2f", totalProfit);
+    ObjectCreate(0, "EA_Total", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_Total", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_Total", OBJPROP_XDISTANCE, leftX);
+    ObjectSetInteger(0, "EA_Total", OBJPROP_YDISTANCE, finalY);
+    ObjectSetString(0, "EA_Total", OBJPROP_TEXT, totalText);
+    ObjectSetInteger(0, "EA_Total", OBJPROP_COLOR, totalProfit >= 0 ? clrLime : clrRed);
+    ObjectSetInteger(0, "EA_Total", OBJPROP_FONTSIZE, 10);
+    ObjectSetString(0, "EA_Total", OBJPROP_FONT, "Arial Bold");
     
-    string priceInfo = StringFormat("Bid: %s | Ask: %s", DoubleToString(bidPrice, digits), DoubleToString(askPrice, digits));
-    ObjectCreate(0, "EA_PriceInfo", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_PriceInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_PriceInfo", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_PriceInfo", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_PriceInfo", OBJPROP_TEXT, priceInfo);
-    ObjectSetInteger(0, "EA_PriceInfo", OBJPROP_COLOR, clrYellow);
-    ObjectSetInteger(0, "EA_PriceInfo", OBJPROP_FONTSIZE, 10);
-    ObjectSetString(0, "EA_PriceInfo", OBJPROP_FONT, "Arial Bold");
-    yPos += 18;
-    
-    // Total Profit
-    double totalProfit = buyTotalProfit + sellTotalProfit;
-    string totalProfitInfo = StringFormat("TOTAL PROFIT: %.2f", totalProfit);
-    ObjectCreate(0, "EA_TotalProfit", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_TotalProfit", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_TotalProfit", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_TotalProfit", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_TotalProfit", OBJPROP_TEXT, totalProfitInfo);
-    ObjectSetInteger(0, "EA_TotalProfit", OBJPROP_COLOR, totalProfit >= 0 ? clrLime : clrRed);
-    ObjectSetInteger(0, "EA_TotalProfit", OBJPROP_FONTSIZE, 10);
-    ObjectSetString(0, "EA_TotalProfit", OBJPROP_FONT, "Arial Bold");
+    // Delete old objects that are no longer used
+    ObjectDelete(0, "EA_ModeStatus");
+    ObjectDelete(0, "EA_SellHeader");
+    ObjectDelete(0, "EA_SellMode");
+    ObjectDelete(0, "EA_SellCount");
+    ObjectDelete(0, "EA_SellBE");
+    ObjectDelete(0, "EA_SellProfit");
+    ObjectDelete(0, "EA_SellRecovery");
+    ObjectDelete(0, "EA_BuyHeader");
+    ObjectDelete(0, "EA_BuyMode");
+    ObjectDelete(0, "EA_BuyCount");
+    ObjectDelete(0, "EA_BuyBE");
+    ObjectDelete(0, "EA_BuyProfit");
+    ObjectDelete(0, "EA_BuyRecovery");
+    ObjectDelete(0, "EA_PriceHeader");
+    ObjectDelete(0, "EA_PriceInfo");
+    ObjectDelete(0, "EA_TotalProfit");
 }
 
 //+------------------------------------------------------------------+

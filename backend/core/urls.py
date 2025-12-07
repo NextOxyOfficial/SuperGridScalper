@@ -14,4 +14,6 @@ urlpatterns = [
     path('trade-data/', views.get_trade_data, name='get_trade_data'),
     path('admin-stats/', views.admin_stats, name='admin_stats'),
     path('update-investment/', views.update_investment, name='update_investment'),
+    path('action-log/', views.add_action_log, name='add_action_log'),
+    path('action-logs/', views.get_action_logs, name='get_action_logs'),
 ]

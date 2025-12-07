@@ -29,9 +29,12 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [showRegisterModal, setShowRegisterModal] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [firstName, setFirstName] = useState('')
   const [mt5Account, setMt5Account] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -80,35 +83,56 @@ export default function Home() {
   }, [])
 
   const handleSubscribe = (plan: Plan) => {
-    setSelectedPlan(plan)
-    setShowModal(true)
-    setError('')
-    setLicenseResult(null)
+    if (!isLoggedIn) {
+      // Show login modal if not logged in
+      setSelectedPlan(plan)
+      setShowLoginModal(true)
+      setError('')
+      return
+    }
+    // If logged in, redirect to dashboard to purchase
+    router.push('/dashboard?tab=purchase&plan=' + plan.id)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+    
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    
     setSubmitting(true)
 
     try {
-      const response = await axios.post(`${API_URL}/subscribe/`, {
+      const response = await axios.post(`${API_URL}/register/`, {
         email,
         password,
-        plan_id: selectedPlan?.id,
-        mt5_account: mt5Account
+        first_name: firstName
       })
 
       if (response.data.success) {
-        setLicenseResult(response.data.license)
-        // Save to localStorage for dashboard
-        localStorage.setItem('user', JSON.stringify({ email }))
-        localStorage.setItem('licenses', JSON.stringify([{
-          ...response.data.license,
-          mt5_account: mt5Account
-        }]))
+        // Auto login after registration
+        localStorage.setItem('user', JSON.stringify(response.data.user))
+        localStorage.setItem('licenses', JSON.stringify(response.data.licenses || []))
+        setIsLoggedIn(true)
+        setUserName(response.data.user.name || response.data.user.email)
+        setShowRegisterModal(false)
+        // Clear form
+        setEmail('')
+        setPassword('')
+        setConfirmPassword('')
+        setFirstName('')
+        // Redirect to dashboard
+        router.push('/dashboard')
       } else {
-        setError(response.data.message || 'Subscription failed')
+        setError(response.data.message || 'Registration failed')
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Connection error. Please try again.')
@@ -144,119 +168,96 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Subscribe Modal */}
-      {showModal && (
+      {/* Register Modal */}
+      {showRegisterModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-2xl max-w-md w-full p-6 relative">
-            <button onClick={closeModal} className="absolute top-4 right-4 text-gray-400 hover:text-white">
+            <button onClick={() => setShowRegisterModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white">
               <X className="w-6 h-6" />
             </button>
 
-            {!licenseResult ? (
-              <>
-                <h3 className="text-2xl font-bold text-white mb-2">Subscribe to {selectedPlan?.name}</h3>
-                <p className="text-gray-400 mb-6">${selectedPlan?.price} for {selectedPlan?.duration_days} days</p>
+            <h3 className="text-2xl font-bold text-white mb-2">Create Account</h3>
+            <p className="text-gray-400 mb-6">Register to purchase licenses</p>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-gray-300 mb-2">Email</label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-                      placeholder="your@email.com"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-300 mb-2">Password</label>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-                      placeholder="Min 6 characters"
-                      minLength={6}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-300 mb-2">MT5 Account Number</label>
-                    <input
-                      type="text"
-                      value={mt5Account}
-                      onChange={(e) => setMt5Account(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-                      placeholder="Your MT5 account number"
-                      required
-                    />
-                    <p className="text-gray-500 text-xs mt-1">License will be bound to this account only</p>
-                  </div>
-
-                  {error && (
-                    <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-red-400 text-sm">
-                      {error}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
-                  >
-                    {submitting ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>Complete Subscription</>
-                    )}
-                  </button>
-                </form>
-
-                <p className="text-gray-500 text-sm mt-4 text-center">
-                  New user? Account will be created automatically.
-                </p>
-              </>
-            ) : (
-              <div className="text-center">
-                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle className="w-8 h-8 text-green-400" />
-                </div>
-                <h3 className="text-2xl font-bold text-white mb-2">Subscription Successful!</h3>
-                <p className="text-gray-400 mb-6">Your license key has been generated</p>
-
-                <div className="bg-slate-700 rounded-xl p-4 mb-4">
-                  <p className="text-gray-400 text-sm mb-2">Your License Key</p>
-                  <div className="flex items-center gap-2">
-                    <code className="text-green-400 font-mono text-sm break-all flex-1">
-                      {licenseResult.license_key}
-                    </code>
-                    <button
-                      onClick={copyLicenseKey}
-                      className="p-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition-all"
-                    >
-                      <Copy className="w-4 h-4 text-white" />
-                    </button>
-                  </div>
-                  {copied && <p className="text-green-400 text-sm mt-2">Copied!</p>}
-                </div>
-
-                <div className="text-left bg-slate-700/50 rounded-xl p-4 mb-6">
-                  <p className="text-gray-300"><strong>Plan:</strong> {licenseResult.plan}</p>
-                  <p className="text-gray-300"><strong>Valid for:</strong> {licenseResult.days_remaining} days</p>
-                </div>
-
-                <button
-                  onClick={() => router.push('/dashboard')}
-                  className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold"
-                >
-                  Go to Dashboard
-                </button>
+            <form onSubmit={handleRegister} className="space-y-4">
+              <div>
+                <label className="block text-gray-300 mb-2">Name</label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  placeholder="Your name"
+                  required
+                />
               </div>
-            )}
+              <div>
+                <label className="block text-gray-300 mb-2">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  placeholder="your@email.com"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-300 mb-2">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  placeholder="Min 6 characters"
+                  minLength={6}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-300 mb-2">Confirm Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  placeholder="Confirm password"
+                  minLength={6}
+                  required
+                />
+              </div>
+
+              {error && (
+                <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Creating Account...
+                  </>
+                ) : (
+                  <>Create Account</>
+                )}
+              </button>
+            </form>
+
+            <p className="text-gray-500 text-sm mt-4 text-center">
+              Already have an account?{' '}
+              <button 
+                onClick={() => { setShowRegisterModal(false); setShowLoginModal(true); setError(''); }}
+                className="text-purple-400 hover:text-purple-300"
+              >
+                Login here
+              </button>
+            </p>
           </div>
         </div>
       )}
@@ -279,7 +280,7 @@ export default function Home() {
               try {
                 const response = await axios.post(`${API_URL}/login/`, { email, password })
                 if (response.data.success) {
-                  localStorage.setItem('user', JSON.stringify({ email }))
+                  localStorage.setItem('user', JSON.stringify(response.data.user))
                   localStorage.setItem('licenses', JSON.stringify(response.data.licenses))
                   router.push('/dashboard')
                 } else {
@@ -334,6 +335,16 @@ export default function Home() {
                 )}
               </button>
             </form>
+
+            <p className="text-gray-500 text-sm mt-4 text-center">
+              Don't have an account?{' '}
+              <button 
+                onClick={() => { setShowLoginModal(false); setShowRegisterModal(true); setError(''); }}
+                className="text-purple-400 hover:text-purple-300"
+              >
+                Register here
+              </button>
+            </p>
           </div>
         </div>
       )}
@@ -367,9 +378,12 @@ export default function Home() {
               </>
             ) : (
               <>
-                <a href="#pricing" className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-xl font-semibold transition-all">
-                  Get Started <ArrowRight className="w-5 h-5" />
-                </a>
+                <button 
+                  onClick={() => setShowRegisterModal(true)}
+                  className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-xl font-semibold transition-all"
+                >
+                  Create Account <ArrowRight className="w-5 h-5" />
+                </button>
                 <button 
                   onClick={() => setShowLoginModal(true)}
                   className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-xl font-semibold transition-all border border-white/20"
@@ -454,7 +468,7 @@ export default function Home() {
                       : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
                   }`}
                 >
-                  Subscribe Now
+                  {isLoggedIn ? 'Purchase Now' : 'Login to Purchase'}
                 </button>
               </div>
             ))}

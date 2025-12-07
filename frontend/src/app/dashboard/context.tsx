@@ -1,0 +1,138 @@
+'use client';
+
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+
+const API_URL = 'http://127.0.0.1:8000/api';
+
+interface DashboardContextType {
+  user: any;
+  licenses: any[];
+  selectedLicense: any;
+  settings: any;
+  setSettings: (settings: any) => void;
+  selectLicense: (license: any) => void;
+  clearSelectedLicense: () => void;
+  logout: () => void;
+  refreshLicenses: () => void;
+  API_URL: string;
+}
+
+const DashboardContext = createContext<DashboardContextType | null>(null);
+
+export function DashboardProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [licenses, setLicenses] = useState<any[]>([]);
+  const [selectedLicense, setSelectedLicense] = useState<any>(null);
+  const [settings, setSettings] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    const licensesData = localStorage.getItem('licenses');
+    const selectedLicenseData = localStorage.getItem('selectedLicense');
+    
+    if (!userData) {
+      router.push('/');
+      return;
+    }
+    
+    setUser(JSON.parse(userData));
+    
+    if (licensesData) {
+      const lics = JSON.parse(licensesData);
+      setLicenses(lics);
+    }
+    
+    if (selectedLicenseData) {
+      const lic = JSON.parse(selectedLicenseData);
+      setSelectedLicense(lic);
+      if (lic.ea_settings) {
+        setSettings(lic.ea_settings);
+      }
+    }
+    
+    setLoading(false);
+  }, [router]);
+
+  const selectLicense = (lic: any) => {
+    setSelectedLicense(lic);
+    localStorage.setItem('selectedLicense', JSON.stringify(lic));
+    if (lic.ea_settings) {
+      setSettings(lic.ea_settings);
+    }
+    // Fetch fresh settings
+    fetchSettings(lic.license_key);
+  };
+
+  const fetchSettings = async (licenseKey: string) => {
+    try {
+      const res = await fetch(`${API_URL}/settings/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ license_key: licenseKey, mt5_account: '' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSettings(data.settings);
+      }
+    } catch (e) {
+      console.error('Failed to fetch settings');
+    }
+  };
+
+  const refreshLicenses = async () => {
+    // Re-fetch from localStorage (could also fetch from server)
+    const licensesData = localStorage.getItem('licenses');
+    if (licensesData) {
+      setLicenses(JSON.parse(licensesData));
+    }
+  };
+
+  const clearSelectedLicense = () => {
+    setSelectedLicense(null);
+    setSettings(null);
+    localStorage.removeItem('selectedLicense');
+  };
+
+  const logout = () => {
+    localStorage.removeItem('user');
+    localStorage.removeItem('licenses');
+    localStorage.removeItem('selectedLicense');
+    router.push('/');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <DashboardContext.Provider value={{
+      user,
+      licenses,
+      selectedLicense,
+      settings,
+      setSettings,
+      selectLicense,
+      clearSelectedLicense,
+      logout,
+      refreshLicenses,
+      API_URL
+    }}>
+      {children}
+    </DashboardContext.Provider>
+  );
+}
+
+export function useDashboard() {
+  const context = useContext(DashboardContext);
+  if (!context) {
+    throw new Error('useDashboard must be used within DashboardProvider');
+  }
+  return context;
+}

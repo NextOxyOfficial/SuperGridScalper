@@ -110,18 +110,105 @@ class LicenseVerificationLog(models.Model):
         verbose_name_plural = "License Verification Logs"
 
 
+class DefaultEASettings(models.Model):
+    """Default EA Settings Template - Base settings for $100 investment"""
+    
+    name = models.CharField(max_length=100, default="Default Settings", help_text="Name for this settings template")
+    is_active = models.BooleanField(default=True, help_text="Use this as the active default template")
+    
+    # Base Investment for calculation (always $100)
+    base_investment = models.DecimalField(max_digits=10, decimal_places=2, default=100, help_text="Base investment amount for lot calculation")
+    
+    # Base Lot Size per $100 investment
+    base_lot_size = models.DecimalField(max_digits=10, decimal_places=4, default=0.05, help_text="Lot size per $100 investment")
+    base_recovery_lot_min = models.DecimalField(max_digits=10, decimal_places=4, default=0.05, help_text="Recovery lot min per $100 investment")
+    
+    # BUY Grid Range Settings (same for all users)
+    buy_range_start = models.DecimalField(max_digits=10, decimal_places=2, default=100000, help_text="BUY Range Start Price")
+    buy_range_end = models.DecimalField(max_digits=10, decimal_places=2, default=80000, help_text="BUY Range End Price")
+    buy_gap_pips = models.DecimalField(max_digits=10, decimal_places=2, default=3.0, help_text="BUY Gap between orders (Pips)")
+    max_buy_orders = models.IntegerField(default=5, help_text="Maximum BUY orders at a time")
+    
+    # BUY TP/SL/Trailing Settings (same for all users)
+    buy_take_profit_pips = models.DecimalField(max_digits=10, decimal_places=2, default=50.0, help_text="BUY Take Profit (Pips)")
+    buy_stop_loss_pips = models.DecimalField(max_digits=10, decimal_places=2, default=0.0, help_text="BUY Stop Loss (Pips)")
+    buy_trailing_start_pips = models.DecimalField(max_digits=10, decimal_places=2, default=3.0, help_text="BUY Trailing Start (Pips)")
+    buy_initial_sl_pips = models.DecimalField(max_digits=10, decimal_places=2, default=2.0, help_text="BUY Initial SL (Pips)")
+    buy_trailing_ratio = models.DecimalField(max_digits=10, decimal_places=2, default=0.5, help_text="BUY Trailing Ratio")
+    buy_max_sl_distance = models.DecimalField(max_digits=10, decimal_places=2, default=15.0, help_text="BUY Max SL Distance (Pips)")
+    buy_trailing_step_pips = models.DecimalField(max_digits=10, decimal_places=2, default=0.5, help_text="BUY Trailing Step (Pips)")
+    
+    # SELL Grid Range Settings (same for all users)
+    sell_range_start = models.DecimalField(max_digits=10, decimal_places=2, default=80000, help_text="SELL Range Start Price")
+    sell_range_end = models.DecimalField(max_digits=10, decimal_places=2, default=100000, help_text="SELL Range End Price")
+    sell_gap_pips = models.DecimalField(max_digits=10, decimal_places=2, default=3.0, help_text="SELL Gap between orders (Pips)")
+    max_sell_orders = models.IntegerField(default=5, help_text="Maximum SELL orders at a time")
+    
+    # SELL TP/SL/Trailing Settings (same for all users)
+    sell_take_profit_pips = models.DecimalField(max_digits=10, decimal_places=2, default=50.0, help_text="SELL Take Profit (Pips)")
+    sell_stop_loss_pips = models.DecimalField(max_digits=10, decimal_places=2, default=0.0, help_text="SELL Stop Loss (Pips)")
+    sell_trailing_start_pips = models.DecimalField(max_digits=10, decimal_places=2, default=3.0, help_text="SELL Trailing Start (Pips)")
+    sell_initial_sl_pips = models.DecimalField(max_digits=10, decimal_places=2, default=2.0, help_text="SELL Initial SL (Pips)")
+    sell_trailing_ratio = models.DecimalField(max_digits=10, decimal_places=2, default=0.5, help_text="SELL Trailing Ratio")
+    sell_max_sl_distance = models.DecimalField(max_digits=10, decimal_places=2, default=15.0, help_text="SELL Max SL Distance (Pips)")
+    sell_trailing_step_pips = models.DecimalField(max_digits=10, decimal_places=2, default=0.5, help_text="SELL Trailing Step (Pips)")
+    
+    # Breakeven TP Settings (same for all users)
+    enable_breakeven_tp = models.BooleanField(default=True, help_text="Enable Breakeven TP")
+    breakeven_buy_tp_pips = models.DecimalField(max_digits=10, decimal_places=2, default=2.0, help_text="Breakeven BUY TP (Pips)")
+    breakeven_sell_tp_pips = models.DecimalField(max_digits=10, decimal_places=2, default=2.0, help_text="Breakeven SELL TP (Pips)")
+    manage_all_trades = models.BooleanField(default=True, help_text="Manage ALL trades")
+    
+    # Recovery Settings (same for all users except lot_min which scales)
+    enable_buy_be_recovery = models.BooleanField(default=True, help_text="Enable BUY Recovery")
+    buy_be_recovery_lot_max = models.DecimalField(max_digits=10, decimal_places=2, default=5.0, help_text="BUY Recovery Lot Max")
+    buy_be_recovery_lot_increase = models.DecimalField(max_digits=10, decimal_places=2, default=10.0, help_text="BUY Recovery Lot Increase %")
+    max_buy_be_recovery_orders = models.IntegerField(default=30, help_text="Max BUY Recovery Orders")
+    
+    enable_sell_be_recovery = models.BooleanField(default=True, help_text="Enable SELL Recovery")
+    sell_be_recovery_lot_max = models.DecimalField(max_digits=10, decimal_places=2, default=5.0, help_text="SELL Recovery Lot Max")
+    sell_be_recovery_lot_increase = models.DecimalField(max_digits=10, decimal_places=2, default=10.0, help_text="SELL Recovery Lot Increase %")
+    max_sell_be_recovery_orders = models.IntegerField(default=30, help_text="Max SELL Recovery Orders")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def calculate_lot_size(self, investment_amount):
+        """Calculate lot size based on investment amount"""
+        multiplier = float(investment_amount) / float(self.base_investment)
+        return round(float(self.base_lot_size) * multiplier, 2)
+    
+    def calculate_recovery_lot_min(self, investment_amount):
+        """Calculate recovery lot min based on investment amount"""
+        multiplier = float(investment_amount) / float(self.base_investment)
+        return round(float(self.base_recovery_lot_min) * multiplier, 2)
+    
+    def save(self, *args, **kwargs):
+        # Ensure only one active default
+        if self.is_active:
+            DefaultEASettings.objects.filter(is_active=True).exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
+    
+    def __str__(self):
+        return f"{self.name} ({'Active' if self.is_active else 'Inactive'})"
+    
+    class Meta:
+        verbose_name = "Default EA Settings"
+        verbose_name_plural = "Default EA Settings"
+
+
 class EASettings(models.Model):
     """EA Trading Settings - Managed from Django Admin"""
     license = models.OneToOneField(License, on_delete=models.CASCADE, related_name='ea_settings')
     
     # Investment Amount (for calculation)
-    investment_amount = models.DecimalField(max_digits=15, decimal_places=2, default=1000, help_text="Investment amount in USD")
+    investment_amount = models.DecimalField(max_digits=15, decimal_places=2, default=100, help_text="Investment amount in USD")
     
     # BUY Grid Range Settings
-    buy_range_start = models.DecimalField(max_digits=10, decimal_places=2, default=4400, help_text="BUY Range Start Price")
-    buy_range_end = models.DecimalField(max_digits=10, decimal_places=2, default=4000, help_text="BUY Range End Price")
+    buy_range_start = models.DecimalField(max_digits=10, decimal_places=2, default=100000, help_text="BUY Range Start Price")
+    buy_range_end = models.DecimalField(max_digits=10, decimal_places=2, default=80000, help_text="BUY Range End Price")
     buy_gap_pips = models.DecimalField(max_digits=10, decimal_places=2, default=3.0, help_text="BUY Gap between orders (Pips)")
-    max_buy_orders = models.IntegerField(default=4, help_text="Maximum BUY orders at a time")
+    max_buy_orders = models.IntegerField(default=5, help_text="Maximum BUY orders at a time")
     
     # BUY TP/SL/Trailing Settings
     buy_take_profit_pips = models.DecimalField(max_digits=10, decimal_places=2, default=50.0, help_text="BUY Take Profit (Pips, 0=disabled)")
@@ -133,10 +220,10 @@ class EASettings(models.Model):
     buy_trailing_step_pips = models.DecimalField(max_digits=10, decimal_places=2, default=0.5, help_text="BUY Minimum step to update SL (pips)")
     
     # SELL Grid Range Settings
-    sell_range_start = models.DecimalField(max_digits=10, decimal_places=2, default=4400, help_text="SELL Range Start Price")
-    sell_range_end = models.DecimalField(max_digits=10, decimal_places=2, default=4000, help_text="SELL Range End Price")
+    sell_range_start = models.DecimalField(max_digits=10, decimal_places=2, default=80000, help_text="SELL Range Start Price")
+    sell_range_end = models.DecimalField(max_digits=10, decimal_places=2, default=100000, help_text="SELL Range End Price")
     sell_gap_pips = models.DecimalField(max_digits=10, decimal_places=2, default=3.0, help_text="SELL Gap between orders (Pips)")
-    max_sell_orders = models.IntegerField(default=4, help_text="Maximum SELL orders at a time")
+    max_sell_orders = models.IntegerField(default=5, help_text="Maximum SELL orders at a time")
     
     # SELL TP/SL/Trailing Settings
     sell_take_profit_pips = models.DecimalField(max_digits=10, decimal_places=2, default=50.0, help_text="SELL Take Profit (Pips, 0=disabled)")
@@ -147,8 +234,8 @@ class EASettings(models.Model):
     sell_max_sl_distance = models.DecimalField(max_digits=10, decimal_places=2, default=15.0, help_text="SELL Maximum SL distance from price (pips)")
     sell_trailing_step_pips = models.DecimalField(max_digits=10, decimal_places=2, default=0.5, help_text="SELL Minimum step to update SL (pips)")
     
-    # Lot & Risk
-    lot_size = models.DecimalField(max_digits=10, decimal_places=2, default=1.0, help_text="Lot Size per order")
+    # Lot & Risk (calculated based on investment)
+    lot_size = models.DecimalField(max_digits=10, decimal_places=2, default=0.05, help_text="Lot Size per order (auto-calculated)")
     
     # Breakeven TP Settings
     enable_breakeven_tp = models.BooleanField(default=True, help_text="Enable Breakeven TP for all trades")
@@ -158,20 +245,88 @@ class EASettings(models.Model):
     
     # BUY Breakeven Recovery
     enable_buy_be_recovery = models.BooleanField(default=True, help_text="Enable BUY Recovery Orders")
-    buy_be_recovery_lot_min = models.DecimalField(max_digits=10, decimal_places=2, default=1.0, help_text="BUY: Minimum lot for recovery")
+    buy_be_recovery_lot_min = models.DecimalField(max_digits=10, decimal_places=2, default=0.05, help_text="BUY: Minimum lot for recovery (auto-calculated)")
     buy_be_recovery_lot_max = models.DecimalField(max_digits=10, decimal_places=2, default=5.0, help_text="BUY: Maximum lot for recovery")
     buy_be_recovery_lot_increase = models.DecimalField(max_digits=10, decimal_places=2, default=10.0, help_text="BUY: Lot increase % per order")
     max_buy_be_recovery_orders = models.IntegerField(default=30, help_text="BUY: Max recovery orders")
     
     # SELL Breakeven Recovery
     enable_sell_be_recovery = models.BooleanField(default=True, help_text="Enable SELL Recovery Orders")
-    sell_be_recovery_lot_min = models.DecimalField(max_digits=10, decimal_places=2, default=0.25, help_text="SELL: Minimum lot for recovery")
+    sell_be_recovery_lot_min = models.DecimalField(max_digits=10, decimal_places=2, default=0.05, help_text="SELL: Minimum lot for recovery (auto-calculated)")
     sell_be_recovery_lot_max = models.DecimalField(max_digits=10, decimal_places=2, default=5.0, help_text="SELL: Maximum lot for recovery")
     sell_be_recovery_lot_increase = models.DecimalField(max_digits=10, decimal_places=2, default=10.0, help_text="SELL: Lot increase % per order")
     max_sell_be_recovery_orders = models.IntegerField(default=30, help_text="SELL: Max recovery orders")
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    def apply_defaults_from_template(self):
+        """Apply default settings from active template and calculate lot sizes"""
+        try:
+            defaults = DefaultEASettings.objects.get(is_active=True)
+            
+            # Copy all default settings
+            self.buy_range_start = defaults.buy_range_start
+            self.buy_range_end = defaults.buy_range_end
+            self.buy_gap_pips = defaults.buy_gap_pips
+            self.max_buy_orders = defaults.max_buy_orders
+            self.buy_take_profit_pips = defaults.buy_take_profit_pips
+            self.buy_stop_loss_pips = defaults.buy_stop_loss_pips
+            self.buy_trailing_start_pips = defaults.buy_trailing_start_pips
+            self.buy_initial_sl_pips = defaults.buy_initial_sl_pips
+            self.buy_trailing_ratio = defaults.buy_trailing_ratio
+            self.buy_max_sl_distance = defaults.buy_max_sl_distance
+            self.buy_trailing_step_pips = defaults.buy_trailing_step_pips
+            
+            self.sell_range_start = defaults.sell_range_start
+            self.sell_range_end = defaults.sell_range_end
+            self.sell_gap_pips = defaults.sell_gap_pips
+            self.max_sell_orders = defaults.max_sell_orders
+            self.sell_take_profit_pips = defaults.sell_take_profit_pips
+            self.sell_stop_loss_pips = defaults.sell_stop_loss_pips
+            self.sell_trailing_start_pips = defaults.sell_trailing_start_pips
+            self.sell_initial_sl_pips = defaults.sell_initial_sl_pips
+            self.sell_trailing_ratio = defaults.sell_trailing_ratio
+            self.sell_max_sl_distance = defaults.sell_max_sl_distance
+            self.sell_trailing_step_pips = defaults.sell_trailing_step_pips
+            
+            self.enable_breakeven_tp = defaults.enable_breakeven_tp
+            self.breakeven_buy_tp_pips = defaults.breakeven_buy_tp_pips
+            self.breakeven_sell_tp_pips = defaults.breakeven_sell_tp_pips
+            self.manage_all_trades = defaults.manage_all_trades
+            
+            self.enable_buy_be_recovery = defaults.enable_buy_be_recovery
+            self.buy_be_recovery_lot_max = defaults.buy_be_recovery_lot_max
+            self.buy_be_recovery_lot_increase = defaults.buy_be_recovery_lot_increase
+            self.max_buy_be_recovery_orders = defaults.max_buy_be_recovery_orders
+            
+            self.enable_sell_be_recovery = defaults.enable_sell_be_recovery
+            self.sell_be_recovery_lot_max = defaults.sell_be_recovery_lot_max
+            self.sell_be_recovery_lot_increase = defaults.sell_be_recovery_lot_increase
+            self.max_sell_be_recovery_orders = defaults.max_sell_be_recovery_orders
+            
+            # Calculate lot sizes based on investment
+            self.lot_size = defaults.calculate_lot_size(self.investment_amount)
+            self.buy_be_recovery_lot_min = defaults.calculate_recovery_lot_min(self.investment_amount)
+            self.sell_be_recovery_lot_min = defaults.calculate_recovery_lot_min(self.investment_amount)
+            
+        except DefaultEASettings.DoesNotExist:
+            # No defaults, use model defaults
+            pass
+    
+    def recalculate_lots(self):
+        """Recalculate lot sizes based on current investment"""
+        try:
+            defaults = DefaultEASettings.objects.get(is_active=True)
+            self.lot_size = defaults.calculate_lot_size(self.investment_amount)
+            self.buy_be_recovery_lot_min = defaults.calculate_recovery_lot_min(self.investment_amount)
+            self.sell_be_recovery_lot_min = defaults.calculate_recovery_lot_min(self.investment_amount)
+        except DefaultEASettings.DoesNotExist:
+            # Fallback calculation: 0.05 per $100
+            multiplier = float(self.investment_amount) / 100
+            self.lot_size = round(0.05 * multiplier, 2)
+            self.buy_be_recovery_lot_min = round(0.05 * multiplier, 2)
+            self.sell_be_recovery_lot_min = round(0.05 * multiplier, 2)
 
     def __str__(self):
         return f"Settings for {self.license.license_key[:12]}..."
@@ -218,3 +373,39 @@ class TradeData(models.Model):
         verbose_name = "Trade Data"
         verbose_name_plural = "Trade Data"
         ordering = ['-last_update']
+
+
+class EAActionLog(models.Model):
+    """Action logs from EA trading activity"""
+    LOG_TYPES = [
+        ('CONNECT', 'EA Connected'),
+        ('DISCONNECT', 'EA Disconnected'),
+        ('MODE', 'Trading Mode'),
+        ('OPEN_BUY', 'Open Buy Position'),
+        ('OPEN_SELL', 'Open Sell Position'),
+        ('CLOSE_BUY', 'Close Buy Position'),
+        ('CLOSE_SELL', 'Close Sell Position'),
+        ('MODIFY', 'Modify Position'),
+        ('TRAILING', 'Trailing Stop'),
+        ('BREAKEVEN', 'Breakeven'),
+        ('RECOVERY', 'Recovery Order'),
+        ('GRID', 'Grid Order'),
+        ('SIGNAL', 'Signal'),
+        ('ERROR', 'Error'),
+        ('WARNING', 'Warning'),
+        ('INFO', 'Info'),
+    ]
+    
+    license = models.ForeignKey(License, on_delete=models.CASCADE, related_name='action_logs')
+    log_type = models.CharField(max_length=20, choices=LOG_TYPES, default='INFO')
+    message = models.TextField()
+    details = models.JSONField(default=dict, blank=True)  # Extra data like ticket, lots, price
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"[{self.log_type}] {self.message[:50]}"
+    
+    class Meta:
+        verbose_name = "EA Action Log"
+        verbose_name_plural = "EA Action Logs"
+        ordering = ['-created_at']
