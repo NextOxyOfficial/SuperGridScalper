@@ -5,7 +5,8 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from .models import License, LicenseVerificationLog, SubscriptionPlan
+from .models import License, LicenseVerificationLog, SubscriptionPlan, EASettings, TradeData
+from decimal import Decimal
 import json
 
 
@@ -17,6 +18,17 @@ def get_client_ip(request):
     else:
         ip = request.META.get('REMOTE_ADDR')
     return ip
+
+
+def admin_stats(request):
+    """Dashboard statistics for admin"""
+    return JsonResponse({
+        'total_licenses': License.objects.count(),
+        'active_licenses': License.objects.filter(status='active').count(),
+        'total_plans': SubscriptionPlan.objects.filter(is_active=True).count(),
+        'total_users': User.objects.count(),
+        'expired_licenses': License.objects.filter(status='expired').count(),
+    })
 
 
 @csrf_exempt
@@ -217,17 +229,35 @@ def login(request):
     if user is None:
         return JsonResponse({'success': False, 'message': 'Invalid email or password'})
     
-    # Get user's licenses
+    # Get all user's licenses
     licenses = License.objects.filter(user=user).select_related('plan')
+    
+    if not licenses.exists():
+        return JsonResponse({'success': False, 'message': 'No license found for this account'})
+    
     license_list = []
     for lic in licenses:
+        # Get EA settings if exists
+        try:
+            settings = lic.ea_settings
+            ea_settings = {
+                'investment_amount': float(settings.investment_amount),
+                'lot_size': float(settings.lot_size),
+                'max_buy_orders': settings.max_buy_orders,
+                'max_sell_orders': settings.max_sell_orders,
+            }
+        except:
+            ea_settings = None
+        
         license_list.append({
             'license_key': lic.license_key,
             'plan': lic.plan.name,
             'status': lic.status,
+            'activated_at': lic.activated_at.isoformat(),
             'expires_at': lic.expires_at.isoformat(),
             'days_remaining': lic.days_remaining(),
-            'mt5_account': lic.mt5_account
+            'mt5_account': lic.mt5_account,
+            'ea_settings': ea_settings
         })
     
     return JsonResponse({
@@ -303,5 +333,251 @@ def subscribe(request):
         'user': {
             'id': user.id,
             'email': user.email
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def get_ea_settings(request):
+    """Get EA settings for a license"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    license_key = data.get('license_key', '').strip().upper()
+    mt5_account = data.get('mt5_account', '').strip()
+    
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key is required'})
+    
+    # Find license
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    # Check if license is valid
+    if not license.is_valid():
+        return JsonResponse({'success': False, 'message': f'License is {license.status}'})
+    
+    # Check MT5 account binding
+    if mt5_account and license.mt5_account and license.mt5_account != mt5_account:
+        return JsonResponse({'success': False, 'message': f'License bound to different account'})
+    
+    # Get or create EA settings
+    try:
+        settings = license.ea_settings
+    except EASettings.DoesNotExist:
+        # Create default settings
+        settings = EASettings.objects.create(license=license)
+    
+    return JsonResponse({
+        'success': True,
+        'settings': {
+            # BUY Grid Range
+            'buy_range_start': float(settings.buy_range_start),
+            'buy_range_end': float(settings.buy_range_end),
+            'buy_gap_pips': float(settings.buy_gap_pips),
+            'max_buy_orders': settings.max_buy_orders,
+            # BUY TP/SL/Trailing
+            'buy_take_profit_pips': float(settings.buy_take_profit_pips),
+            'buy_stop_loss_pips': float(settings.buy_stop_loss_pips),
+            'buy_trailing_start_pips': float(settings.buy_trailing_start_pips),
+            'buy_initial_sl_pips': float(settings.buy_initial_sl_pips),
+            'buy_trailing_ratio': float(settings.buy_trailing_ratio),
+            'buy_max_sl_distance': float(settings.buy_max_sl_distance),
+            'buy_trailing_step_pips': float(settings.buy_trailing_step_pips),
+            # SELL Grid Range
+            'sell_range_start': float(settings.sell_range_start),
+            'sell_range_end': float(settings.sell_range_end),
+            'sell_gap_pips': float(settings.sell_gap_pips),
+            'max_sell_orders': settings.max_sell_orders,
+            # SELL TP/SL/Trailing
+            'sell_take_profit_pips': float(settings.sell_take_profit_pips),
+            'sell_stop_loss_pips': float(settings.sell_stop_loss_pips),
+            'sell_trailing_start_pips': float(settings.sell_trailing_start_pips),
+            'sell_initial_sl_pips': float(settings.sell_initial_sl_pips),
+            'sell_trailing_ratio': float(settings.sell_trailing_ratio),
+            'sell_max_sl_distance': float(settings.sell_max_sl_distance),
+            'sell_trailing_step_pips': float(settings.sell_trailing_step_pips),
+            # Lot & Risk
+            'investment_amount': float(settings.investment_amount),
+            'lot_size': float(settings.lot_size),
+            # Breakeven TP
+            'enable_breakeven_tp': settings.enable_breakeven_tp,
+            'breakeven_buy_tp_pips': float(settings.breakeven_buy_tp_pips),
+            'breakeven_sell_tp_pips': float(settings.breakeven_sell_tp_pips),
+            'manage_all_trades': settings.manage_all_trades,
+            # BUY Recovery
+            'enable_buy_be_recovery': settings.enable_buy_be_recovery,
+            'buy_be_recovery_lot_min': float(settings.buy_be_recovery_lot_min),
+            'buy_be_recovery_lot_max': float(settings.buy_be_recovery_lot_max),
+            'buy_be_recovery_lot_increase': float(settings.buy_be_recovery_lot_increase),
+            'max_buy_be_recovery_orders': settings.max_buy_be_recovery_orders,
+            # SELL Recovery
+            'enable_sell_be_recovery': settings.enable_sell_be_recovery,
+            'sell_be_recovery_lot_min': float(settings.sell_be_recovery_lot_min),
+            'sell_be_recovery_lot_max': float(settings.sell_be_recovery_lot_max),
+            'sell_be_recovery_lot_increase': float(settings.sell_be_recovery_lot_increase),
+            'max_sell_be_recovery_orders': settings.max_sell_be_recovery_orders,
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def update_trade_data(request):
+    """Receive trade data from EA"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    license_key = data.get('license_key', '').strip().upper()
+    
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key is required'})
+    
+    # Find license
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    # Get or create trade data record
+    trade_data, created = TradeData.objects.get_or_create(license=license)
+    
+    # Update account info
+    trade_data.account_balance = Decimal(str(data.get('account_balance', 0)))
+    trade_data.account_equity = Decimal(str(data.get('account_equity', 0)))
+    trade_data.account_profit = Decimal(str(data.get('account_profit', 0)))
+    trade_data.account_margin = Decimal(str(data.get('account_margin', 0)))
+    trade_data.account_free_margin = Decimal(str(data.get('account_free_margin', 0)))
+    
+    # Update position summary
+    trade_data.total_buy_positions = data.get('total_buy_positions', 0)
+    trade_data.total_sell_positions = data.get('total_sell_positions', 0)
+    trade_data.total_buy_lots = Decimal(str(data.get('total_buy_lots', 0)))
+    trade_data.total_sell_lots = Decimal(str(data.get('total_sell_lots', 0)))
+    trade_data.total_buy_profit = Decimal(str(data.get('total_buy_profit', 0)))
+    trade_data.total_sell_profit = Decimal(str(data.get('total_sell_profit', 0)))
+    
+    # Update symbol info
+    trade_data.symbol = data.get('symbol', '')
+    trade_data.current_price = Decimal(str(data.get('current_price', 0)))
+    
+    # Update open positions
+    trade_data.open_positions = data.get('open_positions', [])
+    
+    trade_data.save()
+    
+    return JsonResponse({'success': True, 'message': 'Trade data updated'})
+
+
+@csrf_exempt
+@require_http_methods(["POST", "GET"])
+def get_trade_data(request):
+    """Get trade data for a license (for web dashboard)"""
+    if request.method == "GET":
+        license_key = request.GET.get('license_key', '').strip().upper()
+    else:
+        try:
+            data = json.loads(request.body)
+            license_key = data.get('license_key', '').strip().upper()
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key is required'})
+    
+    # Find license
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    # Get trade data
+    try:
+        trade_data = TradeData.objects.get(license=license)
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'account_balance': float(trade_data.account_balance),
+                'account_equity': float(trade_data.account_equity),
+                'account_profit': float(trade_data.account_profit),
+                'account_margin': float(trade_data.account_margin),
+                'account_free_margin': float(trade_data.account_free_margin),
+                'total_buy_positions': trade_data.total_buy_positions,
+                'total_sell_positions': trade_data.total_sell_positions,
+                'total_buy_lots': float(trade_data.total_buy_lots),
+                'total_sell_lots': float(trade_data.total_sell_lots),
+                'total_buy_profit': float(trade_data.total_buy_profit),
+                'total_sell_profit': float(trade_data.total_sell_profit),
+                'symbol': trade_data.symbol,
+                'current_price': float(trade_data.current_price),
+                'open_positions': trade_data.open_positions,
+                'last_update': trade_data.last_update.isoformat(),
+            }
+        })
+    except TradeData.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'No trade data available'})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def update_investment(request):
+    """Update investment amount and calculate EA settings"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    license_key = data.get('license_key', '').strip().upper()
+    investment = Decimal(str(data.get('investment_amount', 1000)))
+    
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key is required'})
+    
+    if investment < 100:
+        return JsonResponse({'success': False, 'message': 'Minimum investment is $100'})
+    
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    # Get or create settings
+    settings, created = EASettings.objects.get_or_create(license=license)
+    
+    # Save investment amount
+    settings.investment_amount = investment
+    
+    # Calculate settings based on investment
+    settings.lot_size = max(Decimal('0.01'), (investment / 10000).quantize(Decimal('0.01')))
+    settings.max_buy_orders = min(20, max(2, int(investment / 500)))
+    settings.max_sell_orders = min(20, max(2, int(investment / 500)))
+    settings.max_buy_be_recovery_orders = min(50, max(5, int(investment / 200)))
+    settings.max_sell_be_recovery_orders = min(50, max(5, int(investment / 200)))
+    
+    # Recovery lot settings
+    settings.buy_be_recovery_lot_min = settings.lot_size
+    settings.buy_be_recovery_lot_max = settings.lot_size * 5
+    settings.sell_be_recovery_lot_min = settings.lot_size
+    settings.sell_be_recovery_lot_max = settings.lot_size * 5
+    
+    settings.save()
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Investment settings updated',
+        'settings': {
+            'investment_amount': float(settings.investment_amount),
+            'lot_size': float(settings.lot_size),
+            'max_buy_orders': settings.max_buy_orders,
+            'max_sell_orders': settings.max_sell_orders,
+            'max_buy_be_recovery_orders': settings.max_buy_be_recovery_orders,
+            'max_sell_be_recovery_orders': settings.max_sell_be_recovery_orders,
         }
     })

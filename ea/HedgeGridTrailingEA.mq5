@@ -13,10 +13,11 @@
 
 CTrade trade;
 
-//--- License Verification Settings
-input group "=== LICENSE ACTIVATION ==="
-input string    LicenseKey        = "";           // License Key (XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX)
-input string    LicenseServer     = "http://127.0.0.1:8000";  // License Server URL
+//--- License Input (Only visible setting)
+input string    LicenseKey        = "";    // License Key
+
+//--- Server URL (Hardcoded - not visible to user)
+string    LicenseServer     = "http://127.0.0.1:8000";
 
 //--- License Status (Global)
 bool g_LicenseValid = false;
@@ -24,71 +25,74 @@ string g_LicenseMessage = "";
 int g_DaysRemaining = 0;
 string g_PlanName = "";
 datetime g_LastVerification = 0;
+bool g_SettingsLoaded = false;
 
-//--- Input Parameters
-input group "=== BUY Grid Range Settings ==="
-input double    BuyRangeStart     = 4400;      // BUY Range Start Price
-input double    BuyRangeEnd       = 4000;      // BUY Range End Price
-input double    BuyGapPips        = 3.0;       // BUY Gap between orders (Pips)
-input int       MaxBuyOrders      = 4;        // Maximum BUY orders at a time
+//--- All Settings Loaded from Server (Hidden from user)
+// BUY Grid Range Settings
+double    BuyRangeStart     = 0;
+double    BuyRangeEnd       = 0;
+double    BuyGapPips        = 0;
+int       MaxBuyOrders      = 0;
 
-input group "=== BUY TP/SL/Trailing Settings ==="
-input double    BuyTakeProfitPips    = 50.0;   // BUY Take Profit (Pips, 0=disabled)
-input double    BuyStopLossPips      = 0.0;    // BUY Stop Loss (Pips, 0=disabled)
-input double    BuyTrailingStartPips = 3.0;    // BUY Start trailing after X pips profit
-input double    BuyInitialSLPips     = 2.0;    // BUY Initial SL distance when trailing starts
-input double    BuyTrailingRatio     = 0.5;    // BUY SL movement ratio (0.5 = 0.5 pip per 1 pip)
-input double    BuyMaxSLDistance     = 15.0;   // BUY Maximum SL distance from price (pips)
-input double    BuyTrailingStepPips  = 0.5;    // BUY Minimum step to update SL (pips)
+// BUY TP/SL/Trailing Settings
+double    BuyTakeProfitPips    = 0;
+double    BuyStopLossPips      = 0;
+double    BuyTrailingStartPips = 0;
+double    BuyInitialSLPips     = 0;
+double    BuyTrailingRatio     = 0;
+double    BuyMaxSLDistance     = 0;
+double    BuyTrailingStepPips  = 0;
 
-input group "=== SELL Grid Range Settings ==="
-input double    SellRangeStart    = 4400;      // SELL Range Start Price
-input double    SellRangeEnd      = 4000;      // SELL Range End Price
-input double    SellGapPips       = 3.0;       // SELL Gap between orders (Pips)
-input int       MaxSellOrders     = 4;        // Maximum SELL orders at a time
+// SELL Grid Range Settings
+double    SellRangeStart    = 0;
+double    SellRangeEnd      = 0;
+double    SellGapPips       = 0;
+int       MaxSellOrders     = 0;
 
-input group "=== SELL TP/SL/Trailing Settings ==="
-input double    SellTakeProfitPips    = 50.0;  // SELL Take Profit (Pips, 0=disabled)
-input double    SellStopLossPips      = 0.0;   // SELL Stop Loss (Pips, 0=disabled)
-input double    SellTrailingStartPips = 3.0;   // SELL Start trailing after X pips profit
-input double    SellInitialSLPips     = 2.0;   // SELL Initial SL distance when trailing starts
-input double    SellTrailingRatio     = 0.5;   // SELL SL movement ratio (0.5 = 0.5 pip per 1 pip)
-input double    SellMaxSLDistance     = 15.0;  // SELL Maximum SL distance from price (pips)
-input double    SellTrailingStepPips  = 0.5;   // SELL Minimum step to update SL (pips)
+// SELL TP/SL/Trailing Settings
+double    SellTakeProfitPips    = 0;
+double    SellStopLossPips      = 0;
+double    SellTrailingStartPips = 0;
+double    SellInitialSLPips     = 0;
+double    SellTrailingRatio     = 0;
+double    SellMaxSLDistance     = 0;
+double    SellTrailingStepPips  = 0;
 
-input group "=== Lot & Risk ==="
-input double    LotSize           = 1.0;      // Lot Size per order
+// Lot & Risk
+double    LotSize           = 0.01;
 
-input group "=== Breakeven TP Settings ==="
-input bool      EnableBreakevenTP    = true;   // Enable Breakeven TP for all trades
-input double    BreakevenBuyTPPips   = 2.0;    // Breakeven TP for BUY (pips above avg price)
-input double    BreakevenSellTPPips  = 2.0;    // Breakeven TP for SELL (pips below avg price)
-input bool      ManageAllTrades      = true;   // Manage ALL trades (ignore magic number)
+// Breakeven TP Settings
+bool      EnableBreakevenTP    = false;
+double    BreakevenBuyTPPips   = 0;
+double    BreakevenSellTPPips  = 0;
+bool      ManageAllTrades      = false;
 
-input group "=== BUY Breakeven Recovery (After Max Trades) ==="
-input bool      EnableBuyBERecovery       = true;    // Enable BUY Recovery Orders
-input double    BuyBERecoveryLotMin       = 1.0;    // BUY: Minimum lot for recovery
-input double    BuyBERecoveryLotMax       = 5.00;    // BUY: Maximum lot for recovery
-input double    BuyBERecoveryLotIncrease  = 10.0;    // BUY: Lot increase % per order
-input int       MaxBuyBERecoveryOrders    = 30;      // BUY: Max recovery orders
-// Note: Recovery gap uses same BuyGapPips as grid orders
+// BUY Breakeven Recovery
+bool      EnableBuyBERecovery       = false;
+double    BuyBERecoveryLotMin       = 0;
+double    BuyBERecoveryLotMax       = 0;
+double    BuyBERecoveryLotIncrease  = 0;
+int       MaxBuyBERecoveryOrders    = 0;
 
-input group "=== SELL Breakeven Recovery (After Max Trades) ==="
-input bool      EnableSellBERecovery      = true;    // Enable SELL Recovery Orders
-input double    SellBERecoveryLotMin      = 0.25;    // SELL: Minimum lot for recovery
-input double    SellBERecoveryLotMax      = 5.00;    // SELL: Maximum lot for recovery
-input double    SellBERecoveryLotIncrease = 10.0;    // SELL: Lot increase % per order
-input int       MaxSellBERecoveryOrders   = 30;      // SELL: Max recovery orders
-// Note: Recovery gap uses same SellGapPips as grid orders
+// SELL Breakeven Recovery
+bool      EnableSellBERecovery      = false;
+double    SellBERecoveryLotMin      = 0;
+double    SellBERecoveryLotMax      = 0;
+double    SellBERecoveryLotIncrease = 0;
+int       MaxSellBERecoveryOrders   = 0;
 
-input group "=== EA Settings ==="
-input int       MagicNumber       = 999888;    // Magic Number
-input string    OrderComment      = "HedgeGrid"; // Order Comment
+// EA Internal Settings
+int       MagicNumber       = 999888;
+string    OrderComment      = "SGS";
 
 //--- Global Variables
 double pip = 1.0;
 datetime lastCheckTime = 0;
 double normalizedLotSize = 0.0;
+datetime g_LastLicenseCheck = 0;
+datetime g_LastTradeDataUpdate = 0;
+int LICENSE_CHECK_INTERVAL = 3600; // Check license every hour (3600 seconds)
+int TRADE_DATA_UPDATE_INTERVAL = 5; // Send trade data every 5 seconds
 
 // Virtual grid tracking (no pending orders)
 double nextBuyPrice = 0;
@@ -210,29 +214,355 @@ bool VerifyLicense()
 }
 
 //+------------------------------------------------------------------+
-//| Create License Status Label on Chart                              |
+//| Load EA Settings from Server                                       |
+//+------------------------------------------------------------------+
+bool LoadSettingsFromServer()
+{
+    // Get MT5 account number
+    long accountNumber = AccountInfoInteger(ACCOUNT_LOGIN);
+    string mt5Account = IntegerToString(accountNumber);
+    
+    // Build JSON request
+    string jsonRequest = "{";
+    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
+    jsonRequest += "\"mt5_account\":\"" + mt5Account + "\"";
+    jsonRequest += "}";
+    
+    // Prepare request
+    string url = LicenseServer + "/api/settings/";
+    string headers = "Content-Type: application/json\r\n";
+    char postData[];
+    char result[];
+    string resultHeaders;
+    
+    // Convert string to char array
+    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
+    
+    // Make HTTP request
+    ResetLastError();
+    int timeout = 5000;
+    int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
+    
+    if(response == -1)
+    {
+        Print("Failed to load settings from server. Using defaults.");
+        return false;
+    }
+    
+    // Parse response
+    string responseStr = CharArrayToString(result);
+    
+    // Check if successful
+    if(StringFind(responseStr, "\"success\": true") < 0 && StringFind(responseStr, "\"success\":true") < 0)
+    {
+        Print("Settings load failed. Using defaults.");
+        return false;
+    }
+    
+    // Parse settings - BUY Grid
+    BuyRangeStart = ExtractDoubleValue(responseStr, "buy_range_start");
+    BuyRangeEnd = ExtractDoubleValue(responseStr, "buy_range_end");
+    BuyGapPips = ExtractDoubleValue(responseStr, "buy_gap_pips");
+    MaxBuyOrders = (int)ExtractDoubleValue(responseStr, "max_buy_orders");
+    
+    // BUY TP/SL/Trailing
+    BuyTakeProfitPips = ExtractDoubleValue(responseStr, "buy_take_profit_pips");
+    BuyStopLossPips = ExtractDoubleValue(responseStr, "buy_stop_loss_pips");
+    BuyTrailingStartPips = ExtractDoubleValue(responseStr, "buy_trailing_start_pips");
+    BuyInitialSLPips = ExtractDoubleValue(responseStr, "buy_initial_sl_pips");
+    BuyTrailingRatio = ExtractDoubleValue(responseStr, "buy_trailing_ratio");
+    BuyMaxSLDistance = ExtractDoubleValue(responseStr, "buy_max_sl_distance");
+    BuyTrailingStepPips = ExtractDoubleValue(responseStr, "buy_trailing_step_pips");
+    
+    // SELL Grid
+    SellRangeStart = ExtractDoubleValue(responseStr, "sell_range_start");
+    SellRangeEnd = ExtractDoubleValue(responseStr, "sell_range_end");
+    SellGapPips = ExtractDoubleValue(responseStr, "sell_gap_pips");
+    MaxSellOrders = (int)ExtractDoubleValue(responseStr, "max_sell_orders");
+    
+    // SELL TP/SL/Trailing
+    SellTakeProfitPips = ExtractDoubleValue(responseStr, "sell_take_profit_pips");
+    SellStopLossPips = ExtractDoubleValue(responseStr, "sell_stop_loss_pips");
+    SellTrailingStartPips = ExtractDoubleValue(responseStr, "sell_trailing_start_pips");
+    SellInitialSLPips = ExtractDoubleValue(responseStr, "sell_initial_sl_pips");
+    SellTrailingRatio = ExtractDoubleValue(responseStr, "sell_trailing_ratio");
+    SellMaxSLDistance = ExtractDoubleValue(responseStr, "sell_max_sl_distance");
+    SellTrailingStepPips = ExtractDoubleValue(responseStr, "sell_trailing_step_pips");
+    
+    // Lot & Risk
+    LotSize = ExtractDoubleValue(responseStr, "lot_size");
+    
+    // Breakeven TP
+    EnableBreakevenTP = ExtractBoolValue(responseStr, "enable_breakeven_tp");
+    BreakevenBuyTPPips = ExtractDoubleValue(responseStr, "breakeven_buy_tp_pips");
+    BreakevenSellTPPips = ExtractDoubleValue(responseStr, "breakeven_sell_tp_pips");
+    ManageAllTrades = ExtractBoolValue(responseStr, "manage_all_trades");
+    
+    // BUY Recovery
+    EnableBuyBERecovery = ExtractBoolValue(responseStr, "enable_buy_be_recovery");
+    BuyBERecoveryLotMin = ExtractDoubleValue(responseStr, "buy_be_recovery_lot_min");
+    BuyBERecoveryLotMax = ExtractDoubleValue(responseStr, "buy_be_recovery_lot_max");
+    BuyBERecoveryLotIncrease = ExtractDoubleValue(responseStr, "buy_be_recovery_lot_increase");
+    MaxBuyBERecoveryOrders = (int)ExtractDoubleValue(responseStr, "max_buy_be_recovery_orders");
+    
+    // SELL Recovery
+    EnableSellBERecovery = ExtractBoolValue(responseStr, "enable_sell_be_recovery");
+    SellBERecoveryLotMin = ExtractDoubleValue(responseStr, "sell_be_recovery_lot_min");
+    SellBERecoveryLotMax = ExtractDoubleValue(responseStr, "sell_be_recovery_lot_max");
+    SellBERecoveryLotIncrease = ExtractDoubleValue(responseStr, "sell_be_recovery_lot_increase");
+    MaxSellBERecoveryOrders = (int)ExtractDoubleValue(responseStr, "max_sell_be_recovery_orders");
+    
+    g_SettingsLoaded = true;
+    Print("Settings loaded from server successfully!");
+    Print("BuyRange: ", BuyRangeStart, " - ", BuyRangeEnd, " | SellRange: ", SellRangeStart, " - ", SellRangeEnd);
+    Print("LotSize: ", LotSize, " | MaxBuy: ", MaxBuyOrders, " | MaxSell: ", MaxSellOrders);
+    
+    return true;
+}
+
+//+------------------------------------------------------------------+
+//| Send Trade Data to Server                                          |
+//+------------------------------------------------------------------+
+void SendTradeDataToServer()
+{
+    // Collect account info
+    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+    double profit = AccountInfoDouble(ACCOUNT_PROFIT);
+    double margin = AccountInfoDouble(ACCOUNT_MARGIN);
+    double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+    
+    // Collect position data
+    int buyPositions = 0, sellPositions = 0;
+    double buyLots = 0, sellLots = 0;
+    double buyProfit = 0, sellProfit = 0;
+    string positionsJson = "[";
+    bool firstPosition = true;
+    
+    for(int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket > 0)
+        {
+            string posSymbol = PositionGetString(POSITION_SYMBOL);
+            if(posSymbol != _Symbol) continue;
+            
+            long posType = PositionGetInteger(POSITION_TYPE);
+            double posLots = PositionGetDouble(POSITION_VOLUME);
+            double posProfit = PositionGetDouble(POSITION_PROFIT);
+            double posOpenPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            double posSL = PositionGetDouble(POSITION_SL);
+            double posTP = PositionGetDouble(POSITION_TP);
+            
+            if(posType == POSITION_TYPE_BUY)
+            {
+                buyPositions++;
+                buyLots += posLots;
+                buyProfit += posProfit;
+            }
+            else
+            {
+                sellPositions++;
+                sellLots += posLots;
+                sellProfit += posProfit;
+            }
+            
+            // Add to positions JSON
+            if(!firstPosition) positionsJson += ",";
+            firstPosition = false;
+            
+            positionsJson += "{";
+            positionsJson += "\"ticket\":" + IntegerToString(ticket) + ",";
+            positionsJson += "\"type\":\"" + (posType == POSITION_TYPE_BUY ? "BUY" : "SELL") + "\",";
+            positionsJson += "\"lots\":" + DoubleToString(posLots, 2) + ",";
+            positionsJson += "\"open_price\":" + DoubleToString(posOpenPrice, 5) + ",";
+            positionsJson += "\"sl\":" + DoubleToString(posSL, 5) + ",";
+            positionsJson += "\"tp\":" + DoubleToString(posTP, 5) + ",";
+            positionsJson += "\"profit\":" + DoubleToString(posProfit, 2);
+            positionsJson += "}";
+        }
+    }
+    positionsJson += "]";
+    
+    // Build JSON request
+    string jsonRequest = "{";
+    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
+    jsonRequest += "\"account_balance\":" + DoubleToString(balance, 2) + ",";
+    jsonRequest += "\"account_equity\":" + DoubleToString(equity, 2) + ",";
+    jsonRequest += "\"account_profit\":" + DoubleToString(profit, 2) + ",";
+    jsonRequest += "\"account_margin\":" + DoubleToString(margin, 2) + ",";
+    jsonRequest += "\"account_free_margin\":" + DoubleToString(freeMargin, 2) + ",";
+    jsonRequest += "\"total_buy_positions\":" + IntegerToString(buyPositions) + ",";
+    jsonRequest += "\"total_sell_positions\":" + IntegerToString(sellPositions) + ",";
+    jsonRequest += "\"total_buy_lots\":" + DoubleToString(buyLots, 2) + ",";
+    jsonRequest += "\"total_sell_lots\":" + DoubleToString(sellLots, 2) + ",";
+    jsonRequest += "\"total_buy_profit\":" + DoubleToString(buyProfit, 2) + ",";
+    jsonRequest += "\"total_sell_profit\":" + DoubleToString(sellProfit, 2) + ",";
+    jsonRequest += "\"symbol\":\"" + _Symbol + "\",";
+    jsonRequest += "\"current_price\":" + DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_BID), 5) + ",";
+    jsonRequest += "\"open_positions\":" + positionsJson;
+    jsonRequest += "}";
+    
+    // Send to server
+    string url = LicenseServer + "/api/trade-data/update/";
+    string headers = "Content-Type: application/json\r\n";
+    char postData[];
+    char result[];
+    string resultHeaders;
+    
+    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
+    
+    ResetLastError();
+    int response = WebRequest("POST", url, headers, 2000, postData, result, resultHeaders);
+    
+    if(response == -1)
+    {
+        // Silent fail - don't spam logs
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Extract double value from JSON                                     |
+//+------------------------------------------------------------------+
+double ExtractDoubleValue(string json, string key)
+{
+    string searchKey = "\"" + key + "\"";
+    int keyPos = StringFind(json, searchKey);
+    if(keyPos < 0) return 0;
+    
+    int colonPos = StringFind(json, ":", keyPos);
+    if(colonPos < 0) return 0;
+    
+    int endPos = StringFind(json, ",", colonPos);
+    if(endPos < 0) endPos = StringFind(json, "}", colonPos);
+    
+    string valueStr = StringSubstr(json, colonPos + 1, endPos - colonPos - 1);
+    StringTrimLeft(valueStr);
+    StringTrimRight(valueStr);
+    
+    return StringToDouble(valueStr);
+}
+
+//+------------------------------------------------------------------+
+//| Extract bool value from JSON                                       |
+//+------------------------------------------------------------------+
+bool ExtractBoolValue(string json, string key)
+{
+    string searchKey = "\"" + key + "\"";
+    int keyPos = StringFind(json, searchKey);
+    if(keyPos < 0) return false;
+    
+    int colonPos = StringFind(json, ":", keyPos);
+    if(colonPos < 0) return false;
+    
+    int endPos = StringFind(json, ",", colonPos);
+    if(endPos < 0) endPos = StringFind(json, "}", colonPos);
+    
+    string valueStr = StringSubstr(json, colonPos + 1, endPos - colonPos - 1);
+    StringTrimLeft(valueStr);
+    StringTrimRight(valueStr);
+    
+    return (valueStr == "true" || valueStr == "True" || valueStr == "1");
+}
+
+//+------------------------------------------------------------------+
+//| Create License Status Panel on Chart (Top Right Corner)           |
 //+------------------------------------------------------------------+
 void CreateLicenseLabel()
 {
-    string labelName = "EA_LicenseStatus";
-    ObjectDelete(0, labelName);
+    // Delete old license objects
+    ObjectDelete(0, "EA_LicenseTitle");
+    ObjectDelete(0, "EA_LicenseStatus");
+    ObjectDelete(0, "EA_LicensePlan");
+    ObjectDelete(0, "EA_LicenseDays");
+    ObjectDelete(0, "EA_LicenseAccount");
+    ObjectDelete(0, "EA_LicenseKey");
     
-    ObjectCreate(0, labelName, OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, labelName, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-    ObjectSetInteger(0, labelName, OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, labelName, OBJPROP_YDISTANCE, 10);
-    ObjectSetInteger(0, labelName, OBJPROP_FONTSIZE, 10);
+    int xPos = 10;
+    int yStart = 20;
+    int lineHeight = 16;
+    
+    // Get MT5 account
+    long accountNumber = AccountInfoInteger(ACCOUNT_LOGIN);
+    string mt5Account = IntegerToString(accountNumber);
     
     if(g_LicenseValid)
     {
-        ObjectSetString(0, labelName, OBJPROP_TEXT, "License: " + g_PlanName + " (" + IntegerToString(g_DaysRemaining) + " days)");
-        ObjectSetInteger(0, labelName, OBJPROP_COLOR, clrLime);
+        // Title Bar
+        ObjectCreate(0, "EA_LicenseTitle", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_XDISTANCE, xPos);
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_YDISTANCE, yStart);
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_FONTSIZE, 9);
+        ObjectSetString(0, "EA_LicenseTitle", OBJPROP_FONT, "Arial Bold");
+        ObjectSetString(0, "EA_LicenseTitle", OBJPROP_TEXT, "SUPER GRID SCALPER");
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_COLOR, clrGold);
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+        
+        // Status Line
+        color daysColor = clrLime;
+        if(g_DaysRemaining <= 7) daysColor = clrOrange;
+        if(g_DaysRemaining <= 3) daysColor = clrRed;
+        
+        string statusLine = "ACTIVE | " + g_PlanName + " | " + IntegerToString(g_DaysRemaining) + "d";
+        ObjectCreate(0, "EA_LicenseStatus", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_XDISTANCE, xPos);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_YDISTANCE, yStart + lineHeight);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_FONTSIZE, 8);
+        ObjectSetString(0, "EA_LicenseStatus", OBJPROP_FONT, "Arial");
+        ObjectSetString(0, "EA_LicenseStatus", OBJPROP_TEXT, statusLine);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_COLOR, daysColor);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+        
+        // Account
+        ObjectCreate(0, "EA_LicenseAccount", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_XDISTANCE, xPos);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_YDISTANCE, yStart + lineHeight * 2);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_FONTSIZE, 8);
+        ObjectSetString(0, "EA_LicenseAccount", OBJPROP_FONT, "Arial");
+        ObjectSetString(0, "EA_LicenseAccount", OBJPROP_TEXT, "MT5: " + mt5Account);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_COLOR, clrSilver);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
     }
     else
     {
-        ObjectSetString(0, labelName, OBJPROP_TEXT, "LICENSE INVALID");
-        ObjectSetInteger(0, labelName, OBJPROP_COLOR, clrRed);
+        // Error Title
+        ObjectCreate(0, "EA_LicenseTitle", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_XDISTANCE, xPos);
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_YDISTANCE, yStart);
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_FONTSIZE, 10);
+        ObjectSetString(0, "EA_LicenseTitle", OBJPROP_FONT, "Arial Bold");
+        ObjectSetString(0, "EA_LicenseTitle", OBJPROP_TEXT, "LICENSE ERROR");
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_COLOR, clrRed);
+        ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+        
+        // Error Message
+        ObjectCreate(0, "EA_LicenseStatus", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_XDISTANCE, xPos);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_YDISTANCE, yStart + lineHeight);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_FONTSIZE, 8);
+        ObjectSetString(0, "EA_LicenseStatus", OBJPROP_FONT, "Arial");
+        ObjectSetString(0, "EA_LicenseStatus", OBJPROP_TEXT, g_LicenseMessage);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_COLOR, clrOrange);
+        ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+        
+        // Trading Stopped
+        ObjectCreate(0, "EA_LicenseAccount", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_XDISTANCE, xPos);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_YDISTANCE, yStart + lineHeight * 2);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_FONTSIZE, 8);
+        ObjectSetString(0, "EA_LicenseAccount", OBJPROP_FONT, "Arial Bold");
+        ObjectSetString(0, "EA_LicenseAccount", OBJPROP_TEXT, "TRADING STOPPED");
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_COLOR, clrRed);
+        ObjectSetInteger(0, "EA_LicenseAccount", OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
     }
+    
+    ChartRedraw(0);
 }
 
 //+------------------------------------------------------------------+
@@ -253,6 +583,16 @@ int OnInit()
     
     Print("LICENSE VERIFIED: ", g_LicenseMessage);
     CreateLicenseLabel();
+    
+    // === LOAD SETTINGS FROM SERVER ===
+    Print("=== Loading Settings from Server ===");
+    if(!LoadSettingsFromServer())
+    {
+        Print("WARNING: Could not load settings from server. Using default values.");
+    }
+    
+    // Initialize license check timer
+    g_LastLicenseCheck = TimeCurrent();
     // === END LICENSE VERIFICATION ===
     
     trade.SetExpertMagicNumber(MagicNumber);
@@ -436,6 +776,40 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
 {
+    // === PERIODIC LICENSE CHECK ===
+    if(TimeCurrent() - g_LastLicenseCheck > LICENSE_CHECK_INTERVAL)
+    {
+        g_LastLicenseCheck = TimeCurrent();
+        Print("=== Periodic License Check ===");
+        
+        if(!VerifyLicense())
+        {
+            g_LicenseValid = false;
+            Print("LICENSE EXPIRED OR INVALID: ", g_LicenseMessage);
+            CreateLicenseLabel();
+            Comment("LICENSE EXPIRED - EA STOPPED\n", g_LicenseMessage);
+            return; // Stop processing
+        }
+        
+        // Also reload settings in case admin changed them
+        LoadSettingsFromServer();
+        CreateLicenseLabel();
+    }
+    
+    // === CHECK LICENSE BEFORE TRADING ===
+    if(!g_LicenseValid)
+    {
+        Comment("LICENSE INVALID - EA STOPPED\n", g_LicenseMessage);
+        return; // Don't trade if license invalid
+    }
+    
+    // === SEND TRADE DATA TO SERVER ===
+    if(TimeCurrent() - g_LastTradeDataUpdate > TRADE_DATA_UPDATE_INTERVAL)
+    {
+        g_LastTradeDataUpdate = TimeCurrent();
+        SendTradeDataToServer();
+    }
+    
     // Count current positions
     CountOpenPositions();
     

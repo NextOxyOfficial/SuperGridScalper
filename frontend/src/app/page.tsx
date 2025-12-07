@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn } from 'lucide-react'
 import axios from 'axios'
 
-const API_URL = 'http://localhost:8000/api'
+const API_URL = 'http://127.0.0.1:8000/api'
 
 interface Plan {
   id: number
@@ -23,9 +24,11 @@ interface LicenseResult {
 }
 
 export default function Home() {
+  const router = useRouter()
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showLoginModal, setShowLoginModal] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -34,13 +37,36 @@ export default function Home() {
   const [error, setError] = useState('')
   const [licenseResult, setLicenseResult] = useState<LicenseResult | null>(null)
   const [copied, setCopied] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [userName, setUserName] = useState('')
 
   useEffect(() => {
+    // Check if user is logged in
+    const userData = localStorage.getItem('user')
+    const licensesData = localStorage.getItem('licenses')
+    if (userData && licensesData) {
+      setIsLoggedIn(true)
+      const user = JSON.parse(userData)
+      setUserName(user.email || 'User')
+    }
+
     const fetchPlans = async () => {
       try {
         const response = await axios.get(`${API_URL}/plans/`)
-        setPlans(response.data.plans || [])
+        console.log('Plans response:', response.data)
+        if (response.data.plans && response.data.plans.length > 0) {
+          setPlans(response.data.plans)
+        } else {
+          // Fallback plans
+          setPlans([
+            { id: 1, name: 'Monthly', description: 'Perfect for trying out', price: '49.00', duration_days: 30, max_accounts: 1 },
+            { id: 2, name: 'Quarterly', description: 'Most popular choice', price: '129.00', duration_days: 90, max_accounts: 2 },
+            { id: 3, name: 'Yearly', description: 'Best value', price: '399.00', duration_days: 365, max_accounts: 5 },
+          ])
+        }
       } catch (error) {
+        console.error('Failed to fetch plans:', error)
+        // Fallback plans on error
         setPlans([
           { id: 1, name: 'Monthly', description: 'Perfect for trying out', price: '49.00', duration_days: 30, max_accounts: 1 },
           { id: 2, name: 'Quarterly', description: 'Most popular choice', price: '129.00', duration_days: 90, max_accounts: 2 },
@@ -75,6 +101,12 @@ export default function Home() {
 
       if (response.data.success) {
         setLicenseResult(response.data.license)
+        // Save to localStorage for dashboard
+        localStorage.setItem('user', JSON.stringify({ email }))
+        localStorage.setItem('licenses', JSON.stringify([{
+          ...response.data.license,
+          mt5_account: mt5Account
+        }]))
       } else {
         setError(response.data.message || 'Subscription failed')
       }
@@ -218,13 +250,90 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={closeModal}
+                  onClick={() => router.push('/dashboard')}
                   className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold"
                 >
-                  Done
+                  Go to Dashboard
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl max-w-md w-full p-6 relative">
+            <button onClick={() => setShowLoginModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white">
+              <X className="w-6 h-6" />
+            </button>
+
+            <h3 className="text-2xl font-bold text-white mb-2">Login to Dashboard</h3>
+            <p className="text-gray-400 mb-6">Access your trading dashboard</p>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              setError('')
+              setSubmitting(true)
+              try {
+                const response = await axios.post(`${API_URL}/login/`, { email, password })
+                if (response.data.success) {
+                  localStorage.setItem('user', JSON.stringify({ email }))
+                  localStorage.setItem('licenses', JSON.stringify(response.data.licenses))
+                  router.push('/dashboard')
+                } else {
+                  setError(response.data.message || 'Login failed')
+                }
+              } catch (err: any) {
+                setError(err.response?.data?.message || 'Invalid credentials')
+              }
+              setSubmitting(false)
+            }} className="space-y-4">
+              <div>
+                <label className="block text-gray-300 mb-2">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  placeholder="your@email.com"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-300 mb-2">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  placeholder="Your password"
+                  required
+                />
+              </div>
+
+              {error && (
+                <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Logging in...
+                  </>
+                ) : (
+                  <>Login</>
+                )}
+              </button>
+            </form>
           </div>
         </div>
       )}
@@ -244,12 +353,31 @@ export default function Home() {
             Maximize your forex profits with our proven automated strategy.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a href="#pricing" className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-xl font-semibold transition-all">
-              Get Started <ArrowRight className="w-5 h-5" />
-            </a>
-            <a href="#features" className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-xl font-semibold transition-all border border-white/20">
-              Learn More
-            </a>
+            {isLoggedIn ? (
+              <>
+                <button 
+                  onClick={() => router.push('/dashboard')}
+                  className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-xl font-semibold transition-all"
+                >
+                  Go to Dashboard <ArrowRight className="w-5 h-5" />
+                </button>
+                <span className="inline-flex items-center gap-2 bg-white/10 text-white px-6 py-4 rounded-xl font-medium border border-white/20">
+                  👋 Welcome, {userName}
+                </span>
+              </>
+            ) : (
+              <>
+                <a href="#pricing" className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-xl font-semibold transition-all">
+                  Get Started <ArrowRight className="w-5 h-5" />
+                </a>
+                <button 
+                  onClick={() => setShowLoginModal(true)}
+                  className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-xl font-semibold transition-all border border-white/20"
+                >
+                  <LogIn className="w-5 h-5" /> Login
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -272,6 +400,16 @@ export default function Home() {
           </div>
           
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {loading ? (
+              <div className="col-span-3 text-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-purple-500 mx-auto mb-4" />
+                <p className="text-gray-400">Loading plans...</p>
+              </div>
+            ) : plans.length === 0 ? (
+              <div className="col-span-3 text-center py-12">
+                <p className="text-gray-400">No plans available. Please try again later.</p>
+              </div>
+            ) : null}
             {plans.map((plan, index) => (
               <div 
                 key={plan.id} 

@@ -1,0 +1,252 @@
+{% extends 'dashboard/base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="grid grid-4" style="margin-bottom: 30px;">
+    <div class="stat-card">
+        <div class="icon blue">🔑</div>
+        <h3>{{ license.status|title }}</h3>
+        <p>License Status</p>
+    </div>
+    <div class="stat-card">
+        <div class="icon green">📅</div>
+        <h3>{{ days_remaining }}</h3>
+        <p>Days Remaining</p>
+    </div>
+    <div class="stat-card">
+        <div class="icon yellow">💰</div>
+        <h3>${{ investment_amount|default:"0" }}</h3>
+        <p>Investment Amount</p>
+    </div>
+    <div class="stat-card">
+        <div class="icon purple">📊</div>
+        <h3>{{ license.plan.name }}</h3>
+        <p>Current Plan</p>
+    </div>
+</div>
+
+<!-- License Info -->
+<div class="card">
+    <div class="card-header">
+        <h2>🔑 License Information</h2>
+        <span class="badge {% if license.status == 'active' %}badge-success{% else %}badge-danger{% endif %}">
+            {{ license.status|upper }}
+        </span>
+    </div>
+    <div class="card-body">
+        <div class="grid grid-2">
+            <div>
+                <p style="color: var(--gray); margin-bottom: 8px;">License Key</p>
+                <div class="license-key">
+                    <span id="license-key">{{ license.license_key }}</span>
+                    <button onclick="copyLicense()">Copy</button>
+                </div>
+            </div>
+            <div>
+                <p style="color: var(--gray); margin-bottom: 8px;">MT5 Account</p>
+                <div style="background: #f8fafc; padding: 16px 20px; border-radius: 10px; font-size: 1.1rem; font-weight: 600;">
+                    {{ license.mt5_account|default:"Not Set" }}
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-3" style="margin-top: 24px;">
+            <div>
+                <p style="color: var(--gray); font-size: 0.85rem;">Activated On</p>
+                <p style="font-weight: 600; margin-top: 4px;">{{ license.activated_at|date:"M d, Y" }}</p>
+            </div>
+            <div>
+                <p style="color: var(--gray); font-size: 0.85rem;">Expires On</p>
+                <p style="font-weight: 600; margin-top: 4px;">{{ license.expires_at|date:"M d, Y" }}</p>
+            </div>
+            <div>
+                <p style="color: var(--gray); font-size: 0.85rem;">Plan</p>
+                <p style="font-weight: 600; margin-top: 4px;">{{ license.plan.name }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Investment & Settings -->
+<div class="grid grid-2">
+    <div class="card">
+        <div class="card-header">
+            <h2>💰 Investment Settings</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{% url 'update_investment' %}">
+                {% csrf_token %}
+                
+                <div class="investment-display">
+                    <h4>Your Investment Amount</h4>
+                    <div class="amount">$<span id="display-amount">{{ settings.investment_amount|default:"0" }}</span></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="investment">Set Investment Amount (USD)</label>
+                    <input type="number" id="investment" name="investment_amount" 
+                           value="{{ settings.investment_amount|default:'1000' }}" 
+                           min="100" step="100"
+                           oninput="updateCalculations()">
+                    <p class="help-text">Minimum investment: $100. EA settings will be calculated based on this amount.</p>
+                </div>
+                
+                <div class="calculated-settings">
+                    <h4>Calculated EA Settings</h4>
+                    <div class="setting-row">
+                        <span class="label">Lot Size</span>
+                        <span class="value" id="calc-lot">{{ settings.lot_size|default:"0.01" }}</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="label">Max Buy Orders</span>
+                        <span class="value" id="calc-buy">{{ settings.max_buy_orders|default:"4" }}</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="label">Max Sell Orders</span>
+                        <span class="value" id="calc-sell">{{ settings.max_sell_orders|default:"4" }}</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="label">Max Recovery Orders</span>
+                        <span class="value" id="calc-recovery">{{ settings.max_buy_be_recovery_orders|default:"10" }}</span>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 20px;">
+                    💾 Save Investment Settings
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h2>📥 Download EA</h2>
+        </div>
+        <div class="card-body">
+            <div class="download-section">
+                <h3>Super Grid Scalper EA</h3>
+                <p>Download the EA file and install it in your MT5 terminal.<br>
+                Your settings will be loaded automatically from the server.</p>
+                
+                {% if license.status == 'active' %}
+                <a href="{% url 'download_ea' %}" class="btn btn-success btn-lg">
+                    ⬇️ Download EA (.ex5)
+                </a>
+                {% else %}
+                <button class="btn btn-outline btn-lg" disabled>
+                    License Expired
+                </button>
+                {% endif %}
+            </div>
+            
+            <div style="margin-top: 30px;">
+                <h4 style="margin-bottom: 16px; color: var(--dark);">Installation Steps:</h4>
+                <ol style="color: var(--gray); line-height: 2;">
+                    <li>Download the EA file</li>
+                    <li>Open MT5 → File → Open Data Folder</li>
+                    <li>Go to MQL5 → Experts</li>
+                    <li>Copy the EA file here</li>
+                    <li>Restart MT5</li>
+                    <li>Drag EA to chart & enter your license key</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Trade Data (if available) -->
+{% if trade_data %}
+<div class="card">
+    <div class="card-header">
+        <h2>📊 Live Trade Data</h2>
+        <span style="color: var(--gray); font-size: 0.85rem;">
+            Last updated: {{ trade_data.last_update|timesince }} ago
+        </span>
+    </div>
+    <div class="card-body">
+        <div class="grid grid-4">
+            <div>
+                <p style="color: var(--gray); font-size: 0.85rem;">Balance</p>
+                <p style="font-size: 1.5rem; font-weight: 700; color: var(--dark);">${{ trade_data.account_balance }}</p>
+            </div>
+            <div>
+                <p style="color: var(--gray); font-size: 0.85rem;">Equity</p>
+                <p style="font-size: 1.5rem; font-weight: 700; color: var(--dark);">${{ trade_data.account_equity }}</p>
+            </div>
+            <div>
+                <p style="color: var(--gray); font-size: 0.85rem;">Profit/Loss</p>
+                <p style="font-size: 1.5rem; font-weight: 700; color: {% if trade_data.account_profit >= 0 %}var(--success){% else %}var(--danger){% endif %};">
+                    {% if trade_data.account_profit >= 0 %}+{% endif %}${{ trade_data.account_profit }}
+                </p>
+            </div>
+            <div>
+                <p style="color: var(--gray); font-size: 0.85rem;">Open Positions</p>
+                <p style="font-size: 1.5rem; font-weight: 700; color: var(--dark);">
+                    {{ trade_data.total_buy_positions|add:trade_data.total_sell_positions }}
+                </p>
+            </div>
+        </div>
+        
+        {% if trade_data.open_positions %}
+        <table class="table" style="margin-top: 24px;">
+            <thead>
+                <tr>
+                    <th>Ticket</th>
+                    <th>Type</th>
+                    <th>Lots</th>
+                    <th>Open Price</th>
+                    <th>SL</th>
+                    <th>TP</th>
+                    <th>Profit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pos in trade_data.open_positions %}
+                <tr>
+                    <td>{{ pos.ticket }}</td>
+                    <td>
+                        <span class="badge {% if pos.type == 'BUY' %}badge-success{% else %}badge-danger{% endif %}">
+                            {{ pos.type }}
+                        </span>
+                    </td>
+                    <td>{{ pos.lots }}</td>
+                    <td>{{ pos.open_price }}</td>
+                    <td>{{ pos.sl|default:"-" }}</td>
+                    <td>{{ pos.tp|default:"-" }}</td>
+                    <td style="color: {% if pos.profit >= 0 %}var(--success){% else %}var(--danger){% endif %}; font-weight: 600;">
+                        {% if pos.profit >= 0 %}+{% endif %}${{ pos.profit }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<script>
+function copyLicense() {
+    const key = document.getElementById('license-key').textContent;
+    navigator.clipboard.writeText(key);
+    alert('License key copied!');
+}
+
+function updateCalculations() {
+    const investment = parseFloat(document.getElementById('investment').value) || 0;
+    document.getElementById('display-amount').textContent = investment.toLocaleString();
+    
+    // Calculate settings based on investment (you can modify this logic)
+    const lotSize = Math.max(0.01, (investment / 10000).toFixed(2));
+    const maxOrders = Math.min(20, Math.max(2, Math.floor(investment / 500)));
+    const maxRecovery = Math.min(50, Math.max(5, Math.floor(investment / 200)));
+    
+    document.getElementById('calc-lot').textContent = lotSize;
+    document.getElementById('calc-buy').textContent = maxOrders;
+    document.getElementById('calc-sell').textContent = maxOrders;
+    document.getElementById('calc-recovery').textContent = maxRecovery;
+}
+</script>
+{% endblock %}
