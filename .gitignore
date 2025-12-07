@@ -1,0 +1,63 @@
+# Python / Django
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.egg
+.venv/
+venv/
+ENV/
+*.log
+db.sqlite3
+
+# Django
+*.pot
+*.pyc
+local_settings.py
+media/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+.npm
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+*.exe
+*.msi
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Misc
+*.bak
+*.tmp
+*.temp

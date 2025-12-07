@@ -3,6 +3,8 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
 from .models import License, LicenseVerificationLog, SubscriptionPlan
 import json
 
@@ -60,12 +62,7 @@ def verify_license(request):
             'message': 'License key is required'
         })
 
-    if not mt5_account:
-        log_verification(None, license_key, mt5_account, hardware_id, ip_address, False, 'MT5 account is required')
-        return JsonResponse({
-            'valid': False,
-            'message': 'MT5 account number is required'
-        })
+    # MT5 account is optional for web validation, required for EA
 
     # Find license
     try:
@@ -86,22 +83,23 @@ def verify_license(request):
             'status': license.status
         })
 
-    # Check MT5 account binding
-    if license.mt5_account:
-        # Already bound to an account
-        if license.mt5_account != mt5_account:
-            log_verification(license, license_key, mt5_account, hardware_id, ip_address, False, 
-                           f'License bound to different account: {license.mt5_account}')
-            return JsonResponse({
-                'valid': False,
-                'message': f'License is bound to account {license.mt5_account}'
-            })
-    else:
-        # First time - bind to this account
-        license.mt5_account = mt5_account
-        if hardware_id:
-            license.hardware_id = hardware_id
-        license.save()
+    # Check MT5 account binding (only if mt5_account provided)
+    if mt5_account:
+        if license.mt5_account:
+            # Already bound to an account
+            if license.mt5_account != mt5_account:
+                log_verification(license, license_key, mt5_account, hardware_id, ip_address, False, 
+                               f'License bound to different account: {license.mt5_account}')
+                return JsonResponse({
+                    'valid': False,
+                    'message': f'License is bound to account {license.mt5_account}'
+                })
+        else:
+            # First time - bind to this account
+            license.mt5_account = mt5_account
+            if hardware_id:
+                license.hardware_id = hardware_id
+            license.save()
 
     # Update verification stats
     license.last_verified = timezone.now()
@@ -152,4 +150,152 @@ def get_plans(request):
     )
     return JsonResponse({
         'plans': list(plans)
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def register(request):
+    """Register a new user"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    name = data.get('name', '').strip()
+    
+    if not email or not password:
+        return JsonResponse({'success': False, 'message': 'Email and password are required'})
+    
+    if len(password) < 6:
+        return JsonResponse({'success': False, 'message': 'Password must be at least 6 characters'})
+    
+    if User.objects.filter(email=email).exists():
+        return JsonResponse({'success': False, 'message': 'Email already registered'})
+    
+    if User.objects.filter(username=email).exists():
+        return JsonResponse({'success': False, 'message': 'Email already registered'})
+    
+    # Create user
+    user = User.objects.create_user(
+        username=email,
+        email=email,
+        password=password,
+        first_name=name
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Registration successful',
+        'user': {
+            'id': user.id,
+            'email': user.email,
+            'name': user.first_name
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def login(request):
+    """Login user"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    
+    if not email or not password:
+        return JsonResponse({'success': False, 'message': 'Email and password are required'})
+    
+    user = authenticate(username=email, password=password)
+    
+    if user is None:
+        return JsonResponse({'success': False, 'message': 'Invalid email or password'})
+    
+    # Get user's licenses
+    licenses = License.objects.filter(user=user).select_related('plan')
+    license_list = []
+    for lic in licenses:
+        license_list.append({
+            'license_key': lic.license_key,
+            'plan': lic.plan.name,
+            'status': lic.status,
+            'expires_at': lic.expires_at.isoformat(),
+            'days_remaining': lic.days_remaining(),
+            'mt5_account': lic.mt5_account
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Login successful',
+        'user': {
+            'id': user.id,
+            'email': user.email,
+            'name': user.first_name
+        },
+        'licenses': license_list
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def subscribe(request):
+    """Subscribe to a plan and generate license"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    plan_id = data.get('plan_id')
+    
+    if not email or not password or not plan_id:
+        return JsonResponse({'success': False, 'message': 'Email, password, and plan are required'})
+    
+    # Authenticate or create user
+    user = authenticate(username=email, password=password)
+    
+    if user is None:
+        # Check if user exists
+        if User.objects.filter(email=email).exists():
+            return JsonResponse({'success': False, 'message': 'Invalid password for existing account'})
+        
+        # Create new user
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=password
+        )
+    
+    # Get plan
+    try:
+        plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+    except SubscriptionPlan.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid plan selected'})
+    
+    # Create license
+    license = License.objects.create(
+        user=user,
+        plan=plan
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Subscription successful! Your license key has been generated.',
+        'license': {
+            'license_key': license.license_key,
+            'plan': plan.name,
+            'expires_at': license.expires_at.isoformat(),
+            'days_remaining': license.days_remaining()
+        },
+        'user': {
+            'id': user.id,
+            'email': user.email
+        }
     })

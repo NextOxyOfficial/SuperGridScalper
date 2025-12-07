@@ -15,7 +15,7 @@ class LicenseAdmin(admin.ModelAdmin):
     list_display = ['license_key_short', 'user', 'plan', 'status', 'mt5_account', 'expires_at', 'days_left', 'verification_count']
     list_filter = ['status', 'plan', 'created_at']
     search_fields = ['license_key', 'user__username', 'user__email', 'mt5_account']
-    readonly_fields = ['license_key', 'verification_count', 'last_verified', 'created_at', 'updated_at']
+    readonly_fields = ['license_key', 'activated_at', 'verification_count', 'last_verified', 'created_at', 'updated_at']
     raw_id_fields = ['user']
     ordering = ['-created_at']
     

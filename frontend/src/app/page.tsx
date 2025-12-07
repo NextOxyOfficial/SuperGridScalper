@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight } from 'lucide-react'
+import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2 } from 'lucide-react'
 import axios from 'axios'
+
+const API_URL = 'http://localhost:8000/api'
 
 interface Plan {
   id: number
@@ -13,17 +15,31 @@ interface Plan {
   max_accounts: number
 }
 
+interface LicenseResult {
+  license_key: string
+  plan: string
+  expires_at: string
+  days_remaining: number
+}
+
 export default function Home() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [licenseResult, setLicenseResult] = useState<LicenseResult | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const fetchPlans = async () => {
       try {
-        const response = await axios.get('http://localhost:8000/api/plans/')
+        const response = await axios.get(`${API_URL}/plans/`)
         setPlans(response.data.plans || [])
       } catch (error) {
-        // Use default plans if backend not available
         setPlans([
           { id: 1, name: 'Monthly', description: 'Perfect for trying out', price: '49.00', duration_days: 30, max_accounts: 1 },
           { id: 2, name: 'Quarterly', description: 'Most popular choice', price: '129.00', duration_days: 90, max_accounts: 2 },
@@ -36,6 +52,54 @@ export default function Home() {
     fetchPlans()
   }, [])
 
+  const handleSubscribe = (plan: Plan) => {
+    setSelectedPlan(plan)
+    setShowModal(true)
+    setError('')
+    setLicenseResult(null)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
+
+    try {
+      const response = await axios.post(`${API_URL}/subscribe/`, {
+        email,
+        password,
+        plan_id: selectedPlan?.id
+      })
+
+      if (response.data.success) {
+        setLicenseResult(response.data.license)
+      } else {
+        setError(response.data.message || 'Subscription failed')
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Connection error. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const copyLicenseKey = () => {
+    if (licenseResult) {
+      navigator.clipboard.writeText(licenseResult.license_key)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const closeModal = () => {
+    setShowModal(false)
+    setEmail('')
+    setPassword('')
+    setError('')
+    setLicenseResult(null)
+    setSelectedPlan(null)
+  }
+
   const features = [
     { icon: TrendingUp, title: 'Grid Trading', description: 'Automated grid strategy for consistent profits' },
     { icon: Shield, title: 'Risk Management', description: 'Built-in stop loss and take profit controls' },
@@ -45,6 +109,111 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      {/* Subscribe Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl max-w-md w-full p-6 relative">
+            <button onClick={closeModal} className="absolute top-4 right-4 text-gray-400 hover:text-white">
+              <X className="w-6 h-6" />
+            </button>
+
+            {!licenseResult ? (
+              <>
+                <h3 className="text-2xl font-bold text-white mb-2">Subscribe to {selectedPlan?.name}</h3>
+                <p className="text-gray-400 mb-6">${selectedPlan?.price} for {selectedPlan?.duration_days} days</p>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-gray-300 mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                      placeholder="your@email.com"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-300 mb-2">Password</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                      placeholder="Min 6 characters"
+                      minLength={6}
+                      required
+                    />
+                  </div>
+
+                  {error && (
+                    <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-red-400 text-sm">
+                      {error}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>Complete Subscription</>
+                    )}
+                  </button>
+                </form>
+
+                <p className="text-gray-500 text-sm mt-4 text-center">
+                  New user? Account will be created automatically.
+                </p>
+              </>
+            ) : (
+              <div className="text-center">
+                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-8 h-8 text-green-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-2">Subscription Successful!</h3>
+                <p className="text-gray-400 mb-6">Your license key has been generated</p>
+
+                <div className="bg-slate-700 rounded-xl p-4 mb-4">
+                  <p className="text-gray-400 text-sm mb-2">Your License Key</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-green-400 font-mono text-sm break-all flex-1">
+                      {licenseResult.license_key}
+                    </code>
+                    <button
+                      onClick={copyLicenseKey}
+                      className="p-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition-all"
+                    >
+                      <Copy className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
+                  {copied && <p className="text-green-400 text-sm mt-2">Copied!</p>}
+                </div>
+
+                <div className="text-left bg-slate-700/50 rounded-xl p-4 mb-6">
+                  <p className="text-gray-300"><strong>Plan:</strong> {licenseResult.plan}</p>
+                  <p className="text-gray-300"><strong>Valid for:</strong> {licenseResult.days_remaining} days</p>
+                </div>
+
+                <button
+                  onClick={closeModal}
+                  className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold"
+                >
+                  Done
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">
@@ -124,11 +293,14 @@ export default function Home() {
                     Email Support
                   </li>
                 </ul>
-                <button className={`w-full py-3 rounded-xl font-semibold transition-all ${
-                  index === 1 
-                    ? 'bg-purple-600 hover:bg-purple-700 text-white' 
-                    : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
-                }`}>
+                <button 
+                  onClick={() => handleSubscribe(plan)}
+                  className={`w-full py-3 rounded-xl font-semibold transition-all ${
+                    index === 1 
+                      ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                      : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
+                  }`}
+                >
                   Subscribe Now
                 </button>
               </div>
