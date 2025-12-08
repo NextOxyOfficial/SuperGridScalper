@@ -15,65 +15,69 @@ CTrade trade;
 //--- License Settings (VISIBLE TO USER)
 input string    LicenseKey        = "";    // License Key
 
-//--- Hidden Parameters (sinput = static input, not visible in UI)
-//--- BUY Grid Range Settings
-sinput double    BuyRangeStart     = 4400;      // BUY Range Start Price
-sinput double    BuyRangeEnd       = 4000;      // BUY Range End Price
-sinput double    BuyGapPips        = 3.0;       // BUY Gap between orders (Pips)
-sinput int       MaxBuyOrders      = 4;         // Maximum BUY orders at a time
+//=============================================================================
+// HIDDEN TRADING PARAMETERS - Not visible in EA settings UI
+// These are hardcoded values that users cannot modify
+//=============================================================================
 
-//--- BUY TP/SL/Trailing Settings
-sinput double    BuyTakeProfitPips    = 50.0;   // BUY Take Profit (Pips, 0=disabled)
-sinput double    BuyStopLossPips      = 0.0;    // BUY Stop Loss (Pips, 0=disabled)
-sinput double    BuyTrailingStartPips = 3.0;    // BUY Start trailing after X pips profit
-sinput double    BuyInitialSLPips     = 2.0;    // BUY Initial SL distance when trailing starts
-sinput double    BuyTrailingRatio     = 0.5;    // BUY SL movement ratio (0.5 = 0.5 pip per 1 pip)
-sinput double    BuyMaxSLDistance     = 15.0;   // BUY Maximum SL distance from price (pips)
-sinput double    BuyTrailingStepPips  = 0.5;    // BUY Minimum step to update SL (pips)
+//--- BUY Grid Range Settings (HIDDEN)
+double    BuyRangeStart     = 4400;
+double    BuyRangeEnd       = 4000;
+double    BuyGapPips        = 3.0;
+int       MaxBuyOrders      = 4;
 
-//--- SELL Grid Range Settings
-sinput double    SellRangeStart    = 4400;      // SELL Range Start Price
-sinput double    SellRangeEnd      = 4000;      // SELL Range End Price
-sinput double    SellGapPips       = 3.0;       // SELL Gap between orders (Pips)
-sinput int       MaxSellOrders     = 4;         // Maximum SELL orders at a time
+//--- BUY TP/SL/Trailing Settings (HIDDEN)
+double    BuyTakeProfitPips    = 50.0;
+double    BuyStopLossPips      = 0.0;
+double    BuyTrailingStartPips = 3.0;
+double    BuyInitialSLPips     = 2.0;
+double    BuyTrailingRatio     = 0.5;
+double    BuyMaxSLDistance     = 15.0;
+double    BuyTrailingStepPips  = 0.5;
 
-//--- SELL TP/SL/Trailing Settings
-sinput double    SellTakeProfitPips    = 50.0;  // SELL Take Profit (Pips, 0=disabled)
-sinput double    SellStopLossPips      = 0.0;   // SELL Stop Loss (Pips, 0=disabled)
-sinput double    SellTrailingStartPips = 3.0;   // SELL Start trailing after X pips profit
-sinput double    SellInitialSLPips     = 2.0;   // SELL Initial SL distance when trailing starts
-sinput double    SellTrailingRatio     = 0.5;   // SELL SL movement ratio (0.5 = 0.5 pip per 1 pip)
-sinput double    SellMaxSLDistance     = 15.0;  // SELL Maximum SL distance from price (pips)
-sinput double    SellTrailingStepPips  = 0.5;   // SELL Minimum step to update SL (pips)
+//--- SELL Grid Range Settings (HIDDEN)
+double    SellRangeStart    = 4400;
+double    SellRangeEnd      = 4000;
+double    SellGapPips       = 3.0;
+int       MaxSellOrders     = 4;
 
-//--- Lot & Risk
-sinput double    LotSize           = 0.25;      // Lot Size per order
-sinput bool      ManageAllTrades   = true;      // Manage ALL trades (ignore magic number)
+//--- SELL TP/SL/Trailing Settings (HIDDEN)
+double    SellTakeProfitPips    = 50.0;
+double    SellStopLossPips      = 0.0;
+double    SellTrailingStartPips = 3.0;
+double    SellInitialSLPips     = 2.0;
+double    SellTrailingRatio     = 0.5;
+double    SellMaxSLDistance     = 15.0;
+double    SellTrailingStepPips  = 0.5;
 
-//--- BUY Breakeven Recovery (After Max Trades)
-sinput bool      EnableBuyBERecovery       = true;    // Enable BUY Recovery Orders
-sinput double    BuyBERecoveryLotMin       = 0.25;    // BUY: Minimum lot for recovery
-sinput double    BuyBERecoveryLotMax       = 5.00;    // BUY: Maximum lot for recovery
-sinput double    BuyBERecoveryLotIncrease  = 10.0;    // BUY: Lot increase % per order
-sinput int       MaxBuyBERecoveryOrders    = 30;      // BUY: Max recovery orders
+//--- Lot & Risk (HIDDEN)
+double    LotSize           = 0.25;
+bool      ManageAllTrades   = true;
 
-//--- SELL Breakeven Recovery (After Max Trades)
-sinput bool      EnableSellBERecovery      = true;    // Enable SELL Recovery Orders
-sinput double    SellBERecoveryLotMin      = 0.25;    // SELL: Minimum lot for recovery
-sinput double    SellBERecoveryLotMax      = 5.00;    // SELL: Maximum lot for recovery
-sinput double    SellBERecoveryLotIncrease = 10.0;    // SELL: Lot increase % per order
-sinput int       MaxSellBERecoveryOrders   = 30;      // SELL: Max recovery orders
+//--- BUY Breakeven Recovery (HIDDEN)
+bool      EnableBuyBERecovery       = true;
+double    BuyBERecoveryLotMin       = 0.25;
+double    BuyBERecoveryLotMax       = 5.00;
+double    BuyBERecoveryLotIncrease  = 10.0;
+int       MaxBuyBERecoveryOrders    = 30;
 
-//--- Recovery Mode Trailing Settings
-sinput double    RecoveryTakeProfitPips    = 100.0;   // Recovery TP (pips)
-sinput double    RecoveryTrailingStartPips = 1.0;     // Recovery: Start trailing after X pips profit
-sinput double    RecoveryTrailingRatio     = 0.5;     // Recovery: SL movement ratio (0.5 pip per 1 pip)
-sinput double    RecoveryMaxSLDistance     = 12.0;    // Recovery: Maximum SL distance (pips)
-sinput double    RecoveryInitialSLPips     = 1.0;     // Recovery: Initial SL when trailing starts
+//--- SELL Breakeven Recovery (HIDDEN)
+bool      EnableSellBERecovery      = true;
+double    SellBERecoveryLotMin      = 0.25;
+double    SellBERecoveryLotMax      = 5.00;
+double    SellBERecoveryLotIncrease = 10.0;
+int       MaxSellBERecoveryOrders   = 30;
 
-//--- EA Settings
-sinput int       MagicNumber       = 999888;    // Magic Number
-sinput string    OrderComment      = "HedgeGrid"; // Order Comment
+//--- Recovery Mode Trailing Settings (HIDDEN)
+double    RecoveryTakeProfitPips    = 100.0;
+double    RecoveryTrailingStartPips = 3.0;
+double    RecoveryTrailingRatio     = 0.5;
+double    RecoveryMaxSLDistance     = 12.0;
+double    RecoveryInitialSLPips     = 2.0;
+
+//--- EA Settings (HIDDEN)
+int       MagicNumber       = 999888;
+string    OrderComment      = "MarksAI";
 
 //--- Server URL (Hidden from user)
 string    LicenseServer     = "https://markstrades.com";
