@@ -373,9 +373,9 @@ void SendTradeDataToServer()
     bool buyInRecovery = (EnableBuyBERecovery && currentBuyCount >= MaxBuyOrders);
     bool sellInRecovery = (EnableSellBERecovery && currentSellCount >= MaxSellOrders);
     string tradingMode = "Normal";
-    if(buyInRecovery && sellInRecovery) tradingMode = "Recovery (BUY+SELL)";
-    else if(buyInRecovery) tradingMode = "Recovery (BUY)";
-    else if(sellInRecovery) tradingMode = "Recovery (SELL)";
+    if(buyInRecovery && sellInRecovery) tradingMode = "Buy & Sell Recovery Mode Activated!";
+    else if(buyInRecovery) tradingMode = "Buy Recovery Mode Activated!";
+    else if(sellInRecovery) tradingMode = "Sell Recovery Mode Activated!";
     jsonRequest += "\"trading_mode\":\"" + tradingMode + "\",";
     
     jsonRequest += "\"symbol\":\"" + _Symbol + "\",";
