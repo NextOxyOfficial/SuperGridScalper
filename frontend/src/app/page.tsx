@@ -209,57 +209,65 @@ export default function Home() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/5 rounded-full blur-[150px]" />
       {/* Register Modal */}
       {showRegisterModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl max-w-md w-full p-6 relative">
-            <button onClick={() => setShowRegisterModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white">
-              <X className="w-6 h-6" />
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#12121a] border border-cyan-500/20 rounded-2xl max-w-md w-full p-4 sm:p-6 relative shadow-2xl shadow-cyan-500/10">
+            <button onClick={() => setShowRegisterModal(false)} className="absolute top-3 sm:top-4 right-3 sm:right-4 text-gray-500 hover:text-cyan-400 transition-colors">
+              <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
 
-            <h3 className="text-2xl font-bold text-white mb-2">Create Account</h3>
-            <p className="text-gray-400 mb-6">Register to purchase licenses</p>
-
-            <form onSubmit={handleRegister} className="space-y-4">
+            {/* Header with Icon */}
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-xl flex items-center justify-center">
+                <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+              </div>
               <div>
-                <label className="block text-gray-300 mb-2">Name</label>
+                <h3 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Create Account</h3>
+                <p className="text-gray-500 text-xs sm:text-sm">Register to get started</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleRegister} className="space-y-3 sm:space-y-4">
+              <div>
+                <label className="block text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">Name</label>
                 <input
                   type="text"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 text-sm sm:text-base transition-all"
                   placeholder="Your name"
                   required
                 />
               </div>
               <div>
-                <label className="block text-gray-300 mb-2">Email</label>
+                <label className="block text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">Email</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 text-sm sm:text-base transition-all"
                   placeholder="your@email.com"
                   required
                 />
               </div>
               <div>
-                <label className="block text-gray-300 mb-2">Password</label>
+                <label className="block text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">Password</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 text-sm sm:text-base transition-all"
                   placeholder="Min 6 characters"
                   minLength={6}
                   required
                 />
               </div>
               <div>
-                <label className="block text-gray-300 mb-2">Confirm Password</label>
+                <label className="block text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">Confirm Password</label>
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 text-sm sm:text-base transition-all"
                   placeholder="Confirm password"
                   minLength={6}
                   required
@@ -267,7 +275,7 @@ export default function Home() {
               </div>
 
               {error && (
-                <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-red-400 text-sm">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-2.5 sm:p-3 text-red-400 text-xs sm:text-sm">
                   {error}
                 </div>
               )}
@@ -275,24 +283,25 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+                className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 disabled:opacity-50 text-black rounded-xl font-bold text-sm sm:text-base transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25"
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
                 {submitting ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Creating Account...
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                    Creating...
                   </>
                 ) : (
-                  <>Create Account</>
+                  <>CREATE ACCOUNT</>
                 )}
               </button>
             </form>
 
-            <p className="text-gray-500 text-sm mt-4 text-center">
+            <p className="text-gray-500 text-xs sm:text-sm mt-4 text-center">
               Already have an account?{' '}
               <button 
                 onClick={() => { setShowRegisterModal(false); setShowLoginModal(true); setError(''); }}
-                className="text-purple-400 hover:text-purple-300"
+                className="text-cyan-400 hover:text-cyan-300 font-medium"
               >
                 Login here
               </button>
@@ -303,14 +312,22 @@ export default function Home() {
 
       {/* Login Modal */}
       {showLoginModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl max-w-md w-full p-6 relative">
-            <button onClick={() => setShowLoginModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white">
-              <X className="w-6 h-6" />
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#12121a] border border-cyan-500/20 rounded-2xl max-w-md w-full p-4 sm:p-6 relative shadow-2xl shadow-cyan-500/10">
+            <button onClick={() => setShowLoginModal(false)} className="absolute top-3 sm:top-4 right-3 sm:right-4 text-gray-500 hover:text-cyan-400 transition-colors">
+              <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
 
-            <h3 className="text-2xl font-bold text-white mb-2">Login to Dashboard</h3>
-            <p className="text-gray-400 mb-6">Access your trading dashboard</p>
+            {/* Header with Icon */}
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-xl flex items-center justify-center">
+                <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+              </div>
+              <div>
+                <h3 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Welcome Back</h3>
+                <p className="text-gray-500 text-xs sm:text-sm">Login to your dashboard</p>
+              </div>
+            </div>
 
             <form onSubmit={async (e) => {
               e.preventDefault()
@@ -329,32 +346,32 @@ export default function Home() {
                 setError(err.response?.data?.message || 'Invalid credentials')
               }
               setSubmitting(false)
-            }} className="space-y-4">
+            }} className="space-y-3 sm:space-y-4">
               <div>
-                <label className="block text-gray-300 mb-2">Email</label>
+                <label className="block text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">Email</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 text-sm sm:text-base transition-all"
                   placeholder="your@email.com"
                   required
                 />
               </div>
               <div>
-                <label className="block text-gray-300 mb-2">Password</label>
+                <label className="block text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">Password</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 text-sm sm:text-base transition-all"
                   placeholder="Your password"
                   required
                 />
               </div>
 
               {error && (
-                <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-red-400 text-sm">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-2.5 sm:p-3 text-red-400 text-xs sm:text-sm">
                   {error}
                 </div>
               )}
@@ -362,24 +379,25 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+                className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 disabled:opacity-50 text-black rounded-xl font-bold text-sm sm:text-base transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25"
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
                 {submitting ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                     Logging in...
                   </>
                 ) : (
-                  <>Login</>
+                  <>LOGIN</>
                 )}
               </button>
             </form>
 
-            <p className="text-gray-500 text-sm mt-4 text-center">
+            <p className="text-gray-500 text-xs sm:text-sm mt-4 text-center">
               Don't have an account?{' '}
               <button 
                 onClick={() => { setShowLoginModal(false); setShowRegisterModal(true); setError(''); }}
-                className="text-purple-400 hover:text-purple-300"
+                className="text-cyan-400 hover:text-cyan-300 font-medium"
               >
                 Register here
               </button>
@@ -487,7 +505,7 @@ export default function Home() {
                   <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Accuracy</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg sm:text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>24/7</div>
+                  <div className="text-lg sm:text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>24/5</div>
                   <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Auto</div>
                 </div>
                 <div className="text-center">
@@ -774,7 +792,7 @@ export default function Home() {
                   </li>
                   <li className="flex items-center justify-center sm:justify-start gap-2 text-gray-300 text-xs sm:text-base">
                     <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 flex-shrink-0" />
-                    24/7 Support
+                    24/5 Support
                   </li>
                 </ul>
                 <button 
@@ -885,7 +903,7 @@ export default function Home() {
                 <span className="text-xl sm:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>03</span>
               </div>
               <h3 className="text-xs sm:text-xl font-bold text-white mb-1 sm:mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Profit</h3>
-              <p className="text-gray-400 text-[10px] sm:text-base">Trade 24/7</p>
+              <p className="text-gray-400 text-[10px] sm:text-base">Trade 24/5</p>
             </div>
           </div>
         </div>
@@ -899,7 +917,7 @@ export default function Home() {
             <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
           </div>
           <p className="text-gray-500 text-xs sm:text-sm px-4">
-            © 2024 Mark's AI - Advance Scalper
+            © 2024 Mark's AI - Advance Gold Scalping EA
           </p>
           <p className="text-gray-600 text-[10px] sm:text-xs mt-1 sm:mt-2 px-4">
             Trading involves risk. Past performance does not guarantee future results.

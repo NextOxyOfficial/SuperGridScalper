@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, Eye, EyeOff, Loader2, Play, Copy, Check } from 'lucide-react';
+import { Bot, Eye, EyeOff, Loader2, Play, Copy, Check, LogOut, ArrowRight } from 'lucide-react';
 
 const DEMO_EMAIL = 'demo@marksai.com';
 const DEMO_PASSWORD = 'demo123456';
@@ -16,8 +16,24 @@ export default function DemoLoginPage() {
   const [error, setError] = useState('');
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState<any>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+
+  // Check if user is already logged in
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      setLoggedInUser(JSON.parse(userData));
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    localStorage.removeItem('licenses');
+    localStorage.removeItem('selectedLicense');
+    setLoggedInUser(null);
+  };
 
   const handleCopyEmail = () => {
     navigator.clipboard.writeText(DEMO_EMAIL);
@@ -137,71 +153,109 @@ export default function DemoLoginPage() {
           </button>
         </div>
 
-        {/* Login Form */}
+        {/* Login Form or Already Logged In */}
         <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl sm:rounded-2xl p-4 sm:p-6">
-          <h2 className="text-base sm:text-xl font-bold text-white mb-3 sm:mb-4 text-center" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-            Demo Login
-          </h2>
+          {loggedInUser ? (
+            <>
+              {/* Already Logged In */}
+              <div className="text-center">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-cyan-500/20 to-green-500/20 border border-cyan-500/30 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <Check className="w-7 h-7 sm:w-8 sm:h-8 text-green-400" />
+                </div>
+                <h2 className="text-base sm:text-xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  Already Logged In
+                </h2>
+                <p className="text-gray-400 text-xs sm:text-sm mb-1">You are logged in as</p>
+                <p className="text-cyan-400 font-mono text-sm sm:text-base mb-4 sm:mb-6">{loggedInUser.email}</p>
+                
+                {/* Action Buttons */}
+                <div className="space-y-2 sm:space-y-3">
+                  <button
+                    onClick={() => router.push('/dashboard')}
+                    className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black rounded-xl font-bold text-sm sm:text-base transition-all flex items-center justify-center gap-2"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    GO TO DASHBOARD
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full py-2 sm:py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl font-medium text-xs sm:text-sm transition-all flex items-center justify-center gap-2"
+                  >
+                    <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    Logout & Login with Different Account
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Login Form */}
+              <h2 className="text-base sm:text-xl font-bold text-white mb-3 sm:mb-4 text-center" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                Demo Login
+              </h2>
 
-          <form onSubmit={handleLogin} className="space-y-3 sm:space-y-4">
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter demo email"
-                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-white placeholder-gray-600 text-sm sm:text-base"
-                required
-              />
-            </div>
+              <form onSubmit={handleLogin} className="space-y-3 sm:space-y-4">
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter demo email"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-white placeholder-gray-600 text-sm sm:text-base"
+                    required
+                  />
+                </div>
 
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter demo password"
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-white placeholder-gray-600 pr-10 sm:pr-12 text-sm sm:text-base"
-                  required
-                />
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter demo password"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-white placeholder-gray-600 pr-10 sm:pr-12 text-sm sm:text-base"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-cyan-400"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Eye className="w-4 h-4 sm:w-5 sm:h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm">
+                    {error}
+                  </div>
+                )}
+
                 <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-cyan-400"
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-green-500 to-cyan-500 hover:from-green-400 hover:to-cyan-400 text-black rounded-xl font-bold text-sm sm:text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Eye className="w-4 h-4 sm:w-5 sm:h-5" />}
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                      LOGGING IN...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 sm:w-5 sm:h-5" />
+                      ACCESS DEMO
+                    </>
+                  )}
                 </button>
-              </div>
-            </div>
-
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-green-500 to-cyan-500 hover:from-green-400 hover:to-cyan-400 text-black rounded-xl font-bold text-sm sm:text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              style={{ fontFamily: 'Orbitron, sans-serif' }}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                  LOGGING IN...
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 sm:w-5 sm:h-5" />
-                  ACCESS DEMO
-                </>
-              )}
-            </button>
-          </form>
+              </form>
+            </>
+          )}
 
           {/* Back to Home */}
           <div className="mt-3 sm:mt-4 text-center">

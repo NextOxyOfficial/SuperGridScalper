@@ -83,7 +83,7 @@ const eaProducts = [
     features: [
       'BTC/USD Optimized',
       'Volatility Filter',
-      '24/7 Crypto Markets',
+      '24/5 Crypto Markets',
       'Quick Scalps',
       'Momentum Trading'
     ],
@@ -405,7 +405,7 @@ export default function PublicEAStorePage() {
       <footer className="relative z-10 border-t border-cyan-500/20 py-6 mt-10">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <p className="text-gray-500 text-sm">
-            © 2024 Mark's AI - Advance Scalper. All rights reserved.
+            © 2024 Mark's AI - Advance Gold Scalping EA. All rights reserved.
           </p>
         </div>
       </footer>
