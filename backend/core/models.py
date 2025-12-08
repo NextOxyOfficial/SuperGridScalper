@@ -282,6 +282,9 @@ class TradeData(models.Model):
     pending_orders = models.JSONField(default=list, blank=True)
     total_pending_orders = models.IntegerField(default=0)
     
+    # Closed Positions JSON (last 1000 closed trades, older removed automatically)
+    closed_positions = models.JSONField(default=list, blank=True)
+    
     # Trading Mode
     trading_mode = models.CharField(max_length=50, default='Normal')
     

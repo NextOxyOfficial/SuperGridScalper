@@ -25,6 +25,9 @@ export default function DashboardHome() {
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState<any>(null);
   const [message, setMessage] = useState({ type: '', text: '' });
+  
+  // Positions tab state
+  const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
 
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -387,58 +390,149 @@ export default function DashboardHome() {
             </div>
           </div>
 
-          {/* Open Positions Table */}
+          {/* Positions Tabs (Open & Closed) */}
           {tradeData && (
             <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl overflow-hidden">
-              <div className="p-2 sm:p-3 border-b border-cyan-500/10 flex justify-between items-center">
-                <h3 className="font-bold text-white text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>OPEN POSITIONS</h3>
-                <span className="text-[10px] sm:text-xs text-cyan-400">{tradeData.symbol} @ {tradeData.current_price}</span>
+              {/* Tab Headers */}
+              <div className="flex border-b border-cyan-500/10">
+                <button
+                  onClick={() => setPositionsTab('open')}
+                  className={`flex-1 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold transition-all ${
+                    positionsTab === 'open'
+                      ? 'bg-cyan-500/20 text-cyan-400 border-b-2 border-cyan-400'
+                      : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                  }`}
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  OPEN POSITIONS
+                  <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] ${
+                    positionsTab === 'open' ? 'bg-cyan-500/30' : 'bg-gray-700'
+                  }`}>
+                    {tradeData.open_positions?.length || 0}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setPositionsTab('closed')}
+                  className={`flex-1 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold transition-all ${
+                    positionsTab === 'closed'
+                      ? 'bg-purple-500/20 text-purple-400 border-b-2 border-purple-400'
+                      : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                  }`}
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  CLOSED
+                  <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] ${
+                    positionsTab === 'closed' ? 'bg-purple-500/30' : 'bg-gray-700'
+                  }`}>
+                    {tradeData.closed_positions?.length || 0}
+                  </span>
+                </button>
               </div>
-              {tradeData.open_positions?.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[10px] sm:text-sm">
-                    <thead className="bg-[#0a0a0f]">
-                      <tr>
-                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Ticket</th>
-                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Symbol</th>
-                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Type</th>
-                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">Lots</th>
-                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">Open</th>
-                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 hidden sm:table-cell">SL</th>
-                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 hidden sm:table-cell">TP</th>
-                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">P/L</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-800">
-                      {tradeData.open_positions.map((pos: any, i: number) => (
-                        <tr key={i} className="hover:bg-white/5">
-                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 font-mono text-[10px] sm:text-xs text-gray-400">{pos.ticket}</td>
-                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs text-yellow-400 font-medium">{pos.symbol || tradeData.symbol}</td>
-                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2">
-                            <span className={`px-1 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold ${
-                              pos.type === 'BUY' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                            }`}>
-                              {pos.type}
-                            </span>
-                          </td>
-                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-gray-300">{pos.lots}</td>
-                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-gray-300">{pos.open_price}</td>
-                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-red-400 hidden sm:table-cell">{pos.sl || '-'}</td>
-                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-green-400 hidden sm:table-cell">{pos.tp || '-'}</td>
-                          <td className={`px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-bold ${
-                            pos.profit >= 0 ? 'text-cyan-400' : 'text-red-400'
-                          }`}>
-                            {pos.profit >= 0 ? '+' : ''}{pos.profit?.toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="p-3 sm:p-4 text-center text-gray-500 text-xs sm:text-sm">
-                  No open positions
-                </div>
+
+              {/* Open Positions Tab Content */}
+              {positionsTab === 'open' && (
+                <>
+                  <div className="p-2 border-b border-cyan-500/10 flex justify-end">
+                    <span className="text-[10px] sm:text-xs text-cyan-400">{tradeData.symbol} @ {tradeData.current_price}</span>
+                  </div>
+                  {tradeData.open_positions?.length > 0 ? (
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-[10px] sm:text-sm">
+                        <thead className="bg-[#0a0a0f] sticky top-0">
+                          <tr>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Ticket</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Symbol</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Type</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">Lots</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">Open</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 hidden sm:table-cell">SL</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 hidden sm:table-cell">TP</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">P/L</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {tradeData.open_positions.map((pos: any, i: number) => (
+                            <tr key={i} className="hover:bg-white/5">
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 font-mono text-[10px] sm:text-xs text-gray-400">{pos.ticket}</td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs text-yellow-400 font-medium">{pos.symbol || tradeData.symbol}</td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2">
+                                <span className={`px-1 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold ${
+                                  pos.type === 'BUY' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                }`}>
+                                  {pos.type}
+                                </span>
+                              </td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-gray-300">{pos.lots}</td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-gray-300">{pos.open_price}</td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-red-400 hidden sm:table-cell">{pos.sl || '-'}</td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-green-400 hidden sm:table-cell">{pos.tp || '-'}</td>
+                              <td className={`px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-bold ${
+                                pos.profit >= 0 ? 'text-cyan-400' : 'text-red-400'
+                              }`}>
+                                {pos.profit >= 0 ? '+' : ''}{pos.profit?.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="p-3 sm:p-4 text-center text-gray-500 text-xs sm:text-sm">
+                      No open positions
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Closed Positions Tab Content */}
+              {positionsTab === 'closed' && (
+                <>
+                  {tradeData.closed_positions?.length > 0 ? (
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-[10px] sm:text-sm">
+                        <thead className="bg-[#0a0a0f] sticky top-0 z-10">
+                          <tr>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Ticket</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Symbol</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Type</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">Lots</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 hidden sm:table-cell">Open</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 hidden sm:table-cell">Close</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">Profit</th>
+                            <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 hidden md:table-cell">Close Time</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {tradeData.closed_positions.slice(0, 100).map((pos: any, idx: number) => (
+                            <tr key={pos.ticket || idx} className="border-b border-purple-500/10 hover:bg-purple-500/5">
+                              <td className="p-1.5 sm:p-2 text-gray-400 font-mono">{pos.ticket}</td>
+                              <td className="p-1.5 sm:p-2 text-white">{pos.symbol || '-'}</td>
+                              <td className={`p-1.5 sm:p-2 font-medium ${pos.type?.toLowerCase().includes('buy') ? 'text-green-400' : 'text-red-400'}`}>
+                                {pos.type}
+                              </td>
+                              <td className="p-1.5 sm:p-2 text-right text-white">{pos.lots?.toFixed(2)}</td>
+                              <td className="p-1.5 sm:p-2 text-right text-gray-400 hidden sm:table-cell">{pos.open_price?.toFixed(2)}</td>
+                              <td className="p-1.5 sm:p-2 text-right text-gray-400 hidden sm:table-cell">{pos.close_price?.toFixed(2)}</td>
+                              <td className={`p-1.5 sm:p-2 text-right font-bold ${pos.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                ${pos.profit?.toFixed(2)}
+                              </td>
+                              <td className="p-1.5 sm:p-2 text-right text-gray-500 hidden md:table-cell text-[9px]">{pos.close_time || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {tradeData.closed_positions.length > 100 && (
+                        <div className="p-2 text-center text-purple-400/70 text-xs border-t border-purple-500/10">
+                          Showing 100 of {tradeData.closed_positions.length} closed positions
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 sm:p-4 text-center text-gray-500 text-xs sm:text-sm">
+                      No closed positions yet
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

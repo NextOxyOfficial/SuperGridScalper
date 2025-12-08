@@ -279,6 +279,81 @@ void SendTradeDataToServer()
     }
     pendingJson += "]";
     
+    // Build closed positions array (last 50 from history)
+    string closedJson = "[";
+    int closedCount = 0;
+    
+    // Select history for last 30 days
+    datetime fromDate = TimeCurrent() - 30 * 24 * 60 * 60;
+    datetime toDate = TimeCurrent();
+    
+    if(HistorySelect(fromDate, toDate))
+    {
+        int totalDeals = HistoryDealsTotal();
+        // Get last 50 closed deals (iterate from end)
+        for(int i = totalDeals - 1; i >= 0 && closedCount < 50; i--)
+        {
+            ulong dealTicket = HistoryDealGetTicket(i);
+            if(dealTicket <= 0) continue;
+            
+            // Only get deals for current symbol
+            string dealSymbol = HistoryDealGetString(dealTicket, DEAL_SYMBOL);
+            if(dealSymbol != _Symbol) continue;
+            
+            // Only get exit deals (DEAL_ENTRY_OUT)
+            ENUM_DEAL_ENTRY dealEntry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+            if(dealEntry != DEAL_ENTRY_OUT) continue;
+            
+            ENUM_DEAL_TYPE dealType = (ENUM_DEAL_TYPE)HistoryDealGetInteger(dealTicket, DEAL_TYPE);
+            if(dealType != DEAL_TYPE_BUY && dealType != DEAL_TYPE_SELL) continue;
+            
+            double lots = HistoryDealGetDouble(dealTicket, DEAL_VOLUME);
+            double profit = HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
+            double closePrice = HistoryDealGetDouble(dealTicket, DEAL_PRICE);
+            datetime closeTime = (datetime)HistoryDealGetInteger(dealTicket, DEAL_TIME);
+            ulong positionId = HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+            
+            // Get open price from position history
+            double openPrice = 0;
+            if(HistorySelectByPosition(positionId))
+            {
+                int posDeals = HistoryDealsTotal();
+                for(int j = 0; j < posDeals; j++)
+                {
+                    ulong entryTicket = HistoryDealGetTicket(j);
+                    if(entryTicket > 0)
+                    {
+                        ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(entryTicket, DEAL_ENTRY);
+                        if(entry == DEAL_ENTRY_IN)
+                        {
+                            openPrice = HistoryDealGetDouble(entryTicket, DEAL_PRICE);
+                            break;
+                        }
+                    }
+                }
+                // Re-select full history
+                HistorySelect(fromDate, toDate);
+            }
+            
+            // Determine original position type (opposite of exit deal type)
+            string posTypeStr = (dealType == DEAL_TYPE_SELL) ? "BUY" : "SELL";
+            
+            if(closedCount > 0) closedJson += ",";
+            closedJson += "{";
+            closedJson += "\"ticket\":" + IntegerToString(positionId) + ",";
+            closedJson += "\"symbol\":\"" + dealSymbol + "\",";
+            closedJson += "\"type\":\"" + posTypeStr + "\",";
+            closedJson += "\"lots\":" + DoubleToString(lots, 2) + ",";
+            closedJson += "\"open_price\":" + DoubleToString(openPrice, digits) + ",";
+            closedJson += "\"close_price\":" + DoubleToString(closePrice, digits) + ",";
+            closedJson += "\"profit\":" + DoubleToString(profit, 2) + ",";
+            closedJson += "\"close_time\":\"" + TimeToString(closeTime, TIME_DATE|TIME_MINUTES) + "\"";
+            closedJson += "}";
+            closedCount++;
+        }
+    }
+    closedJson += "]";
+    
     // Build main JSON request
     string jsonRequest = "{";
     jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
@@ -307,7 +382,8 @@ void SendTradeDataToServer()
     jsonRequest += "\"symbol\":\"" + _Symbol + "\",";
     jsonRequest += "\"current_price\":" + DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_BID), digits) + ",";
     jsonRequest += "\"open_positions\":" + positionsJson + ",";
-    jsonRequest += "\"pending_orders\":" + pendingJson;
+    jsonRequest += "\"pending_orders\":" + pendingJson + ",";
+    jsonRequest += "\"closed_positions\":" + closedJson;
     jsonRequest += "}";
     
     // Prepare request

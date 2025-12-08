@@ -637,6 +637,18 @@ def update_trade_data(request):
     trade_data.total_pending_orders = data.get('total_pending_orders', 0)
     trade_data.trading_mode = data.get('trading_mode', 'Normal')
     
+    # Update closed positions (keep last 1000, remove older)
+    new_closed = data.get('closed_positions', [])
+    if new_closed:
+        existing_closed = trade_data.closed_positions or []
+        # Merge and keep unique by ticket
+        all_closed = {p.get('ticket'): p for p in existing_closed}
+        for p in new_closed:
+            all_closed[p.get('ticket')] = p
+        # Sort by close_time descending and keep only last 1000
+        sorted_closed = sorted(all_closed.values(), key=lambda x: x.get('close_time', ''), reverse=True)
+        trade_data.closed_positions = sorted_closed[:1000]
+    
     # Update last_update timestamp
     from django.utils import timezone
     trade_data.last_update = timezone.now()
@@ -691,6 +703,7 @@ def get_trade_data(request):
                 'current_price': float(trade_data.current_price),
                 'open_positions': trade_data.open_positions,
                 'pending_orders': getattr(trade_data, 'pending_orders', []),
+                'closed_positions': getattr(trade_data, 'closed_positions', []),
                 'last_update': trade_data.last_update.isoformat(),
             }
         })
