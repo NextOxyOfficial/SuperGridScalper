@@ -832,13 +832,7 @@ export default function DashboardHome() {
                         <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
                         <circle cx="12" cy="4" r="2" fill="currentColor" />
                       </svg>
-                      <span className="hidden sm:inline">{tradingMode}</span>
-                      <span className="sm:hidden">{isRecoveryMode ? 'Recovery' : 'Normal'}</span>
-                    </span>
-                  )}
-                  {symbol && (
-                    <span className="text-[10px] sm:text-xs text-yellow-400 bg-yellow-500/10 px-1.5 sm:px-2 py-0.5 rounded-full font-medium border border-yellow-500/30">
-                      {symbol} @ {currentPrice || ''}
+                      {tradingMode}
                     </span>
                   )}
                 </div>
@@ -848,6 +842,15 @@ export default function DashboardHome() {
                   <span className="group-hover:translate-x-1 transition-transform">→</span>
                 </div>
               </div>
+              
+              {/* Symbol & Price Row */}
+              {symbol && (
+                <div className="px-3 sm:px-5 py-2 bg-gradient-to-r from-yellow-500/5 to-transparent border-b border-yellow-500/10">
+                  <span className="text-xs sm:text-sm text-yellow-400 font-semibold">
+                    {symbol} @ {currentPrice || ''}
+                  </span>
+                </div>
+              )}
               
               {/* License Key Row - Simplified for mobile */}
               <div className="px-3 sm:px-5 py-2 bg-[#0a0a0f]/50 border-b border-cyan-500/10">
