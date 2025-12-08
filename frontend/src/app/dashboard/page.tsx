@@ -214,83 +214,84 @@ export default function DashboardHome() {
       <div className="max-w-7xl mx-auto pt-5 px-4 pb-8">
         <div className="space-y-4">
           {/* Compact Header Bar */}
-          <div className="bg-white rounded-lg shadow-sm px-4 py-2 flex items-center justify-between">
+          <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setIsPolling(!isPolling)}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${
-                  isPolling ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'
+                  isPolling ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-gray-400'
                 }`}
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${isPolling ? 'bg-white animate-pulse' : 'bg-gray-400'}`}></span>
-                {isPolling ? 'Live' : 'Paused'}
+                <span className={`w-1.5 h-1.5 rounded-full ${isPolling ? 'bg-black animate-pulse' : 'bg-gray-500'}`}></span>
+                {isPolling ? 'LIVE' : 'PAUSED'}
               </button>
               {tradeData?.trading_mode && (
                 <span className={`px-2 py-1 rounded text-xs font-medium ${
                   tradeData.trading_mode === 'Normal' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'bg-amber-500 text-white'
-                }`}>
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
+                    : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   {tradeData.trading_mode}
                 </span>
               )}
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-500">
                 {lastUpdate ? lastUpdate.toLocaleTimeString() : '--:--:--'}
               </span>
             </div>
             <button
               onClick={() => selectedLicense && fetchTradeData(selectedLicense.license_key)}
-              className="px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+              className="px-2.5 py-1 text-xs font-medium text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors border border-cyan-500/30"
             >
               ↻ Refresh
             </button>
           </div>
 
           {/* EA Connection Status Banner + Trading Log */}
-          <div className={`rounded-xl overflow-hidden ${eaConnected ? 'bg-gradient-to-r from-green-500 to-emerald-600' : 'bg-gradient-to-r from-gray-600 to-gray-700'}`}>
+          <div className={`rounded-xl overflow-hidden border ${eaConnected ? 'bg-gradient-to-r from-cyan-500/20 to-emerald-500/10 border-cyan-500/30' : 'bg-[#12121a] border-gray-700'}`}>
             {/* Status Header */}
-            <div className="p-4 text-white">
+            <div className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${eaConnected ? 'bg-white animate-pulse' : 'bg-gray-400'}`}></div>
+                  <div className={`w-3 h-3 rounded-full ${eaConnected ? 'bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50' : 'bg-gray-600'}`}></div>
                   <div>
-                    <p className="font-bold">{eaConnected ? 'EA Connected' : 'EA Disconnected'}</p>
-                    <p className="text-sm opacity-80">
+                    <p className="font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>{eaConnected ? 'AI CONNECTED' : 'AI DISCONNECTED'}</p>
+                    <p className="text-sm text-gray-400">
                       {eaConnected 
                         ? `${tradeData?.symbol || 'N/A'} @ ${tradeData?.current_price || '-'}`
-                        : 'Waiting for EA to connect...'}
+                        : 'Waiting for Mark\'s AI to connect...'}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
                   <div className="text-center">
-                    <p className="text-2xl font-bold">{tradeData?.total_pending_orders || 0}</p>
-                    <p className="text-xs opacity-80">Pending</p>
+                    <p className="text-2xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>{tradeData?.total_pending_orders || 0}</p>
+                    <p className="text-xs text-gray-500">Pending</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold">{(tradeData?.total_buy_positions || 0) + (tradeData?.total_sell_positions || 0)}</p>
-                    <p className="text-xs opacity-80">Open</p>
+                    <p className="text-2xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>{(tradeData?.total_buy_positions || 0) + (tradeData?.total_sell_positions || 0)}</p>
+                    <p className="text-xs text-gray-500">Open</p>
                   </div>
                 </div>
               </div>
             </div>
             
             {/* Trading Log (inside banner) */}
-            <div className="bg-black/90 border-t border-white/10">
-              <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-800">
+            <div className="bg-[#0a0a0f] border-t border-cyan-500/10">
+              <div className="px-3 py-1.5 flex items-center justify-between border-b border-cyan-500/10">
                 <div className="flex items-center gap-2">
-                  <span className="text-green-400 text-xs font-mono">Trading Log</span>
-                  <span className="text-gray-600 text-xs">|</span>
-                  <span className="text-gray-500 text-xs font-mono">{tradeData?.symbol || '-'}</span>
+                  <span className="text-cyan-400 text-xs" style={{ fontFamily: 'Orbitron, sans-serif' }}>TRADING LOG</span>
+                  <span className="text-gray-700 text-xs">|</span>
+                  <span className="text-yellow-400 text-xs font-mono">{tradeData?.symbol || '-'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setActionLogs([])}
-                    className="text-gray-500 hover:text-red-400 text-xs font-mono px-1.5 py-0.5 hover:bg-gray-800 rounded"
+                    className="text-gray-600 hover:text-red-400 text-xs font-mono px-1.5 py-0.5 hover:bg-gray-800 rounded"
                   >
                     Clear
                   </button>
-                  <span className={`w-1.5 h-1.5 rounded-full ${isPolling ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`}></span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isPolling ? 'bg-cyan-400 animate-pulse' : 'bg-gray-600'}`}></span>
                 </div>
               </div>
               <div 
@@ -338,57 +339,57 @@ export default function DashboardHome() {
 
           {/* Compact Stats Row */}
           <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-            <div className="bg-white rounded-lg p-2 shadow-sm">
-              <p className="text-gray-400 text-xs">Balance</p>
-              <p className="text-sm font-bold text-gray-900">${tradeData?.account_balance?.toLocaleString() || '-'}</p>
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
+              <p className="text-gray-500 text-xs">Balance</p>
+              <p className="text-sm font-bold text-white">${tradeData?.account_balance?.toLocaleString() || '-'}</p>
             </div>
-            <div className="bg-white rounded-lg p-2 shadow-sm">
-              <p className="text-gray-400 text-xs">Equity</p>
-              <p className="text-sm font-bold text-gray-900">${tradeData?.account_equity?.toLocaleString() || '-'}</p>
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
+              <p className="text-gray-500 text-xs">Equity</p>
+              <p className="text-sm font-bold text-white">${tradeData?.account_equity?.toLocaleString() || '-'}</p>
             </div>
-            <div className="bg-white rounded-lg p-2 shadow-sm">
-              <p className="text-gray-400 text-xs">Floating P/L</p>
-              <p className={`text-sm font-bold ${(tradeData?.account_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
+              <p className="text-gray-500 text-xs">Floating P/L</p>
+              <p className={`text-sm font-bold ${(tradeData?.account_profit || 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
                 {(tradeData?.account_profit || 0) >= 0 ? '+' : ''}${tradeData?.account_profit?.toFixed(2) || '0.00'}
               </p>
             </div>
-            <div className="bg-white rounded-lg p-2 shadow-sm">
-              <p className="text-gray-400 text-xs">BUY</p>
-              <p className="text-sm font-bold text-green-600">{tradeData?.total_buy_positions || 0} <span className="text-xs font-normal text-gray-400">({tradeData?.total_buy_lots?.toFixed(2) || '0'})</span></p>
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
+              <p className="text-gray-500 text-xs">BUY</p>
+              <p className="text-sm font-bold text-green-400">{tradeData?.total_buy_positions || 0} <span className="text-xs font-normal text-gray-600">({tradeData?.total_buy_lots?.toFixed(2) || '0'})</span></p>
             </div>
-            <div className="bg-white rounded-lg p-2 shadow-sm">
-              <p className="text-gray-400 text-xs">SELL</p>
-              <p className="text-sm font-bold text-red-600">{tradeData?.total_sell_positions || 0} <span className="text-xs font-normal text-gray-400">({tradeData?.total_sell_lots?.toFixed(2) || '0'})</span></p>
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
+              <p className="text-gray-500 text-xs">SELL</p>
+              <p className="text-sm font-bold text-red-400">{tradeData?.total_sell_positions || 0} <span className="text-xs font-normal text-gray-600">({tradeData?.total_sell_lots?.toFixed(2) || '0'})</span></p>
             </div>
-            <div className="bg-white rounded-lg p-2 shadow-sm">
-              <p className="text-gray-400 text-xs">BUY P/L</p>
-              <p className={`text-sm font-bold ${(tradeData?.total_buy_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
+              <p className="text-gray-500 text-xs">BUY P/L</p>
+              <p className={`text-sm font-bold ${(tradeData?.total_buy_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 ${tradeData?.total_buy_profit?.toFixed(2) || '0.00'}
               </p>
             </div>
-            <div className="bg-white rounded-lg p-2 shadow-sm">
-              <p className="text-gray-400 text-xs">SELL P/L</p>
-              <p className={`text-sm font-bold ${(tradeData?.total_sell_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
+              <p className="text-gray-500 text-xs">SELL P/L</p>
+              <p className={`text-sm font-bold ${(tradeData?.total_sell_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 ${tradeData?.total_sell_profit?.toFixed(2) || '0.00'}
               </p>
             </div>
-            <div className="bg-white rounded-lg p-2 shadow-sm">
-              <p className="text-gray-400 text-xs">License</p>
-              <p className="text-sm font-bold text-indigo-600">{getDaysRemaining(selectedLicense)}d</p>
+            <div className="bg-[#12121a] border border-yellow-500/20 rounded-lg p-2">
+              <p className="text-gray-500 text-xs">License</p>
+              <p className="text-sm font-bold text-yellow-400">{getDaysRemaining(selectedLicense)}d</p>
             </div>
           </div>
 
           {/* Open Positions Table */}
           {tradeData && (
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-              <div className="p-3 border-b flex justify-between items-center">
-                <h3 className="font-bold text-gray-900 text-sm">Open Positions</h3>
-                <span className="text-xs text-gray-500">{tradeData.symbol} @ {tradeData.current_price}</span>
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl overflow-hidden">
+              <div className="p-3 border-b border-cyan-500/10 flex justify-between items-center">
+                <h3 className="font-bold text-white text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>OPEN POSITIONS</h3>
+                <span className="text-xs text-cyan-400">{tradeData.symbol} @ {tradeData.current_price}</span>
               </div>
               {tradeData.open_positions?.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-[#0a0a0f]">
                       <tr>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Ticket</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
@@ -399,23 +400,23 @@ export default function DashboardHome() {
                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Profit</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y">
+                    <tbody className="divide-y divide-gray-800">
                       {tradeData.open_positions.map((pos: any, i: number) => (
-                        <tr key={i} className="hover:bg-gray-50">
-                          <td className="px-3 py-2 font-mono text-xs">{pos.ticket}</td>
+                        <tr key={i} className="hover:bg-white/5">
+                          <td className="px-3 py-2 font-mono text-xs text-gray-400">{pos.ticket}</td>
                           <td className="px-3 py-2">
                             <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                              pos.type === 'BUY' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              pos.type === 'BUY' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
                             }`}>
                               {pos.type}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-right">{pos.lots}</td>
-                          <td className="px-3 py-2 text-right font-mono">{pos.open_price}</td>
-                          <td className="px-3 py-2 text-right font-mono text-red-600">{pos.sl || '-'}</td>
-                          <td className="px-3 py-2 text-right font-mono text-green-600">{pos.tp || '-'}</td>
+                          <td className="px-3 py-2 text-right text-gray-300">{pos.lots}</td>
+                          <td className="px-3 py-2 text-right font-mono text-gray-300">{pos.open_price}</td>
+                          <td className="px-3 py-2 text-right font-mono text-red-400">{pos.sl || '-'}</td>
+                          <td className="px-3 py-2 text-right font-mono text-green-400">{pos.tp || '-'}</td>
                           <td className={`px-3 py-2 text-right font-bold ${
-                            pos.profit >= 0 ? 'text-green-600' : 'text-red-600'
+                            pos.profit >= 0 ? 'text-cyan-400' : 'text-red-400'
                           }`}>
                             {pos.profit >= 0 ? '+' : ''}{pos.profit?.toFixed(2)}
                           </td>
@@ -425,7 +426,7 @@ export default function DashboardHome() {
                   </table>
                 </div>
               ) : (
-                <div className="p-4 text-center text-gray-400 text-sm">
+                <div className="p-4 text-center text-gray-500 text-sm">
                   No open positions
                 </div>
               )}
@@ -434,15 +435,15 @@ export default function DashboardHome() {
 
           {/* Pending Orders Table */}
           {tradeData && (
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="p-2 border-b flex justify-between items-center bg-amber-50">
-                <h3 className="font-semibold text-amber-800 text-sm">Pending Orders</h3>
-                <span className="text-xs text-amber-600">{tradeData.pending_orders?.length || 0} orders</span>
+            <div className="bg-[#12121a] border border-yellow-500/20 rounded-lg overflow-hidden">
+              <div className="p-2 border-b border-yellow-500/10 flex justify-between items-center">
+                <h3 className="font-semibold text-yellow-400 text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>PENDING ORDERS</h3>
+                <span className="text-xs text-yellow-400/70">{tradeData.pending_orders?.length || 0} orders</span>
               </div>
               {tradeData.pending_orders?.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-[#0a0a0f]">
                       <tr>
                         <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500">Ticket</th>
                         <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500">Type</th>
@@ -452,26 +453,26 @@ export default function DashboardHome() {
                         <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500">TP</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y">
+                    <tbody className="divide-y divide-gray-800">
                       {tradeData.pending_orders?.map((order: any, i: number) => (
-                        <tr key={i} className="hover:bg-gray-50">
-                          <td className="px-2 py-1.5 font-mono">{order.ticket}</td>
+                        <tr key={i} className="hover:bg-white/5">
+                          <td className="px-2 py-1.5 font-mono text-gray-400">{order.ticket}</td>
                           <td className="px-2 py-1.5">
                             <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                              order.type?.includes('BUY') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              order.type?.includes('BUY') ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
                             }`}>{order.type?.replace('_', ' ')}</span>
                           </td>
-                          <td className="px-2 py-1.5 text-right">{order.lots}</td>
-                          <td className="px-2 py-1.5 text-right font-mono">{order.price}</td>
-                          <td className="px-2 py-1.5 text-right font-mono text-red-600">{order.sl || '-'}</td>
-                          <td className="px-2 py-1.5 text-right font-mono text-green-600">{order.tp || '-'}</td>
+                          <td className="px-2 py-1.5 text-right text-gray-300">{order.lots}</td>
+                          <td className="px-2 py-1.5 text-right font-mono text-gray-300">{order.price}</td>
+                          <td className="px-2 py-1.5 text-right font-mono text-red-400">{order.sl || '-'}</td>
+                          <td className="px-2 py-1.5 text-right font-mono text-green-400">{order.tp || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="p-3 text-center text-gray-400 text-sm">
+                <div className="p-3 text-center text-gray-500 text-sm">
                   No pending orders
                 </div>
               )}
@@ -479,16 +480,16 @@ export default function DashboardHome() {
           )}
 
           {/* License Info (collapsible) */}
-          <details className="bg-white rounded-xl shadow-sm">
-            <summary className="p-4 cursor-pointer font-bold text-gray-900 hover:bg-gray-50 rounded-xl">
-              License Details
+          <details className="bg-[#12121a] border border-cyan-500/20 rounded-xl">
+            <summary className="p-4 cursor-pointer font-bold text-white hover:bg-white/5 rounded-xl" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              LICENSE DETAILS
             </summary>
-            <div className="px-4 pb-4 border-t">
+            <div className="px-4 pb-4 border-t border-cyan-500/10">
               <div className="grid md:grid-cols-3 gap-4 pt-4">
                 <div>
                   <p className="text-gray-500 text-sm">License Key</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <p className="font-mono text-xs bg-gray-50 p-2 rounded break-all flex-1">{selectedLicense.license_key}</p>
+                    <p className="font-mono text-xs bg-[#0a0a0f] text-cyan-400 p-2 rounded border border-cyan-500/20 break-all flex-1">{selectedLicense.license_key}</p>
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(selectedLicense.license_key);
@@ -499,7 +500,7 @@ export default function DashboardHome() {
                         }
                       }}
                       id="copy-license-btn"
-                      className="text-xs px-2 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 transition-colors whitespace-nowrap"
+                      className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded hover:bg-cyan-500/30 transition-colors whitespace-nowrap border border-cyan-500/30"
                     >
                       📋 Copy
                     </button>
@@ -507,13 +508,13 @@ export default function DashboardHome() {
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">MT5 Account</p>
-                  <p className="font-medium mt-1">{selectedLicense.mt5_account || 'Not Set'}</p>
+                  <p className="font-medium mt-1 text-white">{selectedLicense.mt5_account || 'Not Set'}</p>
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Expires</p>
-                  <p className="font-medium mt-1">
+                  <p className="font-medium mt-1 text-white">
                     {selectedLicense.expires_at ? new Date(selectedLicense.expires_at).toLocaleDateString() : '-'}
-                    <span className="text-gray-400 ml-2">({getDaysRemaining(selectedLicense)} days left)</span>
+                    <span className="text-yellow-400 ml-2">({getDaysRemaining(selectedLicense)} days left)</span>
                   </p>
                 </div>
               </div>
@@ -528,31 +529,31 @@ export default function DashboardHome() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Welcome, {user?.name || user?.email}</h2>
-        <p className="text-gray-500 text-sm">Select a license to access your dashboard</p>
+        <h2 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Welcome, {user?.name || user?.email}</h2>
+        <p className="text-gray-500 text-sm">Select a license to access your AI trading dashboard</p>
       </div>
 
       {/* Purchase New License Section - Now at top */}
-      <details className="bg-white rounded-xl shadow-sm mb-6" open={licenses.length === 0}>
-        <summary className="p-4 cursor-pointer font-semibold text-gray-800 hover:bg-gray-50 rounded-xl flex items-center justify-between">
-          <span>➕ Purchase New License</span>
-          <span className="text-xs text-gray-400">Click to expand</span>
+      <details className="bg-[#12121a] border border-cyan-500/20 rounded-xl mb-6" open={licenses.length === 0}>
+        <summary className="p-4 cursor-pointer font-semibold text-white hover:bg-white/5 rounded-xl flex items-center justify-between" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+          <span>➕ PURCHASE NEW LICENSE</span>
+          <span className="text-xs text-gray-500">Click to expand</span>
         </summary>
-        <div className="px-4 pb-4 border-t">
+        <div className="px-4 pb-4 border-t border-cyan-500/10">
           {purchaseSuccess ? (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center mt-4">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-2xl">✓</span>
+            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4 text-center mt-4">
+              <div className="w-12 h-12 bg-cyan-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-2xl text-cyan-400">✓</span>
               </div>
-              <h4 className="text-lg font-bold text-green-800 mb-1">License Purchased!</h4>
-              <p className="text-green-600 text-sm mb-3">Your new license has been created</p>
-              <div className="bg-white rounded p-3 mb-3">
+              <h4 className="text-lg font-bold text-cyan-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>License Activated!</h4>
+              <p className="text-gray-400 text-sm mb-3">Your new AI license has been created</p>
+              <div className="bg-[#0a0a0f] rounded p-3 mb-3 border border-cyan-500/20">
                 <p className="text-xs text-gray-500 mb-1">License Key</p>
-                <p className="font-mono text-xs text-gray-800">{purchaseSuccess.license_key}</p>
+                <p className="font-mono text-xs text-cyan-400">{purchaseSuccess.license_key}</p>
               </div>
               <button
                 onClick={() => setPurchaseSuccess(null)}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded text-sm"
+                className="bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-1.5 rounded text-sm font-bold"
               >
                 Purchase Another
               </button>
@@ -564,7 +565,7 @@ export default function DashboardHome() {
                   <p className="text-gray-500 text-sm">Loading plans...</p>
                   <button 
                     onClick={fetchPlans}
-                    className="mt-2 text-indigo-600 text-sm hover:underline"
+                    className="mt-2 text-cyan-400 text-sm hover:underline"
                   >
                     Retry
                   </button>
@@ -577,12 +578,12 @@ export default function DashboardHome() {
                       onClick={() => setSelectedPlan(plan)}
                       className={`p-3 rounded-lg border-2 cursor-pointer transition-all text-center ${
                         selectedPlan?.id === plan.id
-                          ? 'border-indigo-500 bg-indigo-50'
-                          : 'border-gray-200 hover:border-indigo-300'
+                          ? 'border-cyan-400 bg-cyan-500/10'
+                          : 'border-gray-700 hover:border-cyan-500/50 bg-[#0a0a0f]'
                       }`}
                     >
-                      <h4 className="font-semibold text-gray-900 text-sm">{plan.name}</h4>
-                      <p className="text-xl font-bold text-indigo-600">${plan.price}</p>
+                      <h4 className="font-semibold text-white text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h4>
+                      <p className="text-xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</p>
                       <p className="text-xs text-gray-500">{plan.duration_days} days</p>
                     </div>
                   ))}
@@ -592,19 +593,19 @@ export default function DashboardHome() {
               {plans.length > 0 && (
                 <>
                   <div className="mb-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">MT5 Account Number</label>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">MT5 Account Number</label>
                     <input
                       type="text"
                       value={mt5Account}
                       onChange={(e) => setMt5Account(e.target.value)}
                       placeholder="Enter your MT5 account number"
-                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                      className="w-full px-3 py-2 bg-[#0a0a0f] border border-cyan-500/30 rounded focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm text-white placeholder-gray-600"
                     />
-                    <p className="text-xs text-gray-400 mt-1">License will be bound to this account only</p>
+                    <p className="text-xs text-gray-600 mt-1">License will be bound to this account only</p>
                   </div>
                   
                   {message.type === 'error' && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm mb-3">
+                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 rounded text-sm mb-3">
                       {message.text}
                     </div>
                   )}
@@ -612,9 +613,10 @@ export default function DashboardHome() {
                   <button
                     onClick={handlePurchase}
                     disabled={purchasing || !selectedPlan || !mt5Account.trim()}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2 rounded font-medium text-sm transition"
+                    className="w-full bg-cyan-500 hover:bg-cyan-400 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2 rounded font-bold text-sm transition"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
-                    {purchasing ? 'Processing...' : `Purchase ${selectedPlan?.name || 'License'}`}
+                    {purchasing ? 'PROCESSING...' : `ACTIVATE ${selectedPlan?.name || 'LICENSE'}`}
                   </button>
                 </>
               )}
@@ -625,20 +627,20 @@ export default function DashboardHome() {
       
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-3">
-          <h3 className="text-lg font-semibold text-gray-800">Your Licenses</h3>
-          <span className="flex items-center gap-1.5 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
-            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+          <h3 className="text-lg font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>YOUR LICENSES</h3>
+          <span className="flex items-center gap-1.5 text-xs text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-full border border-cyan-500/30">
+            <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
             Live
           </span>
         </div>
-        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{licenses.length} license(s)</span>
+        <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded-full">{licenses.length} license(s)</span>
       </div>
       
       {licenses.length === 0 ? (
-        <div className="bg-white rounded-xl p-8 text-center shadow-sm">
+        <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-8 text-center">
           <p className="text-4xl mb-3">🔑</p>
-          <h3 className="text-lg font-bold text-gray-900 mb-1">No Licenses Found</h3>
-          <p className="text-gray-500 text-sm">Purchase a plan below to get started.</p>
+          <h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>No Licenses Found</h3>
+          <p className="text-gray-500 text-sm">Purchase a plan above to get started with Mark's AI 3.0.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -677,35 +679,35 @@ export default function DashboardHome() {
             <div 
               key={idx}
               onClick={() => handleSelectLicense(lic)}
-              className="bg-white rounded-xl shadow-sm cursor-pointer hover:shadow-lg transition-all border border-gray-100 hover:border-indigo-400 group overflow-hidden"
+              className="bg-[#12121a] rounded-xl cursor-pointer hover:shadow-lg hover:shadow-cyan-500/10 transition-all border border-cyan-500/20 hover:border-cyan-400/50 group overflow-hidden"
             >
               {/* Header Row */}
-              <div className="px-5 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 flex items-center justify-between">
+              <div className="px-5 py-3 bg-gradient-to-r from-cyan-500/5 to-transparent border-b border-cyan-500/10 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`}></div>
+                  <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50' : 'bg-gray-600'}`}></div>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                    lic.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    lic.status === 'active' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
                   }`}>
                     {lic.status?.toUpperCase()}
                   </span>
-                  <span className="font-bold text-gray-900">{lic.plan}</span>
+                  <span className="font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>{lic.plan}</span>
                   {symbol && (
-                    <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full font-medium">
+                    <span className="text-xs text-yellow-400 bg-yellow-500/10 px-2 py-0.5 rounded-full font-medium border border-yellow-500/30">
                       {symbol} {currentPrice ? `@ ${currentPrice}` : ''}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-indigo-600 group-hover:text-indigo-800 font-semibold text-sm">
+                <div className="flex items-center gap-2 text-cyan-400 group-hover:text-cyan-300 font-semibold text-sm">
                   <span>Open Dashboard</span>
                   <span className="group-hover:translate-x-1 transition-transform">→</span>
                 </div>
               </div>
               
               {/* License Key Row */}
-              <div className="px-5 py-2 bg-gray-50/50 border-b border-gray-100">
+              <div className="px-5 py-2 bg-[#0a0a0f]/50 border-b border-cyan-500/10">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">License:</span>
-                  <code className="text-xs font-mono text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
+                  <span className="text-xs text-gray-500">License:</span>
+                  <code className="text-xs font-mono text-cyan-400 bg-[#0a0a0f] px-2 py-0.5 rounded border border-cyan-500/20">
                     {lic.license_key}
                   </code>
                   <button
@@ -716,41 +718,41 @@ export default function DashboardHome() {
                       btn.textContent = '✓';
                       setTimeout(() => btn.textContent = '📋', 1500);
                     }}
-                    className="text-xs px-1.5 py-0.5 rounded hover:bg-gray-200 transition-colors"
+                    className="text-xs px-1.5 py-0.5 rounded hover:bg-cyan-500/20 transition-colors text-gray-400"
                     title="Copy license key"
                   >
                     📋
                   </button>
-                  <span className="text-xs text-gray-400 ml-2">MT5:</span>
-                  <span className="text-xs font-medium text-gray-700">{lic.mt5_account || '-'}</span>
+                  <span className="text-xs text-gray-500 ml-2">MT5:</span>
+                  <span className="text-xs font-medium text-gray-400">{lic.mt5_account || '-'}</span>
                 </div>
               </div>
               
               {/* Stats Row */}
               <div className="px-5 py-4 grid grid-cols-5 gap-4">
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">Balance</p>
-                  <p className="text-lg font-bold text-gray-900">${balance?.toLocaleString() || '-'}</p>
+                  <p className="text-xs text-gray-500 mb-1">Balance</p>
+                  <p className="text-lg font-bold text-white">${balance?.toLocaleString() || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">Floating P/L</p>
-                  <p className={`text-lg font-bold ${(profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <p className="text-xs text-gray-500 mb-1">Floating P/L</p>
+                  <p className={`text-lg font-bold ${(profit || 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
                     {profit !== undefined ? `${profit >= 0 ? '+' : ''}$${profit?.toFixed(2)}` : '-'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">Positions</p>
-                  <p className="text-lg font-bold text-gray-900">{totalPositions}</p>
+                  <p className="text-xs text-gray-500 mb-1">Positions</p>
+                  <p className="text-lg font-bold text-white">{totalPositions}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">Status</p>
-                  <p className={`text-lg font-bold ${isConnected ? 'text-green-600' : 'text-gray-400'}`}>
+                  <p className="text-xs text-gray-500 mb-1">Status</p>
+                  <p className={`text-lg font-bold ${isConnected ? 'text-cyan-400' : 'text-gray-600'}`}>
                     {isConnected ? 'Online' : 'Offline'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">Expires</p>
-                  <p className={`text-lg font-bold ${getDaysRemaining(lic) <= 7 ? 'text-orange-600' : 'text-indigo-600'}`}>
+                  <p className="text-xs text-gray-500 mb-1">Expires</p>
+                  <p className={`text-lg font-bold ${getDaysRemaining(lic) <= 7 ? 'text-orange-400' : 'text-yellow-400'}`}>
                     {getDaysRemaining(lic)} days
                   </p>
                 </div>

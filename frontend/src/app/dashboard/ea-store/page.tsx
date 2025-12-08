@@ -3,12 +3,12 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function DownloadPage() {
+// Redirect to public EA Store page
+export default function DashboardEAStorePage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Redirect to EA Store
-    router.replace('/dashboard/ea-store');
+    router.replace('/ea-store');
   }, [router]);
 
   return (

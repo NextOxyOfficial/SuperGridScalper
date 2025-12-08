@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn } from 'lucide-react'
+import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings } from 'lucide-react'
 import axios from 'axios'
 
 const API_URL = 'http://127.0.0.1:8000/api'
@@ -42,6 +42,18 @@ export default function Home() {
   const [copied, setCopied] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userName, setUserName] = useState('')
+  
+  // Typing effect states
+  const [typedText, setTypedText] = useState('')
+  const [currentPhraseIndex, setCurrentPhraseIndex] = useState(0)
+  const [isDeleting, setIsDeleting] = useState(false)
+  
+  const typingPhrases = [
+    'Start EA trading with as little as $350 and earn 70%-250% profit every day.',
+    'Make money on every move. No matter market moves up or down.',
+    'The EA manages risk automatically and handles all trades for you.',
+    'Fully automated gold trading with AI precision.',
+  ]
 
   useEffect(() => {
     // Check if user is logged in
@@ -81,6 +93,33 @@ export default function Home() {
     }
     fetchPlans()
   }, [])
+
+  // Typing effect
+  useEffect(() => {
+    const currentPhrase = typingPhrases[currentPhraseIndex]
+    
+    const timeout = setTimeout(() => {
+      if (!isDeleting) {
+        // Typing
+        if (typedText.length < currentPhrase.length) {
+          setTypedText(currentPhrase.slice(0, typedText.length + 1))
+        } else {
+          // Pause before deleting
+          setTimeout(() => setIsDeleting(true), 2000)
+        }
+      } else {
+        // Deleting
+        if (typedText.length > 0) {
+          setTypedText(typedText.slice(0, -1))
+        } else {
+          setIsDeleting(false)
+          setCurrentPhraseIndex((prev) => (prev + 1) % typingPhrases.length)
+        }
+      }
+    }, isDeleting ? 50 : 100)
+
+    return () => clearTimeout(timeout)
+  }, [typedText, isDeleting, currentPhraseIndex])
 
   const handleSubscribe = (plan: Plan) => {
     if (!isLoggedIn) {
@@ -159,15 +198,15 @@ export default function Home() {
     setSelectedPlan(null)
   }
 
-  const features = [
-    { icon: TrendingUp, title: 'Grid Trading', description: 'Automated grid strategy for consistent profits' },
-    { icon: Shield, title: 'Risk Management', description: 'Built-in stop loss and take profit controls' },
-    { icon: Zap, title: 'Fast Execution', description: 'Lightning-fast order execution on MT5' },
-    { icon: Clock, title: '24/7 Trading', description: 'Works around the clock while you sleep' },
-  ]
-
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <main className="min-h-screen bg-[#0a0a0f] relative overflow-hidden">
+      {/* Animated Background Grid */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.03)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]" />
+      
+      {/* Glowing Orbs */}
+      <div className="absolute top-20 left-10 w-72 h-72 bg-cyan-500/20 rounded-full blur-[100px] animate-pulse" />
+      <div className="absolute bottom-20 right-10 w-96 h-96 bg-yellow-500/10 rounded-full blur-[120px] animate-pulse" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/5 rounded-full blur-[150px]" />
       {/* Register Modal */}
       {showRegisterModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -349,68 +388,347 @@ export default function Home() {
         </div>
       )}
 
-      {/* Hero Section */}
-      <div className="container mx-auto px-4 py-16">
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 bg-purple-500/20 border border-purple-500/50 rounded-full px-4 py-2 mb-6">
-            <Star className="w-4 h-4 text-yellow-400" />
-            <span className="text-purple-300 text-sm">Professional MT5 Expert Advisor</span>
+      {/* Navigation */}
+      <nav className="relative z-10 container mx-auto px-4 py-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+              <Bot className="w-6 h-6 text-black" />
+            </div>
+            <span className="text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
           </div>
-          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
-            Hedge Grid Trailing EA
-          </h1>
-          <p className="text-xl text-gray-300 max-w-2xl mx-auto mb-8">
-            Advanced grid trading system with intelligent trailing stops. 
-            Maximize your forex profits with our proven automated strategy.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex items-center gap-4">
             {isLoggedIn ? (
-              <>
-                <button 
-                  onClick={() => router.push('/dashboard')}
-                  className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-xl font-semibold transition-all"
-                >
-                  Go to Dashboard <ArrowRight className="w-5 h-5" />
-                </button>
-                <span className="inline-flex items-center gap-2 bg-white/10 text-white px-6 py-4 rounded-xl font-medium border border-white/20">
-                  👋 Welcome, {userName}
-                </span>
-              </>
+              <button onClick={() => router.push('/dashboard')} className="px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                Dashboard
+              </button>
             ) : (
               <>
-                <button 
-                  onClick={() => setShowRegisterModal(true)}
-                  className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-xl font-semibold transition-all"
-                >
-                  Create Account <ArrowRight className="w-5 h-5" />
+                <button onClick={() => setShowLoginModal(true)} className="px-6 py-2 text-cyan-400 hover:text-cyan-300 font-medium transition-all">
+                  Login
                 </button>
-                <button 
-                  onClick={() => setShowLoginModal(true)}
-                  className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-xl font-semibold transition-all border border-white/20"
-                >
-                  <LogIn className="w-5 h-5" /> Login
+                <button onClick={() => setShowRegisterModal(true)} className="px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all">
+                  Get Started
                 </button>
               </>
             )}
           </div>
         </div>
+      </nav>
 
-        {/* Features Section */}
-        <div id="features" className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
-          {features.map((feature, index) => (
-            <div key={index} className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10 hover:border-purple-500/50 transition-all">
-              <feature.icon className="w-10 h-10 text-purple-400 mb-4" />
-              <h3 className="text-xl font-semibold text-white mb-2">{feature.title}</h3>
-              <p className="text-gray-400">{feature.description}</p>
+      {/* Hero Section */}
+      <div className="relative z-10 min-h-screen flex items-center">
+        <div className="container mx-auto px-4 py-20">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-12">
+            
+            {/* Left Side - Text Content */}
+            <div className="flex-1 text-center lg:text-left max-w-2xl">
+              {/* Typing Effect Description - AT TOP */}
+              <div className="h-20 md:h-16 flex items-center justify-center lg:justify-start mb-6">
+                <p className="text-white max-w-3xl text-lg md:text-2xl lg:text-3xl font-bold tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  <span className="text-yellow-400">&gt;</span>{' '}
+                  <span className="uppercase">{typedText}</span>
+                  <span className="inline-block w-1 h-7 md:h-8 bg-cyan-400 ml-2 animate-pulse" />
+                </p>
+              </div>
+              
+              {/* AI Badge */}
+              <div className="inline-flex items-center gap-2 bg-black/50 border border-cyan-500/50 rounded-full px-5 py-2 mb-6 backdrop-blur-md">
+                <Sparkles className="w-4 h-4 text-yellow-400 animate-pulse" />
+                <span className="text-cyan-300 text-sm tracking-wider" style={{ fontFamily: 'Orbitron, sans-serif' }}>POWERED BY ARTIFICIAL INTELLIGENCE</span>
+              </div>
+              
+              {/* Main Title */}
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-white to-yellow-400 mb-2 drop-shadow-2xl" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                MARK'S AI 3.0
+              </h1>
+              <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white/90 mb-4 drop-shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                ADVANCE SCALPER
+              </h2>
+              
+              {/* Tagline */}
+              <p className="text-lg md:text-xl text-cyan-300 mb-6 font-light drop-shadow-lg">
+                The Most Powerful Automated Gold AI Trading
+              </p>
+              
+              {/* CTA Buttons */}
+              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-8">
+                <button 
+                  onClick={() => router.push('/ea-store')}
+                  className="group inline-flex items-center gap-3 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400 text-black px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg shadow-yellow-500/25"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <Store className="w-5 h-5" />
+                  EA STORE
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </button>
+                <button 
+                  onClick={() => router.push('/guideline')}
+                  className="inline-flex items-center gap-2 bg-black/50 hover:bg-black/70 text-cyan-300 px-6 py-3 rounded-xl font-semibold transition-all border border-cyan-500/50 hover:border-cyan-400 backdrop-blur-sm"
+                >
+                  <BookOpen className="w-5 h-5" /> Guidelines
+                </button>
+              </div>
+              
+              {/* Stats Row */}
+              <div className="flex flex-wrap justify-center lg:justify-start gap-6 md:gap-8 py-4 px-6 bg-black/30 backdrop-blur-sm rounded-2xl border border-cyan-500/20">
+                <div className="text-center">
+                  <div className="text-2xl md:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>99.2%</div>
+                  <div className="text-gray-500 text-xs md:text-sm">Accuracy Rate</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>24/7</div>
+                  <div className="text-gray-500 text-xs md:text-sm">Auto Trading</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl md:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>0.001s</div>
+                  <div className="text-gray-500 text-xs md:text-sm">Execution Speed</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>5000+</div>
+                  <div className="text-gray-500 text-xs md:text-sm">Active Traders</div>
+                </div>
+              </div>
             </div>
-          ))}
+            
+            {/* Right Side - AI Robot Image */}
+            <div className="flex-1 flex flex-col items-center lg:items-end">
+              <div className="relative group">
+                {/* Glow effect behind image */}
+                <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/30 to-cyan-400/20 blur-3xl rounded-full scale-90 group-hover:scale-100 transition-transform duration-500" />
+                
+                {/* AI Robot Image */}
+                <img 
+                  src="/marks-ai-robot.png" 
+                  alt="Mark's AI Trading Robot" 
+                  className="relative z-10 w-[300px] md:w-[400px] lg:w-[500px] h-auto drop-shadow-2xl hover:scale-105 transition-transform duration-500"
+                  style={{ filter: 'drop-shadow(0 0 40px rgba(6, 182, 212, 0.4))' }}
+                />
+                
+                {/* Floating badges */}
+                <div className="absolute -top-2 right-10 bg-gradient-to-r from-yellow-500 to-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full animate-bounce shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  NEW 3.0
+                </div>
+                <div className="absolute bottom-20 -left-4 bg-gradient-to-r from-cyan-500 to-cyan-400 text-black text-xs font-bold px-3 py-1 rounded-full shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  AI POWERED
+                </div>
+              </div>
+              
+              {/* Tech Info Bar under Robot */}
+              <div className="mt-4 w-full max-w-md">
+                <div className="bg-gradient-to-r from-[#0a0a0f] via-[#12121a] to-[#0a0a0f] border border-cyan-500/30 rounded-xl p-4 backdrop-blur-sm">
+                  {/* Animated scanning line */}
+                  <div className="relative overflow-hidden mb-3">
+                    <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                      <span>AI NEURAL NETWORK</span>
+                      <span className="text-cyan-400">ACTIVE</span>
+                    </div>
+                    <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                      <div className="h-full w-full bg-gradient-to-r from-cyan-500 via-yellow-400 to-cyan-500 animate-pulse" 
+                           style={{ animation: 'pulse 2s ease-in-out infinite' }} />
+                    </div>
+                  </div>
+                  
+                  {/* Live Stats */}
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="bg-black/40 rounded-lg p-2">
+                      <div className="text-cyan-400 text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>LIVE</div>
+                      <div className="text-gray-500 text-[10px]">STATUS</div>
+                    </div>
+                    <div className="bg-black/40 rounded-lg p-2">
+                      <div className="text-green-400 text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>98.7%</div>
+                      <div className="text-gray-500 text-[10px]">WIN RATE</div>
+                    </div>
+                    <div className="bg-black/40 rounded-lg p-2">
+                      <div className="text-yellow-400 text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>GOLD</div>
+                      <div className="text-gray-500 text-[10px]">XAUUSD</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+      
+        
+      </div>
+
+      {/* Main Content Section */}
+      <div className="relative z-10 container mx-auto px-4">
+
+        {/* Progress Steps - Catchy Section */}
+        <div className="mb-24 relative">
+          {/* Background glow */}
+          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-yellow-500/5 to-green-500/5 rounded-3xl blur-xl" />
+          
+          <div className="relative bg-gradient-to-r from-[#0a0a0f] via-[#12121a] to-[#0a0a0f] border border-cyan-500/20 rounded-3xl p-8 md:p-12 overflow-hidden">
+            {/* Animated background lines */}
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(6,182,212,0.03)_50%,transparent_100%)] animate-pulse" />
+            
+            <div className="relative z-10">
+              <div className="text-center mb-10">
+                <h2 className="text-2xl md:text-4xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  Start Earning in <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400">4 Simple Steps</span>
+                </h2>
+                <p className="text-gray-500">From download to withdrawal - it's that easy!</p>
+              </div>
+              
+              {/* Progress Steps */}
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-0">
+                {[
+                  { step: 1, icon: '📥', title: 'Download', subtitle: 'Get EA from Store', color: 'cyan' },
+                  { step: 2, icon: '⚙️', title: 'Install EA', subtitle: 'Add to MT5 Terminal', color: 'yellow' },
+                  { step: 3, icon: '💰', title: 'Enjoy Profit', subtitle: 'Every Minute', color: 'green' },
+                  { step: 4, icon: '🏦', title: 'Withdraw', subtitle: 'Your Earnings', color: 'purple' }
+                ].map((item, idx) => (
+                  <div key={idx} className="flex items-center">
+                    {/* Step Card */}
+                    <div className={`relative group`}>
+                      <div className={`w-24 h-24 md:w-28 md:h-28 rounded-2xl bg-gradient-to-br ${
+                        item.color === 'cyan' ? 'from-cyan-500/20 to-cyan-500/5 border-cyan-500/30 group-hover:border-cyan-400 group-hover:shadow-cyan-500/20' :
+                        item.color === 'yellow' ? 'from-yellow-500/20 to-yellow-500/5 border-yellow-500/30 group-hover:border-yellow-400 group-hover:shadow-yellow-500/20' :
+                        item.color === 'green' ? 'from-green-500/20 to-green-500/5 border-green-500/30 group-hover:border-green-400 group-hover:shadow-green-500/20' :
+                        'from-purple-500/20 to-purple-500/5 border-purple-500/30 group-hover:border-purple-400 group-hover:shadow-purple-500/20'
+                      } border flex flex-col items-center justify-center transition-all group-hover:scale-110 group-hover:shadow-lg`}>
+                        <span className="text-3xl mb-1">{item.icon}</span>
+                        <span className={`text-xs font-bold ${
+                          item.color === 'cyan' ? 'text-cyan-400' :
+                          item.color === 'yellow' ? 'text-yellow-400' :
+                          item.color === 'green' ? 'text-green-400' :
+                          'text-purple-400'
+                        }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>{item.title}</span>
+                        <span className="text-gray-500 text-[10px]">{item.subtitle}</span>
+                      </div>
+                      {/* Step number badge */}
+                      <div className={`absolute -top-2 -left-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        item.color === 'cyan' ? 'bg-cyan-500 text-black' :
+                        item.color === 'yellow' ? 'bg-yellow-500 text-black' :
+                        item.color === 'green' ? 'bg-green-500 text-black' :
+                        'bg-purple-500 text-black'
+                      }`}>{item.step}</div>
+                    </div>
+                    
+                    {/* Arrow connector (not on last item) */}
+                    {idx < 3 && (
+                      <div className="hidden md:flex items-center mx-4">
+                        <div className={`w-12 h-0.5 ${
+                          item.color === 'cyan' ? 'bg-gradient-to-r from-cyan-500 to-yellow-500' :
+                          item.color === 'yellow' ? 'bg-gradient-to-r from-yellow-500 to-green-500' :
+                          'bg-gradient-to-r from-green-500 to-purple-500'
+                        }`} />
+                        <div className={`w-0 h-0 border-t-4 border-b-4 border-l-8 border-transparent ${
+                          item.color === 'cyan' ? 'border-l-yellow-500' :
+                          item.color === 'yellow' ? 'border-l-green-500' :
+                          'border-l-purple-500'
+                        }`} />
+                      </div>
+                    )}
+                    
+                    {/* Mobile arrow (down) */}
+                    {idx < 3 && (
+                      <div className="md:hidden my-2">
+                        <div className={`w-0.5 h-6 mx-auto ${
+                          item.color === 'cyan' ? 'bg-gradient-to-b from-cyan-500 to-yellow-500' :
+                          item.color === 'yellow' ? 'bg-gradient-to-b from-yellow-500 to-green-500' :
+                          'bg-gradient-to-b from-green-500 to-purple-500'
+                        }`} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Bottom tagline */}
+              <div className="text-center mt-10">
+                <p className="text-lg md:text-xl text-gray-300 mb-4">
+                  <span className="text-cyan-400 font-bold">No trading experience needed.</span> Let AI do the work for you.
+                </p>
+                <button 
+                  onClick={() => router.push('/ea-store')}
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg shadow-green-500/25"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  START EARNING NOW <ArrowRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* EA Store Preview Section */}
+        <div className="mb-24">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-4 py-2 mb-4">
+              <Store className="w-4 h-4 text-yellow-400" />
+              <span className="text-yellow-300 text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA STORE</span>
+            </div>
+            <h2 className="text-4xl font-bold text-white mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your Trading AI</h2>
+            <p className="text-gray-400 max-w-2xl mx-auto">Multiple EA options optimized for different investment sizes and trading strategies</p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {[
+              { name: 'Gold Scalper Lite', investment: '$350 - $1K', profit: '70-120%', color: 'cyan', risk: 'Low' },
+              { name: 'Gold Scalper Pro', investment: '$1K - $5K', profit: '100-180%', color: 'yellow', risk: 'Medium', popular: true },
+              { name: 'Gold Scalper Elite', investment: '$5K - $50K', profit: '150-250%', color: 'purple', risk: 'Med-High' },
+              { name: 'BTC Scalper', investment: '$500 - $10K', profit: '80-200%', color: 'orange', risk: 'High' }
+            ].map((ea, idx) => (
+              <div key={idx} className={`relative bg-gradient-to-br ${
+                ea.color === 'cyan' ? 'from-cyan-500/10 to-cyan-500/5 border-cyan-500/30 hover:border-cyan-400' :
+                ea.color === 'yellow' ? 'from-yellow-500/10 to-yellow-500/5 border-yellow-500/30 hover:border-yellow-400' :
+                ea.color === 'purple' ? 'from-purple-500/10 to-purple-500/5 border-purple-500/30 hover:border-purple-400' :
+                'from-orange-500/10 to-orange-500/5 border-orange-500/30 hover:border-orange-400'
+              } border rounded-xl p-4 transition-all hover:scale-105`}>
+                {ea.popular && (
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2">
+                    <span className="bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">POPULAR</span>
+                  </div>
+                )}
+                <h3 className="text-white font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{ea.name}</h3>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Investment:</span>
+                    <span className="text-white">{ea.investment}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Profit:</span>
+                    <span className={`font-bold ${
+                      ea.color === 'cyan' ? 'text-cyan-400' :
+                      ea.color === 'yellow' ? 'text-yellow-400' :
+                      ea.color === 'purple' ? 'text-purple-400' :
+                      'text-orange-400'
+                    }`}>{ea.profit}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Risk:</span>
+                    <span className="text-gray-300">{ea.risk}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="text-center">
+            <button 
+              onClick={() => router.push('/ea-store')}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400 text-black px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg shadow-yellow-500/25"
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Store className="w-5 h-5" /> VISIT EA STORE <ArrowRight className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Pricing Section */}
-        <div id="pricing" className="mb-20">
+        <div id="pricing" className="mb-24">
           <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-white mb-4">Choose Your Plan</h2>
-            <p className="text-gray-400">Select the subscription that fits your trading needs</p>
+            <div className="inline-flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-4 py-2 mb-4">
+              <Sparkles className="w-4 h-4 text-yellow-400" />
+              <span className="text-yellow-300 text-sm">PRICING PLANS</span>
+            </div>
+            <h2 className="text-4xl font-bold text-white mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your AI Power</h2>
+            <p className="text-gray-400">Unlock the full potential of Mark's AI trading system</p>
           </div>
           
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
@@ -427,88 +745,165 @@ export default function Home() {
             {plans.map((plan, index) => (
               <div 
                 key={plan.id} 
-                className={`relative bg-white/5 backdrop-blur-lg rounded-2xl p-8 border transition-all hover:scale-105 ${
-                  index === 1 ? 'border-purple-500 ring-2 ring-purple-500/50' : 'border-white/10'
+                className={`relative bg-gradient-to-br from-white/5 to-transparent backdrop-blur-lg rounded-2xl p-8 border transition-all hover:scale-105 ${
+                  index === 1 ? 'border-cyan-400 ring-2 ring-cyan-400/30 shadow-lg shadow-cyan-500/10' : 'border-cyan-500/20 hover:border-cyan-500/40'
                 }`}
               >
                 {index === 1 && (
                   <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-purple-600 text-white text-sm px-4 py-1 rounded-full">Most Popular</span>
+                    <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-sm font-bold px-4 py-1 rounded-full" style={{ fontFamily: 'Orbitron, sans-serif' }}>MOST POPULAR</span>
                   </div>
                 )}
-                <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                <h3 className="text-2xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h3>
                 <p className="text-gray-400 mb-4">{plan.description}</p>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-white">${plan.price}</span>
-                  <span className="text-gray-400">/{plan.duration_days} days</span>
+                  <span className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</span>
+                  <span className="text-gray-500">/{plan.duration_days} days</span>
                 </div>
                 <ul className="space-y-3 mb-8">
                   <li className="flex items-center gap-2 text-gray-300">
-                    <CheckCircle className="w-5 h-5 text-green-400" />
+                    <CheckCircle className="w-5 h-5 text-cyan-400" />
                     {plan.max_accounts} MT5 Account{plan.max_accounts > 1 ? 's' : ''}
                   </li>
                   <li className="flex items-center gap-2 text-gray-300">
-                    <CheckCircle className="w-5 h-5 text-green-400" />
-                    Full EA Features
+                    <CheckCircle className="w-5 h-5 text-cyan-400" />
+                    Full AI Trading Features
                   </li>
                   <li className="flex items-center gap-2 text-gray-300">
-                    <CheckCircle className="w-5 h-5 text-green-400" />
-                    Automatic Updates
+                    <CheckCircle className="w-5 h-5 text-cyan-400" />
+                    Real-time Gold Analysis
                   </li>
                   <li className="flex items-center gap-2 text-gray-300">
-                    <CheckCircle className="w-5 h-5 text-green-400" />
-                    Email Support
+                    <CheckCircle className="w-5 h-5 text-cyan-400" />
+                    24/7 Priority Support
                   </li>
                 </ul>
                 <button 
                   onClick={() => handleSubscribe(plan)}
-                  className={`w-full py-3 rounded-xl font-semibold transition-all ${
+                  className={`w-full py-3 rounded-xl font-bold transition-all ${
                     index === 1 
-                      ? 'bg-purple-600 hover:bg-purple-700 text-white' 
-                      : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
+                      ? 'bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black shadow-lg shadow-cyan-500/25' 
+                      : 'bg-white/5 hover:bg-white/10 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400'
                   }`}
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  {isLoggedIn ? 'Purchase Now' : 'Login to Purchase'}
+                  {isLoggedIn ? 'ACTIVATE NOW' : 'GET STARTED'}
                 </button>
               </div>
             ))}
           </div>
         </div>
 
-        {/* How It Works */}
-        <div className="mb-20">
+        {/* Quick Guidelines Section */}
+        <div className="mb-24">
           <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-white mb-4">How It Works</h2>
+            <div className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-4 py-2 mb-4">
+              <BookOpen className="w-4 h-4 text-cyan-400" />
+              <span className="text-cyan-300 text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>GUIDELINES</span>
+            </div>
+            <h2 className="text-4xl font-bold text-white mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Learn Before You Trade</h2>
+            <p className="text-gray-400 max-w-2xl mx-auto">Watch our video tutorials to set up EA correctly and manage risk effectively</p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {[
+              { icon: Shield, title: 'Risk Management', desc: 'Learn proper lot sizing and capital allocation', color: 'yellow' },
+              { icon: Settings, title: 'EA Configuration', desc: 'Optimal settings for your account size', color: 'purple' },
+              { icon: TrendingUp, title: 'Trading Strategies', desc: 'When to use aggressive vs conservative mode', color: 'green' },
+              { icon: Zap, title: 'Quick Setup', desc: 'Install and activate EA in under 5 minutes', color: 'cyan' }
+            ].map((item, idx) => (
+              <div key={idx} className={`bg-[#12121a] border ${
+                item.color === 'yellow' ? 'border-yellow-500/20 hover:border-yellow-400/50' :
+                item.color === 'purple' ? 'border-purple-500/20 hover:border-purple-400/50' :
+                item.color === 'green' ? 'border-green-500/20 hover:border-green-400/50' :
+                'border-cyan-500/20 hover:border-cyan-400/50'
+              } rounded-xl p-5 transition-all hover:scale-105 cursor-pointer group`} onClick={() => router.push('/guideline')}>
+                <div className={`w-12 h-12 ${
+                  item.color === 'yellow' ? 'bg-yellow-500/20' :
+                  item.color === 'purple' ? 'bg-purple-500/20' :
+                  item.color === 'green' ? 'bg-green-500/20' :
+                  'bg-cyan-500/20'
+                } rounded-xl flex items-center justify-center mb-3`}>
+                  <item.icon className={`w-6 h-6 ${
+                    item.color === 'yellow' ? 'text-yellow-400' :
+                    item.color === 'purple' ? 'text-purple-400' :
+                    item.color === 'green' ? 'text-green-400' :
+                    'text-cyan-400'
+                  }`} />
+                </div>
+                <h3 className="text-white font-bold mb-1 group-hover:text-cyan-400 transition">{item.title}</h3>
+                <p className="text-gray-500 text-sm">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+          
+          <div className="bg-gradient-to-r from-cyan-500/10 to-yellow-500/10 border border-cyan-500/30 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-cyan-500/20 rounded-xl flex items-center justify-center">
+                <BookOpen className="w-7 h-7 text-cyan-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Complete Video Tutorials</h3>
+                <p className="text-gray-400 text-sm">15+ videos covering everything from installation to advanced strategies</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => router.push('/guideline')}
+              className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black px-6 py-3 rounded-xl font-bold transition-all"
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <BookOpen className="w-5 h-5" /> WATCH TUTORIALS
+            </button>
+          </div>
+        </div>
+
+        {/* How It Works */}
+        <div className="mb-24">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-4 py-2 mb-4">
+              <Cpu className="w-4 h-4 text-cyan-400" />
+              <span className="text-cyan-300 text-sm">SIMPLE SETUP</span>
+            </div>
+            <h2 className="text-4xl font-bold text-white mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>How Mark's AI Trading Works?</h2>
           </div>
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-white">1</span>
+            <div className="text-center group">
+              <div className="w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-yellow-500/10 border border-cyan-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:border-cyan-400 transition-all">
+                <span className="text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>01</span>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Subscribe</h3>
-              <p className="text-gray-400">Choose a plan and get your license key instantly</p>
+              <h3 className="text-xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Subscribe</h3>
+              <p className="text-gray-400">Choose your AI power level and get instant access</p>
             </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-white">2</span>
+            <div className="text-center group">
+              <div className="w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-yellow-500/10 border border-cyan-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:border-cyan-400 transition-all">
+                <span className="text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>02</span>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Install EA</h3>
-              <p className="text-gray-400">Download and install the EA on your MT5 platform</p>
+              <h3 className="text-xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Install AI</h3>
+              <p className="text-gray-400">Download Mark's AI and install on MT5 in seconds</p>
             </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-white">3</span>
+            <div className="text-center group">
+              <div className="w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-yellow-500/10 border border-cyan-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:border-cyan-400 transition-all">
+                <span className="text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>03</span>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Start Trading</h3>
-              <p className="text-gray-400">Enter your license key and start automated trading</p>
+              <h3 className="text-xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Profit</h3>
+              <p className="text-gray-400">Let the AI trade gold for you 24/7 automatically</p>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="text-center border-t border-white/10 pt-8">
-          <p className="text-gray-400">
-            © 2024 Super Grid Scalper. Developed by Alimul Islam. Contact: +8801957045438
+        <div className="text-center border-t border-cyan-500/10 pt-8 pb-4">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+              <Bot className="w-5 h-5 text-black" />
+            </div>
+            <span className="text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+          </div>
+          <p className="text-gray-500 text-sm">
+            © 2024 Mark's AI - Advance Scalper. The Most Powerful Automated Gold AI Trading.
+          </p>
+          <p className="text-gray-600 text-xs mt-2">
+            Trading involves risk. Past performance does not guarantee future results.
           </p>
         </div>
       </div>
