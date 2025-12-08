@@ -602,16 +602,17 @@ export default function DashboardHome() {
           )}
 
           {/* License Info (collapsible) */}
-          <details className="bg-[#12121a] border border-cyan-500/20 rounded-xl">
-            <summary className="p-4 cursor-pointer font-bold text-white hover:bg-white/5 rounded-xl" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-              LICENSE DETAILS
+          <details className="bg-[#12121a] border border-cyan-500/20 rounded-xl overflow-hidden">
+            <summary className="p-3 sm:p-4 cursor-pointer font-bold text-white hover:bg-white/5 rounded-xl text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              ▼ LICENSE DETAILS
             </summary>
-            <div className="px-4 pb-4 border-t border-cyan-500/10">
-              <div className="grid md:grid-cols-3 gap-4 pt-4">
+            <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-cyan-500/10">
+              <div className="space-y-3 sm:space-y-4 pt-3 sm:pt-4">
+                {/* License Key */}
                 <div>
-                  <p className="text-gray-500 text-sm">License Key</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="font-mono text-xs bg-[#0a0a0f] text-cyan-400 p-2 rounded border border-cyan-500/20 break-all flex-1">{selectedLicense.license_key}</p>
+                  <p className="text-gray-500 text-[10px] sm:text-xs mb-1.5">License Key</p>
+                  <div className="flex items-start sm:items-center gap-2">
+                    <p className="font-mono text-[10px] sm:text-xs bg-[#0a0a0f] text-cyan-400 p-2 sm:p-2.5 rounded-lg border border-cyan-500/20 break-all flex-1 leading-relaxed">{selectedLicense.license_key}</p>
                     <button
                       onClick={(e) => {
                         navigator.clipboard.writeText(selectedLicense.license_key);
@@ -619,25 +620,29 @@ export default function DashboardHome() {
                         btn.classList.add('copied');
                         setTimeout(() => btn.classList.remove('copied'), 1500);
                       }}
-                      className="group flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-cyan-500/20 text-cyan-400 rounded hover:bg-cyan-500/30 transition-all whitespace-nowrap border border-cyan-500/30 [&.copied]:bg-green-500/20 [&.copied]:text-green-400 [&.copied]:border-green-500/30"
+                      className="group flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-all whitespace-nowrap border border-cyan-500/30 [&.copied]:bg-green-500/20 [&.copied]:text-green-400 [&.copied]:border-green-500/30"
                     >
-                      <Copy className="w-3.5 h-3.5 group-[.copied]:hidden" />
-                      <Check className="w-3.5 h-3.5 hidden group-[.copied]:block" />
+                      <Copy className="w-3 h-3 sm:w-3.5 sm:h-3.5 group-[.copied]:hidden" />
+                      <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 hidden group-[.copied]:block" />
                       <span className="group-[.copied]:hidden">Copy</span>
                       <span className="hidden group-[.copied]:inline">Copied</span>
                     </button>
                   </div>
                 </div>
-                <div>
-                  <p className="text-gray-500 text-sm">MT5 Account</p>
-                  <p className="font-medium mt-1 text-white">{selectedLicense.mt5_account || 'Not Set'}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 text-sm">Expires</p>
-                  <p className="font-medium mt-1 text-white">
-                    {selectedLicense.expires_at ? new Date(selectedLicense.expires_at).toLocaleDateString() : '-'}
-                    <span className="text-yellow-400 ml-2">({getDaysRemaining(selectedLicense)} days left)</span>
-                  </p>
+                
+                {/* MT5 Account & Expires - Side by side */}
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <div className="bg-[#0a0a0f]/50 rounded-lg p-2.5 sm:p-3 border border-cyan-500/10">
+                    <p className="text-gray-500 text-[10px] sm:text-xs mb-1">MT5 Account</p>
+                    <p className="font-semibold text-white text-sm sm:text-base">{selectedLicense.mt5_account || 'Not Set'}</p>
+                  </div>
+                  <div className="bg-[#0a0a0f]/50 rounded-lg p-2.5 sm:p-3 border border-cyan-500/10">
+                    <p className="text-gray-500 text-[10px] sm:text-xs mb-1">Expires</p>
+                    <p className="font-semibold text-white text-sm sm:text-base">
+                      {selectedLicense.expires_at ? new Date(selectedLicense.expires_at).toLocaleDateString() : '-'}
+                    </p>
+                    <p className="text-yellow-400 text-[10px] sm:text-xs mt-0.5">({getDaysRemaining(selectedLicense)} days left)</p>
+                  </div>
                 </div>
               </div>
             </div>
