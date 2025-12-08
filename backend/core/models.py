@@ -298,6 +298,67 @@ class TradeData(models.Model):
         ordering = ['-last_update']
 
 
+class EAProduct(models.Model):
+    """EA Products for the EA Store - Managed from Django Admin"""
+    
+    RISK_CHOICES = [
+        ('Low', 'Low'),
+        ('Medium', 'Medium'),
+        ('Medium-High', 'Medium-High'),
+        ('High', 'High'),
+    ]
+    
+    COLOR_CHOICES = [
+        ('cyan', 'Cyan'),
+        ('yellow', 'Yellow'),
+        ('purple', 'Purple'),
+        ('orange', 'Orange'),
+        ('green', 'Green'),
+    ]
+    
+    name = models.CharField(max_length=100, help_text="EA Name (e.g., Gold Scalper Pro)")
+    subtitle = models.CharField(max_length=100, help_text="Short subtitle (e.g., Most Popular)")
+    description = models.TextField(help_text="Description of the EA")
+    
+    # Investment Range
+    min_investment = models.DecimalField(max_digits=10, decimal_places=2, help_text="Minimum investment amount")
+    max_investment = models.DecimalField(max_digits=10, decimal_places=2, help_text="Maximum investment amount")
+    
+    # Performance
+    expected_profit = models.CharField(max_length=50, help_text="Expected profit range (e.g., 100-180%)")
+    risk_level = models.CharField(max_length=20, choices=RISK_CHOICES, default='Medium')
+    trading_style = models.CharField(max_length=100, help_text="Trading style (e.g., Aggressive Scalping)")
+    
+    # Features (comma separated)
+    features = models.TextField(help_text="Features separated by comma (e.g., Auto Risk Management, Trailing Stop)")
+    
+    # Display
+    color = models.CharField(max_length=20, choices=COLOR_CHOICES, default='cyan')
+    is_popular = models.BooleanField(default=False, help_text="Mark as popular/featured")
+    display_order = models.IntegerField(default=0, help_text="Order in which to display (lower = first)")
+    
+    # EA File
+    ea_file = models.FileField(upload_to='ea_files/', blank=True, null=True, help_text="Upload .ex5 file")
+    file_name = models.CharField(max_length=100, blank=True, help_text="Custom file name for download")
+    
+    # Status
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def get_features_list(self):
+        """Return features as a list"""
+        return [f.strip() for f in self.features.split(',') if f.strip()]
+    
+    def __str__(self):
+        return f"{self.name} (${self.min_investment}-${self.max_investment})"
+    
+    class Meta:
+        verbose_name = "EA Product"
+        verbose_name_plural = "EA Products"
+        ordering = ['display_order', 'min_investment']
+
+
 class EAActionLog(models.Model):
     """Action logs from EA trading activity"""
     LOG_TYPES = [

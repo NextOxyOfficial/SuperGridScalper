@@ -5,7 +5,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from .models import License, LicenseVerificationLog, SubscriptionPlan, EASettings, TradeData, EAActionLog
+from .models import License, LicenseVerificationLog, SubscriptionPlan, EASettings, TradeData, EAActionLog, EAProduct
 from decimal import Decimal
 import json
 
@@ -775,4 +775,36 @@ def get_action_logs(request):
     return JsonResponse({
         'success': True,
         'logs': log_list
+    })
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_ea_products(request):
+    """Get all active EA products for the store"""
+    products = EAProduct.objects.filter(is_active=True).order_by('display_order', 'min_investment')
+    
+    product_list = []
+    for p in products:
+        product_list.append({
+            'id': p.id,
+            'name': p.name,
+            'subtitle': p.subtitle,
+            'description': p.description,
+            'min_investment': float(p.min_investment),
+            'max_investment': float(p.max_investment),
+            'expected_profit': p.expected_profit,
+            'risk_level': p.risk_level,
+            'trading_style': p.trading_style,
+            'features': p.get_features_list(),
+            'color': p.color,
+            'is_popular': p.is_popular,
+            'file_name': p.file_name or f"{p.name.replace(' ', '')}.ex5",
+            'has_file': bool(p.ea_file),
+            'download_url': p.ea_file.url if p.ea_file else None,
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'products': product_list
     })

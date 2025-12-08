@@ -16,4 +16,5 @@ urlpatterns = [
     path('admin-stats/', views.admin_stats, name='admin_stats'),
     path('action-log/', views.add_action_log, name='add_action_log'),
     path('action-logs/', views.get_action_logs, name='get_action_logs'),
+    path('ea-products/', views.get_ea_products, name='get_ea_products'),
 ]

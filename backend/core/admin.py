@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct
 
 
 # Unregister default User admin and register with search
@@ -286,3 +286,42 @@ class TradeDataAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(EAProduct)
+class EAProductAdmin(admin.ModelAdmin):
+    list_display = ['name', 'subtitle', 'investment_range', 'expected_profit', 'risk_level', 'is_popular', 'is_active', 'display_order']
+    list_filter = ['is_active', 'is_popular', 'risk_level', 'color']
+    search_fields = ['name', 'subtitle', 'description']
+    list_editable = ['is_popular', 'is_active', 'display_order']
+    ordering = ['display_order', 'min_investment']
+    
+    fieldsets = (
+        ('📦 Basic Info', {
+            'fields': ('name', 'subtitle', 'description')
+        }),
+        ('💰 Investment Range', {
+            'fields': (('min_investment', 'max_investment'),)
+        }),
+        ('📊 Performance', {
+            'fields': (('expected_profit', 'risk_level'), 'trading_style')
+        }),
+        ('✨ Features', {
+            'fields': ('features',),
+            'description': 'Enter features separated by commas (e.g., Auto Risk Management, Trailing Stop, Recovery Mode)'
+        }),
+        ('🎨 Display Settings', {
+            'fields': (('color', 'is_popular'), 'display_order')
+        }),
+        ('📁 EA File', {
+            'fields': ('ea_file', 'file_name'),
+            'description': 'Upload the .ex5 file for download'
+        }),
+        ('⚙️ Status', {
+            'fields': ('is_active',)
+        }),
+    )
+    
+    def investment_range(self, obj):
+        return f"${obj.min_investment:,.0f} - ${obj.max_investment:,.0f}"
+    investment_range.short_description = 'Investment'

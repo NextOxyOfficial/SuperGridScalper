@@ -3,100 +3,76 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Bot, Download, Shield, Zap, TrendingUp, DollarSign, Target, Star, CheckCircle, ArrowRight, LogIn, Store } from 'lucide-react';
+import { Bot, Download, Shield, Zap, TrendingUp, DollarSign, Target, Star, CheckCircle, ArrowRight, LogIn, Store, Loader2 } from 'lucide-react';
 
-// EA Products Data - You can add more EAs here
-const eaProducts = [
+// Fallback EA Products Data (used if API fails)
+const fallbackProducts = [
   {
-    id: 'gold-scalper-350',
-    name: 'Gold Scalper Lite',
-    subtitle: 'Entry Level',
-    description: 'Perfect for beginners starting with small capital. Conservative risk management with steady returns.',
-    minInvestment: 350,
-    maxInvestment: 1000,
-    expectedProfit: '70-120%',
-    riskLevel: 'Low',
-    tradingStyle: 'Conservative Scalping',
-    features: [
-      'Auto Risk Management',
-      'Small Lot Sizes',
-      'Tight Stop Loss',
-      'Daily Profit Target',
-      'Beginner Friendly'
-    ],
-    color: 'cyan',
-    popular: false,
-    fileName: 'GoldScalperLite.ex5'
-  },
-  {
-    id: 'gold-scalper-1000',
+    id: 1,
     name: 'Gold Scalper Pro',
     subtitle: 'Most Popular',
-    description: 'Balanced approach for intermediate traders. Optimized for consistent daily profits with moderate risk.',
-    minInvestment: 1000,
-    maxInvestment: 5000,
-    expectedProfit: '100-180%',
-    riskLevel: 'Medium',
-    tradingStyle: 'Aggressive Scalping',
-    features: [
-      'Advanced Grid System',
-      'Dynamic Lot Sizing',
-      'Trailing Stop Loss',
-      'Recovery Mode',
-      'Multi-Timeframe Analysis'
-    ],
+    description: 'Balanced approach for intermediate traders. Optimized for consistent daily profits.',
+    min_investment: 1000,
+    max_investment: 5000,
+    expected_profit: '100-180%',
+    risk_level: 'Medium',
+    trading_style: 'Aggressive Scalping',
+    features: ['Advanced Grid System', 'Dynamic Lot Sizing', 'Trailing Stop', 'Recovery Mode'],
     color: 'yellow',
-    popular: true,
-    fileName: 'HedgeGridTrailingEA.ex5'
-  },
-  {
-    id: 'gold-scalper-5000',
-    name: 'Gold Scalper Elite',
-    subtitle: 'High Profit',
-    description: 'Maximum profit potential for experienced traders with larger capital. Advanced AI-powered strategies.',
-    minInvestment: 5000,
-    maxInvestment: 50000,
-    expectedProfit: '150-250%',
-    riskLevel: 'Medium-High',
-    tradingStyle: 'AI Hedge Trading',
-    features: [
-      'Neural Network AI',
-      'Hedge Grid System',
-      'Breakeven Recovery',
-      'News Filter',
-      'VIP Support'
-    ],
-    color: 'purple',
-    popular: false,
-    fileName: 'GoldScalperElite.ex5'
-  },
-  {
-    id: 'btc-scalper',
-    name: 'BTC Scalper',
-    subtitle: 'Crypto Trading',
-    description: 'Specialized EA for Bitcoin trading. Captures volatility with precision entries and smart exits.',
-    minInvestment: 500,
-    maxInvestment: 10000,
-    expectedProfit: '80-200%',
-    riskLevel: 'High',
-    tradingStyle: 'Crypto Scalping',
-    features: [
-      'BTC/USD Optimized',
-      'Volatility Filter',
-      '24/5 Crypto Markets',
-      'Quick Scalps',
-      'Momentum Trading'
-    ],
-    color: 'orange',
-    popular: false,
-    fileName: 'HedgeGridTrailingEA_BTC.ex5'
+    is_popular: true,
+    file_name: 'HedgeGridTrailingEA.ex5',
+    has_file: false,
+    download_url: null
   }
 ];
+
+interface EAProduct {
+  id: number;
+  name: string;
+  subtitle: string;
+  description: string;
+  min_investment: number;
+  max_investment: number;
+  expected_profit: string;
+  risk_level: string;
+  trading_style: string;
+  features: string[];
+  color: string;
+  is_popular: boolean;
+  file_name: string;
+  has_file: boolean;
+  download_url: string | null;
+}
 
 export default function PublicEAStorePage() {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState('');
+  const [eaProducts, setEaProducts] = useState<EAProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+
+  // Fetch EA products from API
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch(`${API_URL}/ea-products/`);
+        const data = await res.json();
+        if (data.success && data.products?.length > 0) {
+          setEaProducts(data.products);
+        } else {
+          setEaProducts(fallbackProducts);
+        }
+      } catch (err) {
+        console.error('Failed to fetch EA products:', err);
+        setEaProducts(fallbackProducts);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -217,6 +193,16 @@ export default function PublicEAStorePage() {
         </div>
 
         {/* EA Products Grid */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+          </div>
+        ) : eaProducts.length === 0 ? (
+          <div className="text-center py-20">
+            <Bot className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-500">No EA products available yet.</p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-10">
           {eaProducts.map((ea) => {
             const colors = getColorClasses(ea.color);
@@ -226,7 +212,7 @@ export default function PublicEAStorePage() {
                 className={`relative bg-gradient-to-br ${colors.bg} border ${colors.border} rounded-xl sm:rounded-2xl p-4 sm:p-6 transition-all hover:shadow-lg ${colors.glow} group`}
               >
                 {/* Popular Badge */}
-                {ea.popular && (
+                {ea.is_popular && (
                   <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2">
                     <span className="bg-yellow-500 text-black text-[10px] sm:text-xs font-bold px-2 sm:px-4 py-0.5 sm:py-1 rounded-full flex items-center gap-1">
                       <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> POPULAR
@@ -257,28 +243,28 @@ export default function PublicEAStorePage() {
                       <DollarSign className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" />
                       <span className="text-gray-500 text-[10px] sm:text-xs">Investment</span>
                     </div>
-                    <p className="text-white font-bold text-xs sm:text-base">${ea.minInvestment} - ${ea.maxInvestment >= 1000 ? `${ea.maxInvestment/1000}K` : ea.maxInvestment}</p>
+                    <p className="text-white font-bold text-xs sm:text-base">${ea.min_investment} - ${ea.max_investment >= 1000 ? `${ea.max_investment/1000}K` : ea.max_investment}</p>
                   </div>
                   <div className="bg-black/30 rounded-lg p-2 sm:p-3">
                     <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
                       <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-400" />
                       <span className="text-gray-500 text-[10px] sm:text-xs">Profit</span>
                     </div>
-                    <p className={`font-bold text-xs sm:text-base ${colors.text}`}>{ea.expectedProfit}</p>
+                    <p className={`font-bold text-xs sm:text-base ${colors.text}`}>{ea.expected_profit}</p>
                   </div>
                   <div className="bg-black/30 rounded-lg p-2 sm:p-3">
                     <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
                       <Shield className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
                       <span className="text-gray-500 text-[10px] sm:text-xs">Risk</span>
                     </div>
-                    <p className="text-white font-medium text-xs sm:text-base">{ea.riskLevel}</p>
+                    <p className="text-white font-medium text-xs sm:text-base">{ea.risk_level}</p>
                   </div>
                   <div className="bg-black/30 rounded-lg p-2 sm:p-3">
                     <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
                       <Target className="w-3 h-3 sm:w-4 sm:h-4 text-purple-400" />
                       <span className="text-gray-500 text-[10px] sm:text-xs">Style</span>
                     </div>
-                    <p className="text-white font-medium text-[10px] sm:text-sm">{ea.tradingStyle}</p>
+                    <p className="text-white font-medium text-[10px] sm:text-sm">{ea.trading_style}</p>
                   </div>
                 </div>
 
@@ -297,8 +283,8 @@ export default function PublicEAStorePage() {
 
                 {/* Download Button */}
                 <a
-                  href={`/ea/${ea.fileName}`}
-                  download
+                  href={ea.download_url || `/ea/${ea.file_name}`}
+                  download={ea.file_name}
                   className={`w-full flex items-center justify-center gap-2 bg-gradient-to-r ${
                     ea.color === 'yellow' ? 'from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400' :
                     ea.color === 'cyan' ? 'from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400' :
@@ -308,12 +294,13 @@ export default function PublicEAStorePage() {
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
                   <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                  DOWNLOAD
+                  {ea.has_file ? 'DOWNLOAD' : 'COMING SOON'}
                 </a>
               </div>
             );
           })}
         </div>
+        )}
 
         {/* Installation Guide */}
         <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8">
