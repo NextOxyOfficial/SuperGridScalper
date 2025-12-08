@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings } from 'lucide-react'
+import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings } from 'lucide-react'
 import axios from 'axios'
 
 const API_URL = 'http://127.0.0.1:8000/api'
@@ -54,6 +54,14 @@ export default function Home() {
     'The EA manages risk automatically and handles all trades for you.',
     'Fully automated gold trading with AI precision.',
   ]
+
+  const handleLogout = () => {
+    localStorage.removeItem('user')
+    localStorage.removeItem('licenses')
+    localStorage.removeItem('selectedLicense')
+    setIsLoggedIn(false)
+    setUserName('')
+  }
 
   useEffect(() => {
     // Check if user is logged in
@@ -415,11 +423,20 @@ export default function Home() {
             </div>
             <span className="text-sm sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             {isLoggedIn ? (
-              <button onClick={() => router.push('/dashboard')} className="px-3 sm:px-6 py-1.5 sm:py-2 text-xs sm:text-base bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                Dashboard
-              </button>
+              <>
+                <button onClick={() => router.push('/dashboard')} className="px-3 sm:px-5 py-1.5 sm:py-2 text-xs sm:text-sm bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  Dashboard
+                </button>
+                <button 
+                  onClick={handleLogout} 
+                  className="p-1.5 sm:p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all border border-red-500/30"
+                  title="Logout"
+                >
+                  <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              </>
             ) : (
               <>
                 <button onClick={() => setShowLoginModal(true)} className="px-2 sm:px-4 py-1.5 sm:py-2 text-cyan-400 hover:text-cyan-300 font-medium transition-all text-xs sm:text-sm border border-cyan-500/30 rounded-lg hover:bg-cyan-500/10">

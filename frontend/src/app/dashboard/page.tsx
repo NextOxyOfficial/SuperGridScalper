@@ -28,8 +28,16 @@ export default function DashboardHome() {
   
   // Positions tab state
   const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
+  const closedPositionsRef = useRef<HTMLDivElement>(null);
 
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Scroll closed positions to bottom when tab changes or data updates
+  useEffect(() => {
+    if (positionsTab === 'closed' && closedPositionsRef.current) {
+      closedPositionsRef.current.scrollTop = closedPositionsRef.current.scrollHeight;
+    }
+  }, [positionsTab, tradeData?.closed_positions]);
 
   useEffect(() => {
     fetchPlans();
@@ -488,7 +496,7 @@ export default function DashboardHome() {
               {positionsTab === 'closed' && (
                 <>
                   {tradeData.closed_positions?.length > 0 ? (
-                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <div ref={closedPositionsRef} className="overflow-x-auto max-h-[400px] overflow-y-auto">
                       <table className="w-full text-[10px] sm:text-sm">
                         <thead className="bg-[#0a0a0f] sticky top-0 z-10">
                           <tr>
