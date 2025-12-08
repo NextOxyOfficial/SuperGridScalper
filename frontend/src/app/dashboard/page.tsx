@@ -504,19 +504,23 @@ export default function DashboardHome() {
                         </thead>
                         <tbody className="divide-y divide-gray-800">
                           {tradeData.closed_positions.slice(0, 100).map((pos: any, idx: number) => (
-                            <tr key={pos.ticket || idx} className="border-b border-purple-500/10 hover:bg-purple-500/5">
-                              <td className="p-1.5 sm:p-2 text-gray-400 font-mono">{pos.ticket}</td>
-                              <td className="p-1.5 sm:p-2 text-white">{pos.symbol || '-'}</td>
-                              <td className={`p-1.5 sm:p-2 font-medium ${pos.type?.toLowerCase().includes('buy') ? 'text-green-400' : 'text-red-400'}`}>
-                                {pos.type}
+                            <tr key={pos.ticket || idx} className="hover:bg-white/5">
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 font-mono text-[10px] sm:text-xs text-gray-400">{pos.ticket}</td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs text-yellow-400 font-medium">{pos.symbol || '-'}</td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2">
+                                <span className={`px-1 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold ${
+                                  pos.type?.toLowerCase().includes('buy') ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                }`}>
+                                  {pos.type}
+                                </span>
                               </td>
-                              <td className="p-1.5 sm:p-2 text-right text-white">{pos.lots?.toFixed(2)}</td>
-                              <td className="p-1.5 sm:p-2 text-right text-gray-400 hidden sm:table-cell">{pos.open_price?.toFixed(2)}</td>
-                              <td className="p-1.5 sm:p-2 text-right text-gray-400 hidden sm:table-cell">{pos.close_price?.toFixed(2)}</td>
-                              <td className={`p-1.5 sm:p-2 text-right font-bold ${pos.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                ${pos.profit?.toFixed(2)}
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-gray-300">{pos.lots?.toFixed(2)}</td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-gray-300 hidden sm:table-cell">{pos.open_price?.toFixed(2)}</td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-gray-300 hidden sm:table-cell">{pos.close_price?.toFixed(2)}</td>
+                              <td className={`px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-bold ${pos.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {pos.profit >= 0 ? '+' : ''}${pos.profit?.toFixed(2)}
                               </td>
-                              <td className="p-1.5 sm:p-2 text-right text-gray-500 hidden md:table-cell text-[9px]">{pos.close_time || '-'}</td>
+                              <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-gray-500 hidden md:table-cell text-[10px]">{pos.close_time || '-'}</td>
                             </tr>
                           ))}
                         </tbody>
