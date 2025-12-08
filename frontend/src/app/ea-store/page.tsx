@@ -51,7 +51,7 @@ export default function PublicEAStorePage() {
   const [eaProducts, setEaProducts] = useState<EAProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
 
   // Fetch EA products from API
   useEffect(() => {
@@ -348,7 +348,7 @@ export default function PublicEAStorePage() {
             </li>
             <li className="flex gap-2">
               <span>•</span>
-              <span>Allow WebRequest to <code className="bg-yellow-500/10 px-1 rounded">http://127.0.0.1:8000</code></span>
+              <span>Allow WebRequest to <code className="bg-yellow-500/10 px-1 rounded">https://markstrades.com</code></span>
             </li>
             <li className="flex gap-2">
               <span>•</span>

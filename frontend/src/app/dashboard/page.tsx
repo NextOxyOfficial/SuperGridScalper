@@ -221,7 +221,7 @@ export default function DashboardHome() {
 
   // If license selected, show dashboard with trading
   if (selectedLicense) {
-    const isRecoveryModeDetails = tradeData?.trading_mode?.toLowerCase() === 'recovery';
+    const isRecoveryModeDetails = tradeData?.trading_mode?.toLowerCase().includes('recovery');
     return (
       <div className="max-w-7xl mx-auto pt-3 sm:pt-5 px-2 sm:px-4 pb-6 sm:pb-8">
         <div className="space-y-3 sm:space-y-4">
@@ -254,7 +254,7 @@ export default function DashboardHome() {
                     <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
                     <circle cx="12" cy="4" r="2" fill="currentColor" />
                   </svg>
-                  {isRecoveryModeDetails ? 'Recovery Mode' : 'Normal Mode'}
+                  {tradeData?.trading_mode || 'Normal'}
                 </span>
               )}
               <span className="text-[10px] sm:text-xs text-gray-500">
@@ -796,8 +796,8 @@ export default function DashboardHome() {
             const totalPositions = (licTradeData?.total_buy_positions || 0) + (licTradeData?.total_sell_positions || 0);
             const isConnected = licTradeData && licTradeData.last_update && 
               (Math.abs(new Date().getTime() - new Date(licTradeData.last_update).getTime()) / 1000) < 15;
-            const tradingMode = licTradeData?.trading_mode || 'normal';
-            const isRecoveryMode = tradingMode?.toLowerCase() === 'recovery';
+            const tradingMode = licTradeData?.trading_mode || 'Normal';
+            const isRecoveryMode = tradingMode?.toLowerCase().includes('recovery');
             
             return (
             <div 
@@ -832,8 +832,8 @@ export default function DashboardHome() {
                         <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
                         <circle cx="12" cy="4" r="2" fill="currentColor" />
                       </svg>
-                      <span className="hidden sm:inline">{isRecoveryMode ? 'Recovery Mode' : 'Normal Mode'}</span>
-                      <span className="sm:hidden">{isRecoveryMode ? 'Recovery' : 'Normal Mode'}</span>
+                      <span className="hidden sm:inline">{tradingMode}</span>
+                      <span className="sm:hidden">{isRecoveryMode ? 'Recovery' : 'Normal'}</span>
                     </span>
                   )}
                   {symbol && (

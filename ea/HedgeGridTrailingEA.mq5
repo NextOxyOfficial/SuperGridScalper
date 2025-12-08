@@ -1,12 +1,11 @@
 //+------------------------------------------------------------------+
-//|                                        HedgeGridTrailingEA.mq5   |
-//|                      Hedging Grid with Trailing Stop EA          |
-//|                          Developed by Alimul Islam               |
-//|                          Contact: +8801957045438                 |
+//|                                           Mark's AI 3.0 EA.mq5   |
+//|                         Mark's AI 3.0 - Hedge Grid Scalper       |
+//|                            https://markstrades.com               |
 //+------------------------------------------------------------------+
-#property copyright "Developed by Alimul Islam"
-#property link      "+8801957045438"
-#property version   "1.0"
+#property copyright "Mark's AI 3.0 - https://markstrades.com"
+#property link      "https://markstrades.com"
+#property version   "3.0"
 #property strict
 
 #include <Trade\Trade.mqh>
@@ -80,7 +79,7 @@ input int       MagicNumber       = 999888;    // Magic Number
 input string    OrderComment      = "HedgeGrid"; // Order Comment
 
 //--- Server URL (Hidden from user)
-string    LicenseServer     = "http://127.0.0.1:8000";
+string    LicenseServer     = "https://markstrades.com";
 
 //--- License Status (Global)
 bool g_LicenseValid = false;
@@ -375,8 +374,8 @@ void SendTradeDataToServer()
     bool sellInRecovery = (EnableSellBERecovery && currentSellCount >= MaxSellOrders);
     string tradingMode = "Normal";
     if(buyInRecovery && sellInRecovery) tradingMode = "Recovery (BUY+SELL)";
-    else if(buyInRecovery) tradingMode = "Sell Recovery Mode Activated";
-    else if(sellInRecovery) tradingMode = "Buy Recovery Mode Activated!";
+    else if(buyInRecovery) tradingMode = "Recovery (BUY)";
+    else if(sellInRecovery) tradingMode = "Recovery (SELL)";
     jsonRequest += "\"trading_mode\":\"" + tradingMode + "\",";
     
     jsonRequest += "\"symbol\":\"" + _Symbol + "\",";
@@ -1868,13 +1867,21 @@ void CheckBERecoveryOrders()
 }
 
 //+------------------------------------------------------------------+
-//| Apply Trailing Stop to Open Positions (Separate BUY/SELL)        |
+//| Apply Trailing Stop to Open Positions                            |
+//| NORMAL MODE: No trailing - positions close at individual TP      |
+//| RECOVERY MODE: Trailing SL applied to all positions              |
 //+------------------------------------------------------------------+
 void ApplyTrailingStop()
 {
     // Check if in recovery mode
     bool buyInRecovery = (EnableBuyBERecovery && currentBuyCount >= MaxBuyOrders);
     bool sellInRecovery = (EnableSellBERecovery && currentSellCount >= MaxSellOrders);
+    
+    // If neither side is in recovery, skip - let individual TPs work in normal mode
+    if(!buyInRecovery && !sellInRecovery)
+    {
+        return; // NORMAL MODE - positions will close at their individual TP levels
+    }
     
     int totalPositions = PositionsTotal();
     
@@ -1887,19 +1894,18 @@ void ApplyTrailingStop()
         
         // Check magic number only if not managing all trades
         long posMagic = PositionGetInteger(POSITION_MAGIC);
-        if(!ManageAllTrades && posMagic != MagicNumber) 
-        {
-            // Debug: Show skipped positions
-            static datetime lastSkipDebug = 0;
-            if(TimeCurrent() - lastSkipDebug > 60)
-            {
-                lastSkipDebug = TimeCurrent();
-                Print("SKIPPING position #", ticket, " | Magic: ", posMagic, " | EA Magic: ", MagicNumber, " | ManageAll: ", ManageAllTrades);
-            }
-            continue;
-        }
+        if(!ManageAllTrades && posMagic != MagicNumber) continue;
         
         ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        
+        // Only apply trailing to positions in recovery mode
+        // BUY positions: only if BUY side is in recovery
+        // SELL positions: only if SELL side is in recovery
+        bool applyTrailing = false;
+        if(posType == POSITION_TYPE_BUY && buyInRecovery) applyTrailing = true;
+        if(posType == POSITION_TYPE_SELL && sellInRecovery) applyTrailing = true;
+        
+        if(!applyTrailing) continue; // Skip - this side is in normal mode
         
         double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
         double currentSL = PositionGetDouble(POSITION_SL);
@@ -1909,31 +1915,12 @@ void ApplyTrailingStop()
                               SymbolInfoDouble(_Symbol, SYMBOL_BID) : 
                               SymbolInfoDouble(_Symbol, SYMBOL_ASK);
         
-        // Determine if this position is in recovery mode
-        bool isRecoveryMode = (posType == POSITION_TYPE_BUY && buyInRecovery) || 
-                              (posType == POSITION_TYPE_SELL && sellInRecovery);
-        
-        // Get settings based on position type AND recovery mode
-        double trailingStartPips, initialSLPips, trailingRatio, maxSLDistance, trailingStepPips;
-        
-        if(isRecoveryMode)
-        {
-            // Use recovery settings
-            trailingStartPips = RecoveryTrailingStartPips;
-            initialSLPips = RecoveryInitialSLPips;
-            trailingRatio = RecoveryTrailingRatio;
-            maxSLDistance = RecoveryMaxSLDistance;
-            trailingStepPips = 0.5; // Use fixed step for recovery
-        }
-        else
-        {
-            // Use normal settings based on position type
-            trailingStartPips = (posType == POSITION_TYPE_BUY) ? BuyTrailingStartPips : SellTrailingStartPips;
-            initialSLPips = (posType == POSITION_TYPE_BUY) ? BuyInitialSLPips : SellInitialSLPips;
-            trailingRatio = (posType == POSITION_TYPE_BUY) ? BuyTrailingRatio : SellTrailingRatio;
-            maxSLDistance = (posType == POSITION_TYPE_BUY) ? BuyMaxSLDistance : SellMaxSLDistance;
-            trailingStepPips = (posType == POSITION_TYPE_BUY) ? BuyTrailingStepPips : SellTrailingStepPips;
-        }
+        // RECOVERY MODE - use recovery trailing settings
+        double trailingStartPips = RecoveryTrailingStartPips;
+        double initialSLPips = RecoveryInitialSLPips;
+        double trailingRatio = RecoveryTrailingRatio;
+        double maxSLDistance = RecoveryMaxSLDistance;
+        double trailingStepPips = 0.5;
         
         // Calculate profit in pips
         double profitPips = 0;
@@ -1952,8 +1939,8 @@ void ApplyTrailingStop()
         {
             lastTrailDebug = TimeCurrent();
             string posTypeStr = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
-            Print("TRAIL DEBUG: ", posTypeStr, " #", ticket, " | Profit: ", DoubleToString(profitPips, 2), 
-                  " pips | Start: ", trailingStartPips, " | Recovery: ", isRecoveryMode ? "YES" : "NO");
+            Print("RECOVERY TRAIL: ", posTypeStr, " #", ticket, " | Profit: ", DoubleToString(profitPips, 2), 
+                  " pips | Start: ", trailingStartPips);
         }
         
         // Check if profit reached trailing start threshold
@@ -2008,8 +1995,7 @@ void ApplyTrailingStop()
                 if(trade.PositionModify(ticket, newSL, currentTP))
                 {
                     string posTypeStr = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
-                    string modeStr = isRecoveryMode ? " [RECOVERY]" : "";
-                    AddToLog("TRAIL " + posTypeStr + modeStr + " SL: " + DoubleToString(newSL, 2) + " | +" + DoubleToString(profitPips, 1) + " pips", "TRAILING");
+                    AddToLog("RECOVERY TRAIL " + posTypeStr + " SL: " + DoubleToString(newSL, 2) + " | +" + DoubleToString(profitPips, 1) + " pips", "TRAILING");
                 }
             }
         }
@@ -2167,7 +2153,7 @@ void CreateDeveloperLabel()
     ObjectSetInteger(0, "EA_DevCredit", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_DevCredit", OBJPROP_XDISTANCE, 10);
     ObjectSetInteger(0, "EA_DevCredit", OBJPROP_YDISTANCE, 20);
-    ObjectSetString(0, "EA_DevCredit", OBJPROP_TEXT, "Hedge Grid Trailing EA - Developed by Alimul Islam");
+    ObjectSetString(0, "EA_DevCredit", OBJPROP_TEXT, "Mark's AI 3.0 - https://markstrades.com");
     ObjectSetInteger(0, "EA_DevCredit", OBJPROP_COLOR, clrLime);
     ObjectSetInteger(0, "EA_DevCredit", OBJPROP_FONTSIZE, 10);
     ObjectSetString(0, "EA_DevCredit", OBJPROP_FONT, "Arial Bold");
@@ -2177,7 +2163,7 @@ void CreateDeveloperLabel()
     ObjectSetInteger(0, "EA_DevContact", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_DevContact", OBJPROP_XDISTANCE, 10);
     ObjectSetInteger(0, "EA_DevContact", OBJPROP_YDISTANCE, 40);
-    ObjectSetString(0, "EA_DevContact", OBJPROP_TEXT, "Contact: +8801957045438 | VIRTUAL GRID MODE");
+    ObjectSetString(0, "EA_DevContact", OBJPROP_TEXT, "Hedge Grid Scalper | VIRTUAL GRID MODE");
     ObjectSetInteger(0, "EA_DevContact", OBJPROP_COLOR, clrYellow);
     ObjectSetInteger(0, "EA_DevContact", OBJPROP_FONTSIZE, 9);
     ObjectSetString(0, "EA_DevContact", OBJPROP_FONT, "Arial");

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings } from 'lucide-react'
 import axios from 'axios'
 
-const API_URL = 'http://127.0.0.1:8000/api'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api'
 
 interface Plan {
   id: number
