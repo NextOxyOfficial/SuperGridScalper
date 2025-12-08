@@ -459,7 +459,7 @@ export default function Home() {
             {/* Left Side - Text Content */}
             <div className="flex-1 text-center lg:text-left max-w-2xl">
               {/* Typing Effect Description - AT TOP */}
-              <div className="h-16 sm:h-20 md:h-16 flex items-center justify-center lg:justify-start mb-4 sm:mb-6">
+              <div className="min-h-[80px] sm:min-h-[100px] md:min-h-[80px] flex items-start justify-center lg:justify-start mb-4 sm:mb-6">
                 <p className="text-white max-w-3xl text-sm sm:text-lg md:text-2xl lg:text-3xl font-bold tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   <span className="text-yellow-400">&gt;</span>{' '}
                   <span className="capitalize">{typedText}</span>

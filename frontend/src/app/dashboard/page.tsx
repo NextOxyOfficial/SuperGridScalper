@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { Copy, Check } from 'lucide-react';
 import { useDashboard } from './context';
 
 const POLLING_INTERVAL = 2000; // Faster polling for real-time updates
@@ -612,18 +613,18 @@ export default function DashboardHome() {
                   <div className="flex items-center gap-2 mt-1">
                     <p className="font-mono text-xs bg-[#0a0a0f] text-cyan-400 p-2 rounded border border-cyan-500/20 break-all flex-1">{selectedLicense.license_key}</p>
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
                         navigator.clipboard.writeText(selectedLicense.license_key);
-                        const btn = document.getElementById('copy-license-btn');
-                        if (btn) {
-                          btn.textContent = '✓ Copied';
-                          setTimeout(() => btn.textContent = '📋 Copy', 1500);
-                        }
+                        const btn = e.currentTarget;
+                        btn.classList.add('copied');
+                        setTimeout(() => btn.classList.remove('copied'), 1500);
                       }}
-                      id="copy-license-btn"
-                      className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded hover:bg-cyan-500/30 transition-colors whitespace-nowrap border border-cyan-500/30"
+                      className="group flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-cyan-500/20 text-cyan-400 rounded hover:bg-cyan-500/30 transition-all whitespace-nowrap border border-cyan-500/30 [&.copied]:bg-green-500/20 [&.copied]:text-green-400 [&.copied]:border-green-500/30"
                     >
-                      📋 Copy
+                      <Copy className="w-3.5 h-3.5 group-[.copied]:hidden" />
+                      <Check className="w-3.5 h-3.5 hidden group-[.copied]:block" />
+                      <span className="group-[.copied]:hidden">Copy</span>
+                      <span className="hidden group-[.copied]:inline">Copied</span>
                     </button>
                   </div>
                 </div>
@@ -656,12 +657,15 @@ export default function DashboardHome() {
       </div>
 
       {/* Purchase New License Section - Now at top */}
-      <details className="bg-[#12121a] border border-cyan-500/20 rounded-xl mb-4 sm:mb-6" open={licenses.length === 0}>
-        <summary className="p-3 sm:p-4 cursor-pointer font-semibold text-white hover:bg-white/5 rounded-xl flex items-center justify-between text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-          <span>➕ PURCHASE NEW LICENSE</span>
-          <span className="text-[10px] sm:text-xs text-gray-500">Click to expand</span>
+      <details className="bg-[#12121a] border border-cyan-500/20 rounded-xl mb-4 sm:mb-6 overflow-hidden" open={licenses.length === 0}>
+        <summary className="p-3 sm:p-4 cursor-pointer font-semibold text-white hover:bg-white/5 rounded-xl flex items-center justify-between gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+          <div className="flex items-center gap-2">
+            <span className="text-cyan-400 text-lg">+</span>
+            <span className="text-xs sm:text-sm">PURCHASE NEW LICENSE</span>
+          </div>
+          <span className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Click to expand</span>
         </summary>
-        <div className="px-4 pb-4 border-t border-cyan-500/10">
+        <div className="px-3 sm:px-4 pb-4 border-t border-cyan-500/10">
           {purchaseSuccess ? (
             <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4 text-center mt-4">
               <div className="w-12 h-12 bg-cyan-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -693,20 +697,20 @@ export default function DashboardHome() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-4">
                   {plans.map((plan) => (
                     <div
                       key={plan.id}
                       onClick={() => setSelectedPlan(plan)}
-                      className={`p-3 rounded-lg border-2 cursor-pointer transition-all text-center ${
+                      className={`p-2 sm:p-3 rounded-lg border-2 cursor-pointer transition-all text-center ${
                         selectedPlan?.id === plan.id
-                          ? 'border-cyan-400 bg-cyan-500/10'
+                          ? 'border-cyan-400 bg-cyan-500/10 shadow-lg shadow-cyan-500/20'
                           : 'border-gray-700 hover:border-cyan-500/50 bg-[#0a0a0f]'
                       }`}
                     >
-                      <h4 className="font-semibold text-white text-[10px] sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h4>
-                      <p className="text-base sm:text-xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</p>
-                      <p className="text-[10px] sm:text-xs text-gray-500">{plan.duration_days}d</p>
+                      <h4 className="font-semibold text-white text-[10px] sm:text-sm truncate" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h4>
+                      <p className="text-sm sm:text-xl font-bold text-cyan-400 my-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</p>
+                      <p className="text-[9px] sm:text-xs text-gray-500">{plan.duration_days} days</p>
                     </div>
                   ))}
                 </div>
@@ -715,19 +719,19 @@ export default function DashboardHome() {
               {plans.length > 0 && (
                 <>
                   <div className="mb-3">
-                    <label className="block text-sm font-medium text-gray-400 mb-1">MT5 Account Number</label>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">MT5 Account Number</label>
                     <input
                       type="text"
                       value={mt5Account}
                       onChange={(e) => setMt5Account(e.target.value)}
-                      placeholder="Enter your MT5 account number"
-                      className="w-full px-3 py-2 bg-[#0a0a0f] border border-cyan-500/30 rounded focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm text-white placeholder-gray-600"
+                      placeholder="Enter MT5 account"
+                      className="w-full px-3 py-2 sm:py-2.5 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white placeholder-gray-600"
                     />
-                    <p className="text-xs text-gray-600 mt-1">License will be bound to this account only</p>
+                    <p className="text-[10px] sm:text-xs text-gray-600 mt-1">License will be bound to this account only</p>
                   </div>
                   
                   {message.type === 'error' && (
-                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 rounded text-sm mb-3">
+                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 rounded-lg text-xs sm:text-sm mb-3">
                       {message.text}
                     </div>
                   )}
@@ -735,7 +739,7 @@ export default function DashboardHome() {
                   <button
                     onClick={handlePurchase}
                     disabled={purchasing || !selectedPlan || !mt5Account.trim()}
-                    className="w-full bg-cyan-500 hover:bg-cyan-400 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2 rounded font-bold text-sm transition"
+                    className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
                     {purchasing ? 'PROCESSING...' : `ACTIVATE ${selectedPlan?.name || 'LICENSE'}`}
@@ -805,9 +809,9 @@ export default function DashboardHome() {
               onClick={() => handleSelectLicense(lic)}
               className="bg-[#12121a] rounded-xl cursor-pointer hover:shadow-lg hover:shadow-cyan-500/10 transition-all border border-cyan-500/20 hover:border-cyan-400/50 group overflow-hidden"
             >
-              {/* Header Row */}
-              <div className="px-3 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-cyan-500/5 to-transparent border-b border-cyan-500/10 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              {/* Header Row - Plan + Open Button */}
+              <div className="px-3 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-cyan-500/5 to-transparent border-b border-cyan-500/10 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 sm:gap-3">
                   <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${isConnected ? 'bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50' : 'bg-gray-600'}`}></div>
                   <span className={`px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
                     lic.status === 'active' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
@@ -815,33 +819,35 @@ export default function DashboardHome() {
                     {lic.status?.toUpperCase()}
                   </span>
                   <span className="font-bold text-white text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>{lic.plan}</span>
-                  {/* Trading Mode Badge with Spinner */}
-                  {isConnected && (
-                    <span className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border ${
-                      isRecoveryMode 
-                        ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' 
-                        : 'bg-green-500/20 text-green-400 border-green-500/30'
-                    }`}>
-                      <svg 
-                        className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isRecoveryMode ? 'animate-spin' : ''}`}
-                        style={{ animation: isRecoveryMode ? 'spin 0.5s linear infinite' : 'spin 3s linear infinite' }}
-                        viewBox="0 0 24 24" 
-                        fill="none"
-                      >
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="31.4 31.4" strokeLinecap="round" />
-                        <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                        <circle cx="12" cy="4" r="2" fill="currentColor" />
-                      </svg>
-                      {tradingMode}
-                    </span>
-                  )}
                 </div>
                 <div className="flex items-center gap-1 sm:gap-2 text-cyan-400 group-hover:text-cyan-300 font-semibold text-xs sm:text-sm">
-                  <span className="hidden sm:inline">Open Dashboard</span>
-                  <span className="sm:hidden">Open</span>
+                  <span>Open</span>
                   <span className="group-hover:translate-x-1 transition-transform">→</span>
                 </div>
               </div>
+              
+              {/* Trading Mode Row */}
+              {isConnected && (
+                <div className="px-3 sm:px-5 py-2 border-b border-cyan-500/10">
+                  <span className={`inline-flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold border ${
+                    isRecoveryMode 
+                      ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' 
+                      : 'bg-green-500/20 text-green-400 border-green-500/30'
+                  }`}>
+                    <svg 
+                      className={`w-3.5 h-3.5 sm:w-4 sm:h-4`}
+                      style={{ animation: isRecoveryMode ? 'spin 0.5s linear infinite' : 'spin 3s linear infinite' }}
+                      viewBox="0 0 24 24" 
+                      fill="none"
+                    >
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+                      <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                      <circle cx="12" cy="4" r="2" fill="currentColor" />
+                    </svg>
+                    {tradingMode}
+                  </span>
+                </div>
+              )}
               
               {/* Symbol & Price Row */}
               {symbol && (
@@ -865,13 +871,14 @@ export default function DashboardHome() {
                         e.stopPropagation();
                         navigator.clipboard.writeText(lic.license_key);
                         const btn = e.currentTarget;
-                        btn.textContent = '✓';
-                        setTimeout(() => btn.textContent = '📋', 1500);
+                        btn.classList.add('copied');
+                        setTimeout(() => btn.classList.remove('copied'), 1500);
                       }}
-                      className="text-xs px-1 py-0.5 rounded hover:bg-cyan-500/20 transition-colors text-gray-400"
+                      className="group p-1 rounded hover:bg-cyan-500/20 transition-all text-gray-400 hover:text-cyan-400 [&.copied]:text-green-400 [&.copied]:bg-green-500/20"
                       title="Copy license key"
                     >
-                      📋
+                      <Copy className="w-3.5 h-3.5 group-[.copied]:hidden" />
+                      <Check className="w-3.5 h-3.5 hidden group-[.copied]:block" />
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
