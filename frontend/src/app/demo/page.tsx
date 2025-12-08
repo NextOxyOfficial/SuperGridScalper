@@ -17,7 +17,7 @@ export default function DemoLoginPage() {
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
   const handleCopyEmail = () => {
     navigator.clipboard.writeText(DEMO_EMAIL);
@@ -41,6 +41,7 @@ export default function DemoLoginPage() {
     setLoading(true);
     setError('');
 
+    // Normal API login - same as regular login
     try {
       const res = await fetch(`${API_URL}/login/`, {
         method: 'POST',
@@ -54,7 +55,7 @@ export default function DemoLoginPage() {
         localStorage.setItem('licenses', JSON.stringify(data.licenses || []));
         router.push('/dashboard');
       } else {
-        setError(data.message || 'Invalid demo credentials');
+        setError(data.message || 'Invalid credentials');
       }
     } catch (err) {
       setError('Connection failed. Please try again.');

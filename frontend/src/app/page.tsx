@@ -404,7 +404,7 @@ export default function Home() {
               </button>
             ) : (
               <>
-                <button onClick={() => setShowLoginModal(true)} className="hidden sm:block px-4 py-2 text-cyan-400 hover:text-cyan-300 font-medium transition-all text-sm">
+                <button onClick={() => setShowLoginModal(true)} className="px-2 sm:px-4 py-1.5 sm:py-2 text-cyan-400 hover:text-cyan-300 font-medium transition-all text-xs sm:text-sm border border-cyan-500/30 rounded-lg hover:bg-cyan-500/10">
                   Login
                 </button>
                 <button onClick={() => setShowRegisterModal(true)} className="px-3 sm:px-6 py-1.5 sm:py-2 text-xs sm:text-base bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all">
