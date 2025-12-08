@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //|                                           Mark's AI 3.0 EA.mq5   |
-//|                         Mark's AI 3.0 - Hedge Grid Scalper       |
+//|                         Mark's AI 3.0 - Smart Grid EA            |
 //|                            https://markstrades.com               |
 //+------------------------------------------------------------------+
 #property copyright "Mark's AI 3.0 - https://markstrades.com"
@@ -12,71 +12,68 @@
 
 CTrade trade;
 
-//--- License Settings
-input group "=== License Settings ==="
+//--- License Settings (VISIBLE TO USER)
 input string    LicenseKey        = "";    // License Key
 
-//--- Input Parameters
-input group "=== BUY Grid Range Settings ==="
-input double    BuyRangeStart     = 4400;      // BUY Range Start Price
-input double    BuyRangeEnd       = 4000;      // BUY Range End Price
-input double    BuyGapPips        = 3.0;       // BUY Gap between orders (Pips)
-input int       MaxBuyOrders      = 4;        // Maximum BUY orders at a time
+//--- Hidden Parameters (sinput = static input, not visible in UI)
+//--- BUY Grid Range Settings
+sinput double    BuyRangeStart     = 4400;      // BUY Range Start Price
+sinput double    BuyRangeEnd       = 4000;      // BUY Range End Price
+sinput double    BuyGapPips        = 3.0;       // BUY Gap between orders (Pips)
+sinput int       MaxBuyOrders      = 4;         // Maximum BUY orders at a time
 
-input group "=== BUY TP/SL/Trailing Settings ==="
-input double    BuyTakeProfitPips    = 50.0;   // BUY Take Profit (Pips, 0=disabled)
-input double    BuyStopLossPips      = 0.0;    // BUY Stop Loss (Pips, 0=disabled)
-input double    BuyTrailingStartPips = 3.0;    // BUY Start trailing after X pips profit
-input double    BuyInitialSLPips     = 2.0;    // BUY Initial SL distance when trailing starts
-input double    BuyTrailingRatio     = 0.5;    // BUY SL movement ratio (0.5 = 0.5 pip per 1 pip)
-input double    BuyMaxSLDistance     = 15.0;   // BUY Maximum SL distance from price (pips)
-input double    BuyTrailingStepPips  = 0.5;    // BUY Minimum step to update SL (pips)
+//--- BUY TP/SL/Trailing Settings
+sinput double    BuyTakeProfitPips    = 50.0;   // BUY Take Profit (Pips, 0=disabled)
+sinput double    BuyStopLossPips      = 0.0;    // BUY Stop Loss (Pips, 0=disabled)
+sinput double    BuyTrailingStartPips = 3.0;    // BUY Start trailing after X pips profit
+sinput double    BuyInitialSLPips     = 2.0;    // BUY Initial SL distance when trailing starts
+sinput double    BuyTrailingRatio     = 0.5;    // BUY SL movement ratio (0.5 = 0.5 pip per 1 pip)
+sinput double    BuyMaxSLDistance     = 15.0;   // BUY Maximum SL distance from price (pips)
+sinput double    BuyTrailingStepPips  = 0.5;    // BUY Minimum step to update SL (pips)
 
-input group "=== SELL Grid Range Settings ==="
-input double    SellRangeStart    = 4400;      // SELL Range Start Price
-input double    SellRangeEnd      = 4000;      // SELL Range End Price
-input double    SellGapPips       = 3.0;       // SELL Gap between orders (Pips)
-input int       MaxSellOrders     = 4;        // Maximum SELL orders at a time
+//--- SELL Grid Range Settings
+sinput double    SellRangeStart    = 4400;      // SELL Range Start Price
+sinput double    SellRangeEnd      = 4000;      // SELL Range End Price
+sinput double    SellGapPips       = 3.0;       // SELL Gap between orders (Pips)
+sinput int       MaxSellOrders     = 4;         // Maximum SELL orders at a time
 
-input group "=== SELL TP/SL/Trailing Settings ==="
-input double    SellTakeProfitPips    = 50.0;  // SELL Take Profit (Pips, 0=disabled)
-input double    SellStopLossPips      = 0.0;   // SELL Stop Loss (Pips, 0=disabled)
-input double    SellTrailingStartPips = 3.0;   // SELL Start trailing after X pips profit
-input double    SellInitialSLPips     = 2.0;   // SELL Initial SL distance when trailing starts
-input double    SellTrailingRatio     = 0.5;   // SELL SL movement ratio (0.5 = 0.5 pip per 1 pip)
-input double    SellMaxSLDistance     = 15.0;  // SELL Maximum SL distance from price (pips)
-input double    SellTrailingStepPips  = 0.5;   // SELL Minimum step to update SL (pips)
+//--- SELL TP/SL/Trailing Settings
+sinput double    SellTakeProfitPips    = 50.0;  // SELL Take Profit (Pips, 0=disabled)
+sinput double    SellStopLossPips      = 0.0;   // SELL Stop Loss (Pips, 0=disabled)
+sinput double    SellTrailingStartPips = 3.0;   // SELL Start trailing after X pips profit
+sinput double    SellInitialSLPips     = 2.0;   // SELL Initial SL distance when trailing starts
+sinput double    SellTrailingRatio     = 0.5;   // SELL SL movement ratio (0.5 = 0.5 pip per 1 pip)
+sinput double    SellMaxSLDistance     = 15.0;  // SELL Maximum SL distance from price (pips)
+sinput double    SellTrailingStepPips  = 0.5;   // SELL Minimum step to update SL (pips)
 
-input group "=== Lot & Risk ==="
-input double    LotSize           = 0.25;      // Lot Size per order
-input bool      ManageAllTrades   = true;      // Manage ALL trades (ignore magic number)
+//--- Lot & Risk
+sinput double    LotSize           = 0.25;      // Lot Size per order
+sinput bool      ManageAllTrades   = true;      // Manage ALL trades (ignore magic number)
 
-input group "=== BUY Breakeven Recovery (After Max Trades) ==="
-input bool      EnableBuyBERecovery       = true;    // Enable BUY Recovery Orders
-input double    BuyBERecoveryLotMin       = 0.25;    // BUY: Minimum lot for recovery
-input double    BuyBERecoveryLotMax       = 5.00;    // BUY: Maximum lot for recovery
-input double    BuyBERecoveryLotIncrease  = 10.0;    // BUY: Lot increase % per order
-input int       MaxBuyBERecoveryOrders    = 30;      // BUY: Max recovery orders
-// Note: Recovery gap uses same BuyGapPips as grid orders
+//--- BUY Breakeven Recovery (After Max Trades)
+sinput bool      EnableBuyBERecovery       = true;    // Enable BUY Recovery Orders
+sinput double    BuyBERecoveryLotMin       = 0.25;    // BUY: Minimum lot for recovery
+sinput double    BuyBERecoveryLotMax       = 5.00;    // BUY: Maximum lot for recovery
+sinput double    BuyBERecoveryLotIncrease  = 10.0;    // BUY: Lot increase % per order
+sinput int       MaxBuyBERecoveryOrders    = 30;      // BUY: Max recovery orders
 
-input group "=== SELL Breakeven Recovery (After Max Trades) ==="
-input bool      EnableSellBERecovery      = true;    // Enable SELL Recovery Orders
-input double    SellBERecoveryLotMin      = 0.25;    // SELL: Minimum lot for recovery
-input double    SellBERecoveryLotMax      = 5.00;    // SELL: Maximum lot for recovery
-input double    SellBERecoveryLotIncrease = 10.0;    // SELL: Lot increase % per order
-input int       MaxSellBERecoveryOrders   = 30;      // SELL: Max recovery orders
-// Note: Recovery gap uses same SellGapPips as grid orders
+//--- SELL Breakeven Recovery (After Max Trades)
+sinput bool      EnableSellBERecovery      = true;    // Enable SELL Recovery Orders
+sinput double    SellBERecoveryLotMin      = 0.25;    // SELL: Minimum lot for recovery
+sinput double    SellBERecoveryLotMax      = 5.00;    // SELL: Maximum lot for recovery
+sinput double    SellBERecoveryLotIncrease = 10.0;    // SELL: Lot increase % per order
+sinput int       MaxSellBERecoveryOrders   = 30;      // SELL: Max recovery orders
 
-input group "=== Recovery Mode Trailing Settings ==="
-input double    RecoveryTakeProfitPips    = 100.0;   // Recovery TP (pips)
-input double    RecoveryTrailingStartPips = 1.0;     // Recovery: Start trailing after X pips profit
-input double    RecoveryTrailingRatio     = 0.5;     // Recovery: SL movement ratio (0.5 pip per 1 pip)
-input double    RecoveryMaxSLDistance     = 12.0;    // Recovery: Maximum SL distance (pips)
-input double    RecoveryInitialSLPips     = 1.0;     // Recovery: Initial SL when trailing starts
+//--- Recovery Mode Trailing Settings
+sinput double    RecoveryTakeProfitPips    = 100.0;   // Recovery TP (pips)
+sinput double    RecoveryTrailingStartPips = 1.0;     // Recovery: Start trailing after X pips profit
+sinput double    RecoveryTrailingRatio     = 0.5;     // Recovery: SL movement ratio (0.5 pip per 1 pip)
+sinput double    RecoveryMaxSLDistance     = 12.0;    // Recovery: Maximum SL distance (pips)
+sinput double    RecoveryInitialSLPips     = 1.0;     // Recovery: Initial SL when trailing starts
 
-input group "=== EA Settings ==="
-input int       MagicNumber       = 999888;    // Magic Number
-input string    OrderComment      = "HedgeGrid"; // Order Comment
+//--- EA Settings
+sinput int       MagicNumber       = 999888;    // Magic Number
+sinput string    OrderComment      = "HedgeGrid"; // Order Comment
 
 //--- Server URL (Hidden from user)
 string    LicenseServer     = "https://markstrades.com";
@@ -591,7 +588,7 @@ void CreateLicenseLabel()
         ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_YDISTANCE, yStart);
         ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_FONTSIZE, 9);
         ObjectSetString(0, "EA_LicenseTitle", OBJPROP_FONT, "Arial Bold");
-        ObjectSetString(0, "EA_LicenseTitle", OBJPROP_TEXT, "HEDGE GRID SCALPER");
+        ObjectSetString(0, "EA_LicenseTitle", OBJPROP_TEXT, "MARK'S AI 3.0");
         ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_COLOR, clrGold);
         ObjectSetInteger(0, "EA_LicenseTitle", OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
         
@@ -678,9 +675,11 @@ int OnInit()
     string symbolName = _Symbol;
     
     // Check if it's a gold/metal symbol
+    // XAUUSDc: 4188.00 to 4189.00 = 1 pip, so pip = 1.0
+    // Gold always uses 1 pip = $1 movement regardless of decimal places
     if(StringFind(symbolName, "XAU") >= 0 || StringFind(symbolName, "GOLD") >= 0)
     {
-        // For Gold: 1 pip = 1.0 (4000 to 4001 = 1 pip)
+        // For Gold: 1 pip = 1.0 (4188 to 4189 = 1 pip)
         pip = 1.0;
     }
     else if(StringFind(symbolName, "XAG") >= 0 || StringFind(symbolName, "SILVER") >= 0)
@@ -690,8 +689,8 @@ int OnInit()
     }
     else if(digits == 2)
     {
-        // 2 decimal places (like some indices or metals): 1 pip = 1.0
-        pip = 1.0;
+        // 2 decimal places (like some indices): 1 pip = 0.1
+        pip = 0.1;
     }
     else if(digits == 3)
     {
@@ -714,7 +713,9 @@ int OnInit()
         pip = MathPow(10, -(digits - 1));
     }
     
+    Print("=== PIP CALCULATION ===");
     Print("Symbol: ", symbolName, " | Digits: ", digits, " | Pip Value: ", DoubleToString(pip, digits));
+    Print("Example: 1 pip movement = ", DoubleToString(pip, digits), " price change");
     
     // === MANDATORY LICENSE VERIFICATION ===
     Print("=== Verifying License ===");
@@ -870,6 +871,11 @@ void OnDeinit(const int reason)
     ObjectDelete(0, "EA_PriceInfo");
     ObjectDelete(0, "EA_TotalProfit");
     
+    // Delete license panel objects
+    ObjectDelete(0, "EA_LicenseTitle");
+    ObjectDelete(0, "EA_LicenseStatus");
+    ObjectDelete(0, "EA_LicenseAccount");
+    
     // Delete trading log objects
     ObjectDelete(0, "EA_LogHeader");
     for(int i = 0; i < MAX_LOG_ENTRIES; i++)
@@ -877,7 +883,7 @@ void OnDeinit(const int reason)
         ObjectDelete(0, "EA_Log_" + IntegerToString(i));
     }
     
-    Print("=== Hedge Grid Trailing EA Stopped ===");
+    Print("=== Mark's AI 3.0 EA Stopped ===");
 }
 
 //+------------------------------------------------------------------+
@@ -1868,20 +1874,14 @@ void CheckBERecoveryOrders()
 
 //+------------------------------------------------------------------+
 //| Apply Trailing Stop to Open Positions                            |
-//| NORMAL MODE: No trailing - positions close at individual TP      |
-//| RECOVERY MODE: Trailing SL applied to all positions              |
+//| NORMAL MODE: Use BUY/SELL individual trailing settings           |
+//| RECOVERY MODE: Use Recovery trailing settings                    |
 //+------------------------------------------------------------------+
 void ApplyTrailingStop()
 {
     // Check if in recovery mode
     bool buyInRecovery = (EnableBuyBERecovery && currentBuyCount >= MaxBuyOrders);
     bool sellInRecovery = (EnableSellBERecovery && currentSellCount >= MaxSellOrders);
-    
-    // If neither side is in recovery, skip - let individual TPs work in normal mode
-    if(!buyInRecovery && !sellInRecovery)
-    {
-        return; // NORMAL MODE - positions will close at their individual TP levels
-    }
     
     int totalPositions = PositionsTotal();
     
@@ -1898,15 +1898,6 @@ void ApplyTrailingStop()
         
         ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
         
-        // Only apply trailing to positions in recovery mode
-        // BUY positions: only if BUY side is in recovery
-        // SELL positions: only if SELL side is in recovery
-        bool applyTrailing = false;
-        if(posType == POSITION_TYPE_BUY && buyInRecovery) applyTrailing = true;
-        if(posType == POSITION_TYPE_SELL && sellInRecovery) applyTrailing = true;
-        
-        if(!applyTrailing) continue; // Skip - this side is in normal mode
-        
         double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
         double currentSL = PositionGetDouble(POSITION_SL);
         double currentTP = PositionGetDouble(POSITION_TP);
@@ -1915,22 +1906,72 @@ void ApplyTrailingStop()
                               SymbolInfoDouble(_Symbol, SYMBOL_BID) : 
                               SymbolInfoDouble(_Symbol, SYMBOL_ASK);
         
-        // RECOVERY MODE - use recovery trailing settings
-        double trailingStartPips = RecoveryTrailingStartPips;
-        double initialSLPips = RecoveryInitialSLPips;
-        double trailingRatio = RecoveryTrailingRatio;
-        double maxSLDistance = RecoveryMaxSLDistance;
-        double trailingStepPips = 0.5;
+        // Select trailing settings based on position type and mode
+        double trailingStartPips, initialSLPips, trailingRatio, maxSLDistance, trailingStepPips;
+        bool isRecoveryMode = false;
+        string modeStr = "";
         
-        // Calculate profit in pips
-        double profitPips = 0;
         if(posType == POSITION_TYPE_BUY)
         {
-            profitPips = (currentPrice - openPrice) / pip;
+            if(buyInRecovery)
+            {
+                // BUY in Recovery Mode - use recovery settings
+                trailingStartPips = RecoveryTrailingStartPips;
+                initialSLPips = RecoveryInitialSLPips;
+                trailingRatio = RecoveryTrailingRatio;
+                maxSLDistance = RecoveryMaxSLDistance;
+                trailingStepPips = 0.5;
+                isRecoveryMode = true;
+                modeStr = "RECOVERY";
+            }
+            else
+            {
+                // BUY in Normal Mode - use BUY individual settings
+                trailingStartPips = BuyTrailingStartPips;
+                initialSLPips = BuyInitialSLPips;
+                trailingRatio = BuyTrailingRatio;
+                maxSLDistance = BuyMaxSLDistance;
+                trailingStepPips = BuyTrailingStepPips;
+                modeStr = "NORMAL";
+            }
+        }
+        else // SELL
+        {
+            if(sellInRecovery)
+            {
+                // SELL in Recovery Mode - use recovery settings
+                trailingStartPips = RecoveryTrailingStartPips;
+                initialSLPips = RecoveryInitialSLPips;
+                trailingRatio = RecoveryTrailingRatio;
+                maxSLDistance = RecoveryMaxSLDistance;
+                trailingStepPips = 0.5;
+                isRecoveryMode = true;
+                modeStr = "RECOVERY";
+            }
+            else
+            {
+                // SELL in Normal Mode - use SELL individual settings
+                trailingStartPips = SellTrailingStartPips;
+                initialSLPips = SellInitialSLPips;
+                trailingRatio = SellTrailingRatio;
+                maxSLDistance = SellMaxSLDistance;
+                trailingStepPips = SellTrailingStepPips;
+                modeStr = "NORMAL";
+            }
+        }
+        
+        // Calculate profit in pips (price difference / pip value)
+        double profitPips = 0;
+        double priceDiff = 0;
+        if(posType == POSITION_TYPE_BUY)
+        {
+            priceDiff = currentPrice - openPrice;
+            profitPips = priceDiff / pip;
         }
         else
         {
-            profitPips = (openPrice - currentPrice) / pip;
+            priceDiff = openPrice - currentPrice;
+            profitPips = priceDiff / pip;
         }
         
         // Debug trailing every 30 seconds
@@ -1939,8 +1980,11 @@ void ApplyTrailingStop()
         {
             lastTrailDebug = TimeCurrent();
             string posTypeStr = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
-            Print("RECOVERY TRAIL: ", posTypeStr, " #", ticket, " | Profit: ", DoubleToString(profitPips, 2), 
-                  " pips | Start: ", trailingStartPips);
+            Print("=== TRAILING DEBUG [", modeStr, "] ===");
+            Print("Position: ", posTypeStr, " #", ticket);
+            Print("Open: ", DoubleToString(openPrice, 2), " | Current: ", DoubleToString(currentPrice, 2));
+            Print("Profit Pips: ", DoubleToString(profitPips, 2), " | Start Threshold: ", trailingStartPips);
+            Print("Current SL: ", DoubleToString(currentSL, 2));
         }
         
         // Check if profit reached trailing start threshold
@@ -1995,7 +2039,7 @@ void ApplyTrailingStop()
                 if(trade.PositionModify(ticket, newSL, currentTP))
                 {
                     string posTypeStr = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
-                    AddToLog("RECOVERY TRAIL " + posTypeStr + " SL: " + DoubleToString(newSL, 2) + " | +" + DoubleToString(profitPips, 1) + " pips", "TRAILING");
+                    AddToLog(modeStr + " TRAIL " + posTypeStr + " SL: " + DoubleToString(newSL, 2) + " | +" + DoubleToString(profitPips, 1) + " pips", "TRAILING");
                 }
             }
         }
@@ -2163,7 +2207,7 @@ void CreateDeveloperLabel()
     ObjectSetInteger(0, "EA_DevContact", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_DevContact", OBJPROP_XDISTANCE, 10);
     ObjectSetInteger(0, "EA_DevContact", OBJPROP_YDISTANCE, 40);
-    ObjectSetString(0, "EA_DevContact", OBJPROP_TEXT, "Hedge Grid Scalper | VIRTUAL GRID MODE");
+    ObjectSetString(0, "EA_DevContact", OBJPROP_TEXT, "Mark's AI 3.0 | VIRTUAL GRID MODE");
     ObjectSetInteger(0, "EA_DevContact", OBJPROP_COLOR, clrYellow);
     ObjectSetInteger(0, "EA_DevContact", OBJPROP_FONTSIZE, 9);
     ObjectSetString(0, "EA_DevContact", OBJPROP_FONT, "Arial");
