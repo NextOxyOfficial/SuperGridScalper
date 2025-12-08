@@ -388,26 +388,26 @@ export default function Home() {
         </div>
       )}
 
-      {/* Navigation */}
-      <nav className="relative z-10 container mx-auto px-4 py-6">
+      {/* Navigation - Mobile Optimized */}
+      <nav className="relative z-10 container mx-auto px-3 sm:px-4 py-4 sm:py-6">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-              <Bot className="w-6 h-6 text-black" />
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+              <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
             </div>
-            <span className="text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+            <span className="text-sm sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {isLoggedIn ? (
-              <button onClick={() => router.push('/dashboard')} className="px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              <button onClick={() => router.push('/dashboard')} className="px-3 sm:px-6 py-1.5 sm:py-2 text-xs sm:text-base bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                 Dashboard
               </button>
             ) : (
               <>
-                <button onClick={() => setShowLoginModal(true)} className="px-6 py-2 text-cyan-400 hover:text-cyan-300 font-medium transition-all">
+                <button onClick={() => setShowLoginModal(true)} className="hidden sm:block px-4 py-2 text-cyan-400 hover:text-cyan-300 font-medium transition-all text-sm">
                   Login
                 </button>
-                <button onClick={() => setShowRegisterModal(true)} className="px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all">
+                <button onClick={() => setShowRegisterModal(true)} className="px-3 sm:px-6 py-1.5 sm:py-2 text-xs sm:text-base bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all">
                   Get Started
                 </button>
               </>
@@ -418,75 +418,75 @@ export default function Home() {
 
       {/* Hero Section */}
       <div className="relative z-10 min-h-screen flex items-center">
-        <div className="container mx-auto px-4 py-20">
+        <div className="container mx-auto px-3 sm:px-4 py-10 sm:py-20">
           <div className="flex flex-col lg:flex-row items-center justify-between gap-12">
             
             {/* Left Side - Text Content */}
             <div className="flex-1 text-center lg:text-left max-w-2xl">
               {/* Typing Effect Description - AT TOP */}
-              <div className="h-20 md:h-16 flex items-center justify-center lg:justify-start mb-6">
-                <p className="text-white max-w-3xl text-lg md:text-2xl lg:text-3xl font-bold tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              <div className="h-16 sm:h-20 md:h-16 flex items-center justify-center lg:justify-start mb-4 sm:mb-6">
+                <p className="text-white max-w-3xl text-sm sm:text-lg md:text-2xl lg:text-3xl font-bold tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   <span className="text-yellow-400">&gt;</span>{' '}
-                  <span className="uppercase">{typedText}</span>
-                  <span className="inline-block w-1 h-7 md:h-8 bg-cyan-400 ml-2 animate-pulse" />
+                  <span className="capitalize">{typedText}</span>
+                  <span className="inline-block w-1 h-5 sm:h-7 md:h-8 bg-cyan-400 ml-1 sm:ml-2 animate-pulse" />
                 </p>
               </div>
               
               {/* AI Badge */}
-              <div className="inline-flex items-center gap-2 bg-black/50 border border-cyan-500/50 rounded-full px-5 py-2 mb-6 backdrop-blur-md">
-                <Sparkles className="w-4 h-4 text-yellow-400 animate-pulse" />
-                <span className="text-cyan-300 text-sm tracking-wider" style={{ fontFamily: 'Orbitron, sans-serif' }}>POWERED BY ARTIFICIAL INTELLIGENCE</span>
+              <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-black/50 border border-cyan-500/50 rounded-full px-3 sm:px-5 py-1.5 sm:py-2 mb-4 sm:mb-6 backdrop-blur-md">
+                <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400 animate-pulse" />
+                <span className="text-cyan-300 text-[10px] sm:text-sm tracking-wider" style={{ fontFamily: 'Orbitron, sans-serif' }}>POWERED BY AI</span>
               </div>
               
               {/* Main Title */}
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-white to-yellow-400 mb-2 drop-shadow-2xl" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-white to-yellow-400 mb-1 sm:mb-2 drop-shadow-2xl" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                 MARK'S AI 3.0
               </h1>
-              <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white/90 mb-4 drop-shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              <h2 className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white/90 mb-3 sm:mb-4 drop-shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                 ADVANCE SCALPER
               </h2>
               
               {/* Tagline */}
-              <p className="text-lg md:text-xl text-cyan-300 mb-6 font-light drop-shadow-lg">
+              <p className="text-sm sm:text-lg md:text-xl text-cyan-300 mb-4 sm:mb-6 font-light drop-shadow-lg">
                 The Most Powerful Automated Gold AI Trading
               </p>
               
               {/* CTA Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-8">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start mb-6 sm:mb-8">
                 <button 
                   onClick={() => router.push('/ea-store')}
-                  className="group inline-flex items-center gap-3 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400 text-black px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg shadow-yellow-500/25"
+                  className="group inline-flex items-center justify-center gap-2 sm:gap-3 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400 text-black px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-105 shadow-lg shadow-yellow-500/25"
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  <Store className="w-5 h-5" />
+                  <Store className="w-4 h-4 sm:w-5 sm:h-5" />
                   EA STORE
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button 
                   onClick={() => router.push('/guideline')}
-                  className="inline-flex items-center gap-2 bg-black/50 hover:bg-black/70 text-cyan-300 px-6 py-3 rounded-xl font-semibold transition-all border border-cyan-500/50 hover:border-cyan-400 backdrop-blur-sm"
+                  className="inline-flex items-center justify-center gap-2 bg-black/50 hover:bg-black/70 text-cyan-300 px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl font-semibold text-sm sm:text-base transition-all border border-cyan-500/50 hover:border-cyan-400 backdrop-blur-sm"
                 >
-                  <BookOpen className="w-5 h-5" /> Guidelines
+                  <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" /> Guidelines
                 </button>
               </div>
               
               {/* Stats Row */}
-              <div className="flex flex-wrap justify-center lg:justify-start gap-6 md:gap-8 py-4 px-6 bg-black/30 backdrop-blur-sm rounded-2xl border border-cyan-500/20">
+              <div className="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:justify-center lg:justify-start sm:gap-6 md:gap-8 py-3 sm:py-4 px-3 sm:px-6 bg-black/30 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-cyan-500/20">
                 <div className="text-center">
-                  <div className="text-2xl md:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>99.2%</div>
-                  <div className="text-gray-500 text-xs md:text-sm">Accuracy Rate</div>
+                  <div className="text-lg sm:text-2xl md:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>99.2%</div>
+                  <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Accuracy</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>24/7</div>
-                  <div className="text-gray-500 text-xs md:text-sm">Auto Trading</div>
+                  <div className="text-lg sm:text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>24/7</div>
+                  <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Auto</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl md:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>0.001s</div>
-                  <div className="text-gray-500 text-xs md:text-sm">Execution Speed</div>
+                  <div className="text-lg sm:text-2xl md:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>0.001s</div>
+                  <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Speed</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>5000+</div>
-                  <div className="text-gray-500 text-xs md:text-sm">Active Traders</div>
+                  <div className="text-lg sm:text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>5000+</div>
+                  <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Traders</div>
                 </div>
               </div>
             </div>
@@ -501,25 +501,25 @@ export default function Home() {
                 <img 
                   src="/marks-ai-robot.png" 
                   alt="Mark's AI Trading Robot" 
-                  className="relative z-10 w-[300px] md:w-[400px] lg:w-[500px] h-auto drop-shadow-2xl hover:scale-105 transition-transform duration-500"
+                  className="relative z-10 w-[200px] sm:w-[300px] md:w-[400px] lg:w-[500px] h-auto drop-shadow-2xl hover:scale-105 transition-transform duration-500"
                   style={{ filter: 'drop-shadow(0 0 40px rgba(6, 182, 212, 0.4))' }}
                 />
                 
                 {/* Floating badges */}
-                <div className="absolute -top-2 right-10 bg-gradient-to-r from-yellow-500 to-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full animate-bounce shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                <div className="absolute -top-1 sm:-top-2 right-4 sm:right-10 bg-gradient-to-r from-yellow-500 to-yellow-400 text-black text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full animate-bounce shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   NEW 3.0
                 </div>
-                <div className="absolute bottom-20 -left-4 bg-gradient-to-r from-cyan-500 to-cyan-400 text-black text-xs font-bold px-3 py-1 rounded-full shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                <div className="absolute bottom-12 sm:bottom-20 -left-2 sm:-left-4 bg-gradient-to-r from-cyan-500 to-cyan-400 text-black text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   AI POWERED
                 </div>
               </div>
               
               {/* Tech Info Bar under Robot */}
-              <div className="mt-4 w-full max-w-md">
-                <div className="bg-gradient-to-r from-[#0a0a0f] via-[#12121a] to-[#0a0a0f] border border-cyan-500/30 rounded-xl p-4 backdrop-blur-sm">
+              <div className="mt-3 sm:mt-4 w-full max-w-sm sm:max-w-md">
+                <div className="bg-gradient-to-r from-[#0a0a0f] via-[#12121a] to-[#0a0a0f] border border-cyan-500/30 rounded-xl p-3 sm:p-4 backdrop-blur-sm">
                   {/* Animated scanning line */}
-                  <div className="relative overflow-hidden mb-3">
-                    <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                  <div className="relative overflow-hidden mb-2 sm:mb-3">
+                    <div className="flex items-center justify-between text-[10px] sm:text-xs text-gray-400 mb-1">
                       <span>AI NEURAL NETWORK</span>
                       <span className="text-cyan-400">ACTIVE</span>
                     </div>
@@ -530,18 +530,18 @@ export default function Home() {
                   </div>
                   
                   {/* Live Stats */}
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div className="bg-black/40 rounded-lg p-2">
-                      <div className="text-cyan-400 text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>LIVE</div>
-                      <div className="text-gray-500 text-[10px]">STATUS</div>
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">
+                    <div className="bg-black/40 rounded-lg p-1.5 sm:p-2">
+                      <div className="text-cyan-400 text-sm sm:text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>LIVE</div>
+                      <div className="text-gray-500 text-[8px] sm:text-[10px]">STATUS</div>
                     </div>
-                    <div className="bg-black/40 rounded-lg p-2">
-                      <div className="text-green-400 text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>98.7%</div>
-                      <div className="text-gray-500 text-[10px]">WIN RATE</div>
+                    <div className="bg-black/40 rounded-lg p-1.5 sm:p-2">
+                      <div className="text-green-400 text-sm sm:text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>98.7%</div>
+                      <div className="text-gray-500 text-[8px] sm:text-[10px]">WIN RATE</div>
                     </div>
-                    <div className="bg-black/40 rounded-lg p-2">
-                      <div className="text-yellow-400 text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>GOLD</div>
-                      <div className="text-gray-500 text-[10px]">XAUUSD</div>
+                    <div className="bg-black/40 rounded-lg p-1.5 sm:p-2">
+                      <div className="text-yellow-400 text-sm sm:text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>GOLD</div>
+                      <div className="text-gray-500 text-[8px] sm:text-[10px]">XAUUSD</div>
                     </div>
                   </div>
                 </div>
@@ -555,42 +555,42 @@ export default function Home() {
       </div>
 
       {/* Main Content Section */}
-      <div className="relative z-10 container mx-auto px-4">
+      <div className="relative z-10 container mx-auto px-3 sm:px-4">
 
         {/* Progress Steps - Catchy Section */}
-        <div className="mb-24 relative">
+        <div className="mb-12 sm:mb-24 relative">
           {/* Background glow */}
           <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-yellow-500/5 to-green-500/5 rounded-3xl blur-xl" />
           
-          <div className="relative bg-gradient-to-r from-[#0a0a0f] via-[#12121a] to-[#0a0a0f] border border-cyan-500/20 rounded-3xl p-8 md:p-12 overflow-hidden">
+          <div className="relative bg-gradient-to-r from-[#0a0a0f] via-[#12121a] to-[#0a0a0f] border border-cyan-500/20 rounded-2xl sm:rounded-3xl p-4 sm:p-8 md:p-12 overflow-hidden">
             {/* Animated background lines */}
             <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(6,182,212,0.03)_50%,transparent_100%)] animate-pulse" />
             
             <div className="relative z-10">
-              <div className="text-center mb-10">
-                <h2 className="text-2xl md:text-4xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              <div className="text-center mb-6 sm:mb-10">
+                <h2 className="text-xl sm:text-2xl md:text-4xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   Start Earning in <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400">4 Simple Steps</span>
                 </h2>
-                <p className="text-gray-500">From download to withdrawal - it's that easy!</p>
+                <p className="text-gray-500 text-xs sm:text-base">From download to withdrawal - it's that easy!</p>
               </div>
               
-              {/* Progress Steps */}
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-0">
+              {/* Progress Steps - 2x2 grid on mobile, row on desktop */}
+              <div className="grid grid-cols-2 md:flex md:flex-row items-center justify-between gap-4 md:gap-0">
                 {[
                   { step: 1, icon: '📥', title: 'Download', subtitle: 'Get EA from Store', color: 'cyan' },
                   { step: 2, icon: '⚙️', title: 'Install EA', subtitle: 'Add to MT5 Terminal', color: 'yellow' },
                   { step: 3, icon: '💰', title: 'Enjoy Profit', subtitle: 'Every Minute', color: 'green' },
                   { step: 4, icon: '🏦', title: 'Withdraw', subtitle: 'Your Earnings', color: 'purple' }
                 ].map((item, idx) => (
-                  <div key={idx} className="flex items-center">
+                  <div key={idx} className="flex flex-col md:flex-row items-center">
                     {/* Step Card */}
-                    <div className={`relative group`}>
-                      <div className={`w-24 h-24 md:w-28 md:h-28 rounded-2xl bg-gradient-to-br ${
+                    <div className={`relative group w-full`}>
+                      <div className={`w-full h-28 md:w-28 md:h-28 rounded-2xl bg-gradient-to-br ${
                         item.color === 'cyan' ? 'from-cyan-500/20 to-cyan-500/5 border-cyan-500/30 group-hover:border-cyan-400 group-hover:shadow-cyan-500/20' :
                         item.color === 'yellow' ? 'from-yellow-500/20 to-yellow-500/5 border-yellow-500/30 group-hover:border-yellow-400 group-hover:shadow-yellow-500/20' :
                         item.color === 'green' ? 'from-green-500/20 to-green-500/5 border-green-500/30 group-hover:border-green-400 group-hover:shadow-green-500/20' :
                         'from-purple-500/20 to-purple-500/5 border-purple-500/30 group-hover:border-purple-400 group-hover:shadow-purple-500/20'
-                      } border flex flex-col items-center justify-center transition-all group-hover:scale-110 group-hover:shadow-lg`}>
+                      } border flex flex-col items-center justify-center transition-all group-hover:scale-105 group-hover:shadow-lg`}>
                         <span className="text-3xl mb-1">{item.icon}</span>
                         <span className={`text-xs font-bold ${
                           item.color === 'cyan' ? 'text-cyan-400' :
@@ -609,7 +609,7 @@ export default function Home() {
                       }`}>{item.step}</div>
                     </div>
                     
-                    {/* Arrow connector (not on last item) */}
+                    {/* Arrow connector (not on last item) - Desktop only */}
                     {idx < 3 && (
                       <div className="hidden md:flex items-center mx-4">
                         <div className={`w-12 h-0.5 ${
@@ -621,17 +621,6 @@ export default function Home() {
                           item.color === 'cyan' ? 'border-l-yellow-500' :
                           item.color === 'yellow' ? 'border-l-green-500' :
                           'border-l-purple-500'
-                        }`} />
-                      </div>
-                    )}
-                    
-                    {/* Mobile arrow (down) */}
-                    {idx < 3 && (
-                      <div className="md:hidden my-2">
-                        <div className={`w-0.5 h-6 mx-auto ${
-                          item.color === 'cyan' ? 'bg-gradient-to-b from-cyan-500 to-yellow-500' :
-                          item.color === 'yellow' ? 'bg-gradient-to-b from-yellow-500 to-green-500' :
-                          'bg-gradient-to-b from-green-500 to-purple-500'
                         }`} />
                       </div>
                     )}
@@ -649,7 +638,7 @@ export default function Home() {
                   className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg shadow-green-500/25"
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  START EARNING NOW <ArrowRight className="w-5 h-5" />
+                  START EARNING NOW <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
             </div>
@@ -657,14 +646,14 @@ export default function Home() {
         </div>
 
         {/* EA Store Preview Section */}
-        <div className="mb-24">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-4 py-2 mb-4">
-              <Store className="w-4 h-4 text-yellow-400" />
-              <span className="text-yellow-300 text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA STORE</span>
+        <div className="mb-12 sm:mb-24">
+          <div className="text-center mb-6 sm:mb-12">
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-3 sm:mb-4">
+              <Store className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
+              <span className="text-yellow-300 text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA STORE</span>
             </div>
-            <h2 className="text-4xl font-bold text-white mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your Trading AI</h2>
-            <p className="text-gray-400 max-w-2xl mx-auto">Multiple EA options optimized for different investment sizes and trading strategies</p>
+            <h2 className="text-2xl sm:text-4xl font-bold text-white mb-2 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your Trading AI</h2>
+            <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">Multiple EA options optimized for different investment sizes</p>
           </div>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -679,14 +668,14 @@ export default function Home() {
                 ea.color === 'yellow' ? 'from-yellow-500/10 to-yellow-500/5 border-yellow-500/30 hover:border-yellow-400' :
                 ea.color === 'purple' ? 'from-purple-500/10 to-purple-500/5 border-purple-500/30 hover:border-purple-400' :
                 'from-orange-500/10 to-orange-500/5 border-orange-500/30 hover:border-orange-400'
-              } border rounded-xl p-4 transition-all hover:scale-105`}>
+              } border rounded-xl p-3 sm:p-4 transition-all hover:scale-105`}>
                 {ea.popular && (
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2">
                     <span className="bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">POPULAR</span>
                   </div>
                 )}
-                <h3 className="text-white font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{ea.name}</h3>
-                <div className="space-y-1 text-sm">
+                <h3 className="text-white font-bold text-xs sm:text-base mb-1 sm:mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{ea.name}</h3>
+                <div className="space-y-0.5 sm:space-y-1 text-[10px] sm:text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Investment:</span>
                     <span className="text-white">{ea.investment}</span>
@@ -712,26 +701,26 @@ export default function Home() {
           <div className="text-center">
             <button 
               onClick={() => router.push('/ea-store')}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400 text-black px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg shadow-yellow-500/25"
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400 text-black px-5 sm:px-8 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-105 shadow-lg shadow-yellow-500/25"
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              <Store className="w-5 h-5" /> VISIT EA STORE <ArrowRight className="w-5 h-5" />
+              <Store className="w-4 h-4 sm:w-5 sm:h-5" /> VISIT EA STORE <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
 
         {/* Pricing Section */}
-        <div id="pricing" className="mb-24">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-4 py-2 mb-4">
-              <Sparkles className="w-4 h-4 text-yellow-400" />
-              <span className="text-yellow-300 text-sm">PRICING PLANS</span>
+        <div id="pricing" className="mb-12 sm:mb-24">
+          <div className="text-center mb-6 sm:mb-12">
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-3 sm:mb-4">
+              <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
+              <span className="text-yellow-300 text-xs sm:text-sm">PRICING PLANS</span>
             </div>
-            <h2 className="text-4xl font-bold text-white mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your AI Power</h2>
-            <p className="text-gray-400">Unlock the full potential of Mark's AI trading system</p>
+            <h2 className="text-2xl sm:text-4xl font-bold text-white mb-2 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your AI Power</h2>
+            <p className="text-gray-400 text-sm sm:text-base">Unlock the full potential of Mark's AI trading system</p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-8 max-w-5xl mx-auto">
             {loading ? (
               <div className="col-span-3 text-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-purple-500 mx-auto mb-4" />
@@ -745,37 +734,37 @@ export default function Home() {
             {plans.map((plan, index) => (
               <div 
                 key={plan.id} 
-                className={`relative bg-gradient-to-br from-white/5 to-transparent backdrop-blur-lg rounded-2xl p-8 border transition-all hover:scale-105 ${
+                className={`relative bg-gradient-to-br from-white/5 to-transparent backdrop-blur-lg rounded-xl sm:rounded-2xl p-4 sm:p-8 border transition-all hover:scale-105 ${
                   index === 1 ? 'border-cyan-400 ring-2 ring-cyan-400/30 shadow-lg shadow-cyan-500/10' : 'border-cyan-500/20 hover:border-cyan-500/40'
                 }`}
               >
                 {index === 1 && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-sm font-bold px-4 py-1 rounded-full" style={{ fontFamily: 'Orbitron, sans-serif' }}>MOST POPULAR</span>
+                  <div className="absolute -top-3 sm:-top-4 left-1/2 transform -translate-x-1/2">
+                    <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-[10px] sm:text-sm font-bold px-3 sm:px-4 py-0.5 sm:py-1 rounded-full" style={{ fontFamily: 'Orbitron, sans-serif' }}>MOST POPULAR</span>
                   </div>
                 )}
-                <h3 className="text-2xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h3>
-                <p className="text-gray-400 mb-4">{plan.description}</p>
-                <div className="mb-6">
-                  <span className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</span>
-                  <span className="text-gray-500">/{plan.duration_days} days</span>
+                <h3 className="text-lg sm:text-2xl font-bold text-white mb-1 sm:mb-2 text-center sm:text-left" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h3>
+                <p className="text-gray-400 text-xs sm:text-base mb-2 sm:mb-4 text-center sm:text-left">{plan.description}</p>
+                <div className="mb-4 sm:mb-6 text-center sm:text-left">
+                  <span className="text-2xl sm:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</span>
+                  <span className="text-gray-500 text-xs sm:text-base">/{plan.duration_days} days</span>
                 </div>
-                <ul className="space-y-3 mb-8">
-                  <li className="flex items-center gap-2 text-gray-300">
-                    <CheckCircle className="w-5 h-5 text-cyan-400" />
+                <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-8">
+                  <li className="flex items-center justify-center sm:justify-start gap-2 text-gray-300 text-xs sm:text-base">
+                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 flex-shrink-0" />
                     {plan.max_accounts} MT5 Account{plan.max_accounts > 1 ? 's' : ''}
                   </li>
-                  <li className="flex items-center gap-2 text-gray-300">
-                    <CheckCircle className="w-5 h-5 text-cyan-400" />
-                    Full AI Trading Features
+                  <li className="flex items-center justify-center sm:justify-start gap-2 text-gray-300 text-xs sm:text-base">
+                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 flex-shrink-0" />
+                    Full AI Trading
                   </li>
-                  <li className="flex items-center gap-2 text-gray-300">
-                    <CheckCircle className="w-5 h-5 text-cyan-400" />
-                    Real-time Gold Analysis
+                  <li className="flex items-center justify-center sm:justify-start gap-2 text-gray-300 text-xs sm:text-base">
+                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 flex-shrink-0" />
+                    Gold Analysis
                   </li>
-                  <li className="flex items-center gap-2 text-gray-300">
-                    <CheckCircle className="w-5 h-5 text-cyan-400" />
-                    24/7 Priority Support
+                  <li className="flex items-center justify-center sm:justify-start gap-2 text-gray-300 text-xs sm:text-base">
+                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 flex-shrink-0" />
+                    24/7 Support
                   </li>
                 </ul>
                 <button 
@@ -795,114 +784,114 @@ export default function Home() {
         </div>
 
         {/* Quick Guidelines Section */}
-        <div className="mb-24">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-4 py-2 mb-4">
-              <BookOpen className="w-4 h-4 text-cyan-400" />
-              <span className="text-cyan-300 text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>GUIDELINES</span>
+        <div className="mb-12 sm:mb-24">
+          <div className="text-center mb-6 sm:mb-12">
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-3 sm:mb-4">
+              <BookOpen className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-400" />
+              <span className="text-cyan-300 text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>GUIDELINES</span>
             </div>
-            <h2 className="text-4xl font-bold text-white mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Learn Before You Trade</h2>
-            <p className="text-gray-400 max-w-2xl mx-auto">Watch our video tutorials to set up EA correctly and manage risk effectively</p>
+            <h2 className="text-2xl sm:text-4xl font-bold text-white mb-2 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Learn Before You Trade</h2>
+            <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">Watch our video tutorials to set up EA correctly</p>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
             {[
-              { icon: Shield, title: 'Risk Management', desc: 'Learn proper lot sizing and capital allocation', color: 'yellow' },
-              { icon: Settings, title: 'EA Configuration', desc: 'Optimal settings for your account size', color: 'purple' },
-              { icon: TrendingUp, title: 'Trading Strategies', desc: 'When to use aggressive vs conservative mode', color: 'green' },
-              { icon: Zap, title: 'Quick Setup', desc: 'Install and activate EA in under 5 minutes', color: 'cyan' }
+              { icon: Shield, title: 'Risk Mgmt', desc: 'Lot sizing & capital', color: 'yellow' },
+              { icon: Settings, title: 'EA Config', desc: 'Optimal settings', color: 'purple' },
+              { icon: TrendingUp, title: 'Strategies', desc: 'Trading modes', color: 'green' },
+              { icon: Zap, title: 'Quick Setup', desc: '5 min install', color: 'cyan' }
             ].map((item, idx) => (
               <div key={idx} className={`bg-[#12121a] border ${
                 item.color === 'yellow' ? 'border-yellow-500/20 hover:border-yellow-400/50' :
                 item.color === 'purple' ? 'border-purple-500/20 hover:border-purple-400/50' :
                 item.color === 'green' ? 'border-green-500/20 hover:border-green-400/50' :
                 'border-cyan-500/20 hover:border-cyan-400/50'
-              } rounded-xl p-5 transition-all hover:scale-105 cursor-pointer group`} onClick={() => router.push('/guideline')}>
-                <div className={`w-12 h-12 ${
+              } rounded-xl p-3 sm:p-5 transition-all hover:scale-105 cursor-pointer group`} onClick={() => router.push('/guideline')}>
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${
                   item.color === 'yellow' ? 'bg-yellow-500/20' :
                   item.color === 'purple' ? 'bg-purple-500/20' :
                   item.color === 'green' ? 'bg-green-500/20' :
                   'bg-cyan-500/20'
-                } rounded-xl flex items-center justify-center mb-3`}>
-                  <item.icon className={`w-6 h-6 ${
+                } rounded-xl flex items-center justify-center mb-2 sm:mb-3`}>
+                  <item.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${
                     item.color === 'yellow' ? 'text-yellow-400' :
                     item.color === 'purple' ? 'text-purple-400' :
                     item.color === 'green' ? 'text-green-400' :
                     'text-cyan-400'
                   }`} />
                 </div>
-                <h3 className="text-white font-bold mb-1 group-hover:text-cyan-400 transition">{item.title}</h3>
-                <p className="text-gray-500 text-sm">{item.desc}</p>
+                <h3 className="text-white font-bold text-xs sm:text-base mb-0.5 sm:mb-1 group-hover:text-cyan-400 transition">{item.title}</h3>
+                <p className="text-gray-500 text-[10px] sm:text-sm">{item.desc}</p>
               </div>
             ))}
           </div>
           
-          <div className="bg-gradient-to-r from-cyan-500/10 to-yellow-500/10 border border-cyan-500/30 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-cyan-500/20 rounded-xl flex items-center justify-center">
-                <BookOpen className="w-7 h-7 text-cyan-400" />
+          <div className="bg-gradient-to-r from-cyan-500/10 to-yellow-500/10 border border-cyan-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-14 sm:h-14 bg-cyan-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <BookOpen className="w-5 h-5 sm:w-7 sm:h-7 text-cyan-400" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Complete Video Tutorials</h3>
-                <p className="text-gray-400 text-sm">15+ videos covering everything from installation to advanced strategies</p>
+                <h3 className="text-sm sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Video Tutorials</h3>
+                <p className="text-gray-400 text-[10px] sm:text-sm">15+ videos from installation to strategies</p>
               </div>
             </div>
             <button 
               onClick={() => router.push('/guideline')}
-              className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black px-6 py-3 rounded-xl font-bold transition-all"
+              className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-bold text-xs sm:text-base transition-all w-full md:w-auto justify-center"
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              <BookOpen className="w-5 h-5" /> WATCH TUTORIALS
+              <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" /> WATCH
             </button>
           </div>
         </div>
 
         {/* How It Works */}
-        <div className="mb-24">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-4 py-2 mb-4">
-              <Cpu className="w-4 h-4 text-cyan-400" />
-              <span className="text-cyan-300 text-sm">SIMPLE SETUP</span>
+        <div className="mb-12 sm:mb-24">
+          <div className="text-center mb-6 sm:mb-12">
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-3 sm:mb-4">
+              <Cpu className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-400" />
+              <span className="text-cyan-300 text-xs sm:text-sm">SIMPLE SETUP</span>
             </div>
-            <h2 className="text-4xl font-bold text-white mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>How Mark's AI Trading Works?</h2>
+            <h2 className="text-xl sm:text-4xl font-bold text-white mb-2 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>How It Works?</h2>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+          <div className="grid grid-cols-3 gap-3 sm:gap-8 max-w-4xl mx-auto">
             <div className="text-center group">
-              <div className="w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-yellow-500/10 border border-cyan-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:border-cyan-400 transition-all">
-                <span className="text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>01</span>
+              <div className="w-14 h-14 sm:w-20 sm:h-20 bg-gradient-to-br from-cyan-500/20 to-yellow-500/10 border border-cyan-500/30 rounded-xl sm:rounded-2xl flex items-center justify-center mx-auto mb-2 sm:mb-4 group-hover:border-cyan-400 transition-all">
+                <span className="text-xl sm:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>01</span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Subscribe</h3>
-              <p className="text-gray-400">Choose your AI power level and get instant access</p>
+              <h3 className="text-xs sm:text-xl font-bold text-white mb-1 sm:mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Subscribe</h3>
+              <p className="text-gray-400 text-[10px] sm:text-base">Get instant access</p>
             </div>
             <div className="text-center group">
-              <div className="w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-yellow-500/10 border border-cyan-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:border-cyan-400 transition-all">
-                <span className="text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>02</span>
+              <div className="w-14 h-14 sm:w-20 sm:h-20 bg-gradient-to-br from-cyan-500/20 to-yellow-500/10 border border-cyan-500/30 rounded-xl sm:rounded-2xl flex items-center justify-center mx-auto mb-2 sm:mb-4 group-hover:border-cyan-400 transition-all">
+                <span className="text-xl sm:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>02</span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Install AI</h3>
-              <p className="text-gray-400">Download Mark's AI and install on MT5 in seconds</p>
+              <h3 className="text-xs sm:text-xl font-bold text-white mb-1 sm:mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Install</h3>
+              <p className="text-gray-400 text-[10px] sm:text-base">Add to MT5</p>
             </div>
             <div className="text-center group">
-              <div className="w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-yellow-500/10 border border-cyan-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:border-cyan-400 transition-all">
-                <span className="text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>03</span>
+              <div className="w-14 h-14 sm:w-20 sm:h-20 bg-gradient-to-br from-cyan-500/20 to-yellow-500/10 border border-cyan-500/30 rounded-xl sm:rounded-2xl flex items-center justify-center mx-auto mb-2 sm:mb-4 group-hover:border-cyan-400 transition-all">
+                <span className="text-xl sm:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>03</span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Profit</h3>
-              <p className="text-gray-400">Let the AI trade gold for you 24/7 automatically</p>
+              <h3 className="text-xs sm:text-xl font-bold text-white mb-1 sm:mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Profit</h3>
+              <p className="text-gray-400 text-[10px] sm:text-base">Trade 24/7</p>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="text-center border-t border-cyan-500/10 pt-8 pb-4">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-              <Bot className="w-5 h-5 text-black" />
+        <div className="text-center border-t border-cyan-500/10 pt-6 sm:pt-8 pb-4">
+          <div className="flex items-center justify-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+              <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
             </div>
-            <span className="text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+            <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
           </div>
-          <p className="text-gray-500 text-sm">
-            © 2024 Mark's AI - Advance Scalper. The Most Powerful Automated Gold AI Trading.
+          <p className="text-gray-500 text-xs sm:text-sm px-4">
+            © 2024 Mark's AI - Advance Scalper
           </p>
-          <p className="text-gray-600 text-xs mt-2">
+          <p className="text-gray-600 text-[10px] sm:text-xs mt-1 sm:mt-2 px-4">
             Trading involves risk. Past performance does not guarantee future results.
           </p>
         </div>

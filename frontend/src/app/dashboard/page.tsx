@@ -210,15 +210,16 @@ export default function DashboardHome() {
 
   // If license selected, show dashboard with trading
   if (selectedLicense) {
+    const isRecoveryModeDetails = tradeData?.trading_mode?.toLowerCase() === 'recovery';
     return (
-      <div className="max-w-7xl mx-auto pt-5 px-4 pb-8">
-        <div className="space-y-4">
+      <div className="max-w-7xl mx-auto pt-3 sm:pt-5 px-2 sm:px-4 pb-6 sm:pb-8">
+        <div className="space-y-3 sm:space-y-4">
           {/* Compact Header Bar */}
-          <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg px-2 sm:px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               <button
                 onClick={() => setIsPolling(!isPolling)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${
+                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded text-[10px] sm:text-xs font-medium ${
                   isPolling ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-gray-400'
                 }`}
                 style={{ fontFamily: 'Orbitron, sans-serif' }}
@@ -227,50 +228,54 @@ export default function DashboardHome() {
                 {isPolling ? 'LIVE' : 'PAUSED'}
               </button>
               {tradeData?.trading_mode && (
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                  tradeData.trading_mode === 'Normal' 
-                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
-                    : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                <span className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium border ${
+                  isRecoveryModeDetails 
+                    ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' 
+                    : 'bg-green-500/20 text-green-400 border-green-500/30'
                 }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                  {tradeData.trading_mode}
+                  <svg 
+                    className="w-3 h-3 sm:w-3.5 sm:h-3.5"
+                    style={{ animation: isRecoveryModeDetails ? 'spin 0.5s linear infinite' : 'spin 3s linear infinite' }}
+                    viewBox="0 0 24 24" 
+                    fill="none"
+                  >
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+                    <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                    <circle cx="12" cy="4" r="2" fill="currentColor" />
+                  </svg>
+                  {isRecoveryModeDetails ? 'Recovery Mode' : 'Normal Mode'}
                 </span>
               )}
-              <span className="text-xs text-gray-500">
+              <span className="text-[10px] sm:text-xs text-gray-500">
                 {lastUpdate ? lastUpdate.toLocaleTimeString() : '--:--:--'}
               </span>
             </div>
-            <button
-              onClick={() => selectedLicense && fetchTradeData(selectedLicense.license_key)}
-              className="px-2.5 py-1 text-xs font-medium text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors border border-cyan-500/30"
-            >
-              ↻ Refresh
-            </button>
           </div>
 
           {/* EA Connection Status Banner + Trading Log */}
           <div className={`rounded-xl overflow-hidden border ${eaConnected ? 'bg-gradient-to-r from-cyan-500/20 to-emerald-500/10 border-cyan-500/30' : 'bg-[#12121a] border-gray-700'}`}>
             {/* Status Header */}
-            <div className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${eaConnected ? 'bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50' : 'bg-gray-600'}`}></div>
+            <div className="p-3 sm:p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0 ${eaConnected ? 'bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50' : 'bg-gray-600'}`}></div>
                   <div>
-                    <p className="font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>{eaConnected ? 'AI CONNECTED' : 'AI DISCONNECTED'}</p>
-                    <p className="text-sm text-gray-400">
+                    <p className="font-bold text-white text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>{eaConnected ? 'AI CONNECTED' : 'AI DISCONNECTED'}</p>
+                    <p className="text-xs sm:text-sm text-gray-400">
                       {eaConnected 
                         ? `${tradeData?.symbol || 'N/A'} @ ${tradeData?.current_price || '-'}`
-                        : 'Waiting for Mark\'s AI to connect...'}
+                        : 'Waiting for AI...'}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-3 sm:gap-6">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>{tradeData?.total_pending_orders || 0}</p>
-                    <p className="text-xs text-gray-500">Pending</p>
+                    <p className="text-lg sm:text-2xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>{tradeData?.total_pending_orders || 0}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">Pending</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>{(tradeData?.total_buy_positions || 0) + (tradeData?.total_sell_positions || 0)}</p>
-                    <p className="text-xs text-gray-500">Open</p>
+                    <p className="text-lg sm:text-2xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>{(tradeData?.total_buy_positions || 0) + (tradeData?.total_sell_positions || 0)}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">Open</p>
                   </div>
                 </div>
               </div>
@@ -338,44 +343,47 @@ export default function DashboardHome() {
           </div>
 
           {/* Compact Stats Row */}
-          <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
-              <p className="text-gray-500 text-xs">Balance</p>
-              <p className="text-sm font-bold text-white">${tradeData?.account_balance?.toLocaleString() || '-'}</p>
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-1.5 sm:p-2">
+              <p className="text-gray-500 text-[10px] sm:text-xs">Balance</p>
+              <p className="text-xs sm:text-sm font-bold text-white">${tradeData?.account_balance?.toLocaleString() || '-'}</p>
             </div>
-            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
-              <p className="text-gray-500 text-xs">Equity</p>
-              <p className="text-sm font-bold text-white">${tradeData?.account_equity?.toLocaleString() || '-'}</p>
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-1.5 sm:p-2">
+              <p className="text-gray-500 text-[10px] sm:text-xs">Equity</p>
+              <p className="text-xs sm:text-sm font-bold text-white">${tradeData?.account_equity?.toLocaleString() || '-'}</p>
             </div>
-            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
-              <p className="text-gray-500 text-xs">Floating P/L</p>
-              <p className={`text-sm font-bold ${(tradeData?.account_profit || 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
-                {(tradeData?.account_profit || 0) >= 0 ? '+' : ''}${tradeData?.account_profit?.toFixed(2) || '0.00'}
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-1.5 sm:p-2">
+              <p className="text-gray-500 text-[10px] sm:text-xs">P/L</p>
+              <p className={`text-xs sm:text-sm font-bold ${(tradeData?.account_profit || 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
+                {(tradeData?.account_profit || 0) >= 0 ? '+' : ''}${tradeData?.account_profit?.toFixed(0) || '0'}
               </p>
             </div>
-            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
-              <p className="text-gray-500 text-xs">BUY</p>
-              <p className="text-sm font-bold text-green-400">{tradeData?.total_buy_positions || 0} <span className="text-xs font-normal text-gray-600">({tradeData?.total_buy_lots?.toFixed(2) || '0'})</span></p>
+            <div className="bg-[#12121a] border border-yellow-500/20 rounded-lg p-1.5 sm:p-2">
+              <p className="text-gray-500 text-[10px] sm:text-xs">Expires</p>
+              <p className="text-xs sm:text-sm font-bold text-yellow-400">{getDaysRemaining(selectedLicense)}d</p>
             </div>
-            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
-              <p className="text-gray-500 text-xs">SELL</p>
-              <p className="text-sm font-bold text-red-400">{tradeData?.total_sell_positions || 0} <span className="text-xs font-normal text-gray-600">({tradeData?.total_sell_lots?.toFixed(2) || '0'})</span></p>
+          </div>
+          {/* Second Stats Row - Desktop only or collapsible */}
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-1.5 sm:p-2">
+              <p className="text-gray-500 text-[10px] sm:text-xs">BUY</p>
+              <p className="text-xs sm:text-sm font-bold text-green-400">{tradeData?.total_buy_positions || 0} <span className="text-[10px] sm:text-xs font-normal text-gray-600">({tradeData?.total_buy_lots?.toFixed(2) || '0'})</span></p>
             </div>
-            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
-              <p className="text-gray-500 text-xs">BUY P/L</p>
-              <p className={`text-sm font-bold ${(tradeData?.total_buy_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                ${tradeData?.total_buy_profit?.toFixed(2) || '0.00'}
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-1.5 sm:p-2">
+              <p className="text-gray-500 text-[10px] sm:text-xs">SELL</p>
+              <p className="text-xs sm:text-sm font-bold text-red-400">{tradeData?.total_sell_positions || 0} <span className="text-[10px] sm:text-xs font-normal text-gray-600">({tradeData?.total_sell_lots?.toFixed(2) || '0'})</span></p>
+            </div>
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-1.5 sm:p-2">
+              <p className="text-gray-500 text-[10px] sm:text-xs">BUY P/L</p>
+              <p className={`text-xs sm:text-sm font-bold ${(tradeData?.total_buy_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                ${tradeData?.total_buy_profit?.toFixed(0) || '0'}
               </p>
             </div>
-            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2">
-              <p className="text-gray-500 text-xs">SELL P/L</p>
-              <p className={`text-sm font-bold ${(tradeData?.total_sell_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                ${tradeData?.total_sell_profit?.toFixed(2) || '0.00'}
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-1.5 sm:p-2">
+              <p className="text-gray-500 text-[10px] sm:text-xs">SELL P/L</p>
+              <p className={`text-xs sm:text-sm font-bold ${(tradeData?.total_sell_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                ${tradeData?.total_sell_profit?.toFixed(0) || '0'}
               </p>
-            </div>
-            <div className="bg-[#12121a] border border-yellow-500/20 rounded-lg p-2">
-              <p className="text-gray-500 text-xs">License</p>
-              <p className="text-sm font-bold text-yellow-400">{getDaysRemaining(selectedLicense)}d</p>
             </div>
           </div>
 
@@ -527,17 +535,18 @@ export default function DashboardHome() {
 
   // License Selection Screen
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Welcome, {user?.name || user?.email}</h2>
-        <p className="text-gray-500 text-sm">Select a license to access your AI trading dashboard</p>
+    <div className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+      <div className="text-center mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Welcome,</h2>
+        <h2 className="text-sm sm:text-xl font-bold text-cyan-400 mb-1 break-all px-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{user?.name || user?.email}</h2>
+        <p className="text-gray-500 text-xs sm:text-sm">Select a license to access your AI trading dashboard</p>
       </div>
 
       {/* Purchase New License Section - Now at top */}
-      <details className="bg-[#12121a] border border-cyan-500/20 rounded-xl mb-6" open={licenses.length === 0}>
-        <summary className="p-4 cursor-pointer font-semibold text-white hover:bg-white/5 rounded-xl flex items-center justify-between" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+      <details className="bg-[#12121a] border border-cyan-500/20 rounded-xl mb-4 sm:mb-6" open={licenses.length === 0}>
+        <summary className="p-3 sm:p-4 cursor-pointer font-semibold text-white hover:bg-white/5 rounded-xl flex items-center justify-between text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>
           <span>➕ PURCHASE NEW LICENSE</span>
-          <span className="text-xs text-gray-500">Click to expand</span>
+          <span className="text-[10px] sm:text-xs text-gray-500">Click to expand</span>
         </summary>
         <div className="px-4 pb-4 border-t border-cyan-500/10">
           {purchaseSuccess ? (
@@ -571,7 +580,7 @@ export default function DashboardHome() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
                   {plans.map((plan) => (
                     <div
                       key={plan.id}
@@ -582,9 +591,9 @@ export default function DashboardHome() {
                           : 'border-gray-700 hover:border-cyan-500/50 bg-[#0a0a0f]'
                       }`}
                     >
-                      <h4 className="font-semibold text-white text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h4>
-                      <p className="text-xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</p>
-                      <p className="text-xs text-gray-500">{plan.duration_days} days</p>
+                      <h4 className="font-semibold text-white text-[10px] sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h4>
+                      <p className="text-base sm:text-xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500">{plan.duration_days}d</p>
                     </div>
                   ))}
                 </div>
@@ -625,22 +634,22 @@ export default function DashboardHome() {
         </div>
       </details>
       
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-3">
-          <h3 className="text-lg font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>YOUR LICENSES</h3>
-          <span className="flex items-center gap-1.5 text-xs text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-full border border-cyan-500/30">
-            <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
+      <div className="flex justify-between items-center mb-3 mt-10 sm:mb-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <h3 className="text-sm sm:text-lg font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>YOUR LICENSES</h3>
+          <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-cyan-400 bg-cyan-500/10 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-cyan-500/30">
+            <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
             Live
           </span>
         </div>
-        <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded-full">{licenses.length} license(s)</span>
+        <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">{licenses.length} license(s)</span>
       </div>
       
       {licenses.length === 0 ? (
-        <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-8 text-center">
-          <p className="text-4xl mb-3">🔑</p>
-          <h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>No Licenses Found</h3>
-          <p className="text-gray-500 text-sm">Purchase a plan above to get started with Mark's AI 3.0.</p>
+        <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-4 sm:p-8 text-center">
+          <p className="text-2xl sm:text-4xl mb-2 sm:mb-3">🔑</p>
+          <h3 className="text-sm sm:text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>No Licenses Found</h3>
+          <p className="text-gray-500 text-xs sm:text-sm">Purchase a plan above to get started.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -674,6 +683,8 @@ export default function DashboardHome() {
             const totalPositions = (licTradeData?.total_buy_positions || 0) + (licTradeData?.total_sell_positions || 0);
             const isConnected = licTradeData && licTradeData.last_update && 
               (Math.abs(new Date().getTime() - new Date(licTradeData.last_update).getTime()) / 1000) < 15;
+            const tradingMode = licTradeData?.trading_mode || 'normal';
+            const isRecoveryMode = tradingMode?.toLowerCase() === 'recovery';
             
             return (
             <div 
@@ -682,77 +693,118 @@ export default function DashboardHome() {
               className="bg-[#12121a] rounded-xl cursor-pointer hover:shadow-lg hover:shadow-cyan-500/10 transition-all border border-cyan-500/20 hover:border-cyan-400/50 group overflow-hidden"
             >
               {/* Header Row */}
-              <div className="px-5 py-3 bg-gradient-to-r from-cyan-500/5 to-transparent border-b border-cyan-500/10 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50' : 'bg-gray-600'}`}></div>
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+              <div className="px-3 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-cyan-500/5 to-transparent border-b border-cyan-500/10 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${isConnected ? 'bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50' : 'bg-gray-600'}`}></div>
+                  <span className={`px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
                     lic.status === 'active' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
                   }`}>
                     {lic.status?.toUpperCase()}
                   </span>
-                  <span className="font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>{lic.plan}</span>
+                  <span className="font-bold text-white text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>{lic.plan}</span>
+                  {/* Trading Mode Badge with Spinner */}
+                  {isConnected && (
+                    <span className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border ${
+                      isRecoveryMode 
+                        ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' 
+                        : 'bg-green-500/20 text-green-400 border-green-500/30'
+                    }`}>
+                      <svg 
+                        className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isRecoveryMode ? 'animate-spin' : ''}`}
+                        style={{ animation: isRecoveryMode ? 'spin 0.5s linear infinite' : 'spin 3s linear infinite' }}
+                        viewBox="0 0 24 24" 
+                        fill="none"
+                      >
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+                        <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                        <circle cx="12" cy="4" r="2" fill="currentColor" />
+                      </svg>
+                      <span className="hidden sm:inline">{isRecoveryMode ? 'Recovery Mode' : 'Normal Mode'}</span>
+                      <span className="sm:hidden">{isRecoveryMode ? 'Recovery' : 'Normal Mode'}</span>
+                    </span>
+                  )}
                   {symbol && (
-                    <span className="text-xs text-yellow-400 bg-yellow-500/10 px-2 py-0.5 rounded-full font-medium border border-yellow-500/30">
-                      {symbol} {currentPrice ? `@ ${currentPrice}` : ''}
+                    <span className="text-[10px] sm:text-xs text-yellow-400 bg-yellow-500/10 px-1.5 sm:px-2 py-0.5 rounded-full font-medium border border-yellow-500/30">
+                      {symbol} @ {currentPrice || ''}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-cyan-400 group-hover:text-cyan-300 font-semibold text-sm">
-                  <span>Open Dashboard</span>
+                <div className="flex items-center gap-1 sm:gap-2 text-cyan-400 group-hover:text-cyan-300 font-semibold text-xs sm:text-sm">
+                  <span className="hidden sm:inline">Open Dashboard</span>
+                  <span className="sm:hidden">Open</span>
                   <span className="group-hover:translate-x-1 transition-transform">→</span>
                 </div>
               </div>
               
-              {/* License Key Row */}
-              <div className="px-5 py-2 bg-[#0a0a0f]/50 border-b border-cyan-500/10">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">License:</span>
-                  <code className="text-xs font-mono text-cyan-400 bg-[#0a0a0f] px-2 py-0.5 rounded border border-cyan-500/20">
-                    {lic.license_key}
-                  </code>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigator.clipboard.writeText(lic.license_key);
-                      const btn = e.currentTarget;
-                      btn.textContent = '✓';
-                      setTimeout(() => btn.textContent = '📋', 1500);
-                    }}
-                    className="text-xs px-1.5 py-0.5 rounded hover:bg-cyan-500/20 transition-colors text-gray-400"
-                    title="Copy license key"
-                  >
-                    📋
-                  </button>
-                  <span className="text-xs text-gray-500 ml-2">MT5:</span>
-                  <span className="text-xs font-medium text-gray-400">{lic.mt5_account || '-'}</span>
+              {/* License Key Row - Simplified for mobile */}
+              <div className="px-3 sm:px-5 py-2 bg-[#0a0a0f]/50 border-b border-cyan-500/10">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] sm:text-xs text-gray-500">License:</span>
+                    <code className="text-[10px] sm:text-xs font-mono text-cyan-400 bg-[#0a0a0f] px-1.5 sm:px-2 py-0.5 rounded border border-cyan-500/20 truncate max-w-[150px] sm:max-w-none">
+                      {lic.license_key}
+                    </code>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(lic.license_key);
+                        const btn = e.currentTarget;
+                        btn.textContent = '✓';
+                        setTimeout(() => btn.textContent = '📋', 1500);
+                      }}
+                      className="text-xs px-1 py-0.5 rounded hover:bg-cyan-500/20 transition-colors text-gray-400"
+                      title="Copy license key"
+                    >
+                      📋
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] sm:text-xs text-gray-500">MT5:</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-gray-400">{lic.mt5_account || '-'}</span>
+                  </div>
                 </div>
               </div>
               
-              {/* Stats Row */}
-              <div className="px-5 py-4 grid grid-cols-5 gap-4">
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Balance</p>
-                  <p className="text-lg font-bold text-white">${balance?.toLocaleString() || '-'}</p>
+              {/* Stats Row - 3 cols on mobile, 5 on desktop */}
+              <div className="px-3 sm:px-5 py-3 sm:py-4 grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-4">
+                <div className="text-center sm:text-left">
+                  <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Balance</p>
+                  <p className="text-sm sm:text-lg font-bold text-white">${balance?.toLocaleString() || '-'}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Floating P/L</p>
-                  <p className={`text-lg font-bold ${(profit || 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
-                    {profit !== undefined ? `${profit >= 0 ? '+' : ''}$${profit?.toFixed(2)}` : '-'}
+                <div className="text-center sm:text-left">
+                  <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">P/L</p>
+                  <p className={`text-sm sm:text-lg font-bold ${(profit || 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
+                    {profit !== undefined ? `${profit >= 0 ? '+' : ''}$${profit?.toFixed(0)}` : '-'}
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Positions</p>
-                  <p className="text-lg font-bold text-white">{totalPositions}</p>
+                <div className="text-center sm:text-left">
+                  <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Pos</p>
+                  <p className="text-sm sm:text-lg font-bold text-white">{totalPositions}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Status</p>
-                  <p className={`text-lg font-bold ${isConnected ? 'text-cyan-400' : 'text-gray-600'}`}>
+                <div className="text-center sm:text-left hidden sm:block">
+                  <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Status</p>
+                  <p className={`text-sm sm:text-lg font-bold ${isConnected ? 'text-cyan-400' : 'text-gray-600'}`}>
                     {isConnected ? 'Online' : 'Offline'}
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Expires</p>
-                  <p className={`text-lg font-bold ${getDaysRemaining(lic) <= 7 ? 'text-orange-400' : 'text-yellow-400'}`}>
+                <div className="text-center sm:text-left hidden sm:block">
+                  <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Expires</p>
+                  <p className={`text-sm sm:text-lg font-bold ${getDaysRemaining(lic) <= 7 ? 'text-orange-400' : 'text-yellow-400'}`}>
+                    {getDaysRemaining(lic)} days
+                  </p>
+                </div>
+              </div>
+              {/* Mobile-only: Status & Expires row */}
+              <div className="sm:hidden px-3 pb-3 grid grid-cols-2 gap-2 border-t border-cyan-500/10 pt-2">
+                <div className="text-center">
+                  <p className="text-[10px] text-gray-500">Status</p>
+                  <p className={`text-sm font-bold ${isConnected ? 'text-cyan-400' : 'text-gray-600'}`}>
+                    {isConnected ? 'Online' : 'Offline'}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] text-gray-500">Expires</p>
+                  <p className={`text-sm font-bold ${getDaysRemaining(lic) <= 7 ? 'text-orange-400' : 'text-yellow-400'}`}>
                     {getDaysRemaining(lic)} days
                   </p>
                 </div>

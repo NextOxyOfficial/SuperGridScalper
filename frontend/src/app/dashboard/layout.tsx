@@ -20,18 +20,18 @@ function DashboardNav() {
   if (!selectedLicense && (pathname === '/dashboard' || pathname === '/dashboard/ea-store')) {
     return (
       <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
-              <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                <Bot className="w-5 h-5 text-black" />
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-3 flex justify-between items-center">
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            <Link href="/" className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+                <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
               </div>
-              <span className="text-white font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+              <span className="text-white font-bold text-xs sm:text-base hidden sm:inline" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
             </Link>
-            <div className="h-5 w-px bg-cyan-500/30 mx-2"></div>
+            <div className="h-4 sm:h-5 w-px bg-cyan-500/30 mx-1 sm:mx-2"></div>
             <Link
               href="/dashboard"
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-sm font-medium transition ${
                 pathname === '/dashboard' 
                   ? 'bg-cyan-500 text-black' 
                   : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
@@ -42,19 +42,19 @@ function DashboardNav() {
             </Link>
             <Link
               href="/dashboard/ea-store"
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-1.5 ${
                 pathname === '/dashboard/ea-store' 
                   ? 'bg-yellow-500 text-black' 
                   : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
               }`}
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              <Store className="w-4 h-4" /> EA Store
+              <Store className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">EA</span> Store
             </Link>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-cyan-300 text-sm hidden sm:block">{user?.email}</span>
-            <button onClick={logout} className="text-cyan-300 hover:text-white text-sm px-3 py-1.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-cyan-300 text-xs sm:text-sm hidden sm:block">{user?.email}</span>
+            <button onClick={logout} className="text-cyan-300 hover:text-white text-[10px] sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30">
               Logout
             </button>
           </div>
@@ -69,28 +69,28 @@ function DashboardNav() {
 
   return (
     <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-3 flex justify-between items-center">
         {/* Left: Back + License Info */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           <button 
             onClick={() => clearSelectedLicense()}
-            className="text-cyan-300 hover:text-white text-sm flex items-center gap-1 transition"
+            className="text-cyan-300 hover:text-white text-xs sm:text-sm flex items-center gap-1 transition"
           >
-            ← Back
+            ← <span className="hidden sm:inline">Back</span>
           </button>
           {selectedLicense && (
             <>
-              <div className="h-5 w-px bg-cyan-500/30"></div>
-              <div className="flex items-center gap-3">
-                <div className="w-6 h-6 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-black" />
+              <div className="h-4 sm:h-5 w-px bg-cyan-500/30"></div>
+              <div className="flex items-center gap-1.5 sm:gap-3">
+                <div className="w-5 h-5 sm:w-6 sm:h-6 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded flex items-center justify-center">
+                  <Bot className="w-3 h-3 sm:w-4 sm:h-4 text-black" />
                 </div>
-                <span className="text-white font-semibold" style={{ fontFamily: 'Orbitron, sans-serif' }}>{selectedLicense.plan}</span>
-                <span className="text-cyan-400 text-xs font-mono hidden sm:inline bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
-                  {selectedLicense.license_key?.slice(0, 12)}...
+                <span className="text-white font-semibold text-xs sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>{selectedLicense.plan}</span>
+                <span className="text-cyan-400 text-[10px] sm:text-xs font-mono hidden md:inline bg-cyan-500/10 px-1.5 sm:px-2 py-0.5 rounded border border-cyan-500/20">
+                  {selectedLicense.license_key?.slice(0, 8)}...
                 </span>
-                <span className="bg-yellow-500/20 text-yellow-300 text-xs px-2 py-0.5 rounded-full border border-yellow-500/30">
-                  {getDaysRemaining(selectedLicense)} days
+                <span className="bg-yellow-500/20 text-yellow-300 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full border border-yellow-500/30">
+                  {getDaysRemaining(selectedLicense)}d
                 </span>
               </div>
             </>
@@ -98,40 +98,42 @@ function DashboardNav() {
         </div>
 
         {/* Right: Nav Links + User */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           {selectedLicense && (
             <>
               <Link
                 href="/dashboard"
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+                className={`px-2 sm:px-4 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-sm font-medium transition ${
                   isDashboardPage 
                     ? 'bg-cyan-500 text-black' 
                     : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
                 }`}
                 style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
-                Dashboard
+                <span className="hidden sm:inline">Dashboard</span>
+                <span className="sm:hidden">Home</span>
               </Link>
               <Link
                 href="/dashboard/ea-store"
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${
+                className={`px-2 sm:px-4 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-1.5 ${
                   isEAStorePage 
                     ? 'bg-yellow-500 text-black' 
                     : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
                 }`}
                 style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
-                <Store className="w-4 h-4" /> EA Store
+                <Store className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">EA</span> Store
               </Link>
-              <div className="h-5 w-px bg-cyan-500/30 mx-1"></div>
+              <div className="h-4 sm:h-5 w-px bg-cyan-500/30 mx-0.5 sm:mx-1 hidden sm:block"></div>
             </>
           )}
-          <span className="text-cyan-300 text-sm hidden sm:inline">{user?.email}</span>
+          <span className="text-cyan-300 text-xs sm:text-sm hidden md:inline">{user?.email}</span>
           <button 
             onClick={logout} 
-            className="text-cyan-300 hover:text-white text-sm px-3 py-1.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30"
+            className="text-cyan-300 hover:text-white text-[10px] sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30"
           >
-            Logout
+            <span className="hidden sm:inline">Logout</span>
+            <span className="sm:hidden">Exit</span>
           </button>
         </div>
       </div>
