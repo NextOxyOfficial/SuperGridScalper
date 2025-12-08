@@ -636,14 +636,56 @@ export default function DashboardHome() {
                     <p className="text-gray-500 text-[10px] sm:text-xs mb-1">MT5 Account</p>
                     <p className="font-semibold text-white text-sm sm:text-base">{selectedLicense.mt5_account || 'Not Set'}</p>
                   </div>
-                  <div className="bg-[#0a0a0f]/50 rounded-lg p-2.5 sm:p-3 border border-cyan-500/10">
+                  <div className={`bg-[#0a0a0f]/50 rounded-lg p-2.5 sm:p-3 border ${getDaysRemaining(selectedLicense) <= 0 ? 'border-red-500/30' : getDaysRemaining(selectedLicense) <= 3 ? 'border-yellow-500/30' : 'border-cyan-500/10'}`}>
                     <p className="text-gray-500 text-[10px] sm:text-xs mb-1">Expires</p>
                     <p className="font-semibold text-white text-sm sm:text-base">
                       {selectedLicense.expires_at ? new Date(selectedLicense.expires_at).toLocaleDateString() : '-'}
                     </p>
-                    <p className="text-yellow-400 text-[10px] sm:text-xs mt-0.5">({getDaysRemaining(selectedLicense)} days left)</p>
+                    <p className={`text-[10px] sm:text-xs mt-0.5 ${getDaysRemaining(selectedLicense) <= 0 ? 'text-red-400' : getDaysRemaining(selectedLicense) <= 3 ? 'text-yellow-400' : 'text-yellow-400'}`}>
+                      {getDaysRemaining(selectedLicense) <= 0 ? 'Expired!' : `(${getDaysRemaining(selectedLicense)} days left)`}
+                    </p>
                   </div>
                 </div>
+                
+                {/* Extend Subscription - Show when expired or about to expire */}
+                {getDaysRemaining(selectedLicense) <= 3 && (
+                  <div className={`rounded-lg p-3 sm:p-4 border ${getDaysRemaining(selectedLicense) <= 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-yellow-500/10 border-yellow-500/30'}`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <p className={`font-semibold text-sm sm:text-base ${getDaysRemaining(selectedLicense) <= 0 ? 'text-red-400' : 'text-yellow-400'}`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {getDaysRemaining(selectedLicense) <= 0 ? '⚠️ License Expired!' : '⏰ License Expiring Soon!'}
+                        </p>
+                        <p className="text-gray-400 text-[10px] sm:text-xs mt-1">
+                          {getDaysRemaining(selectedLicense) <= 0 
+                            ? 'Your license has expired. Extend now to continue trading.' 
+                            : `Only ${getDaysRemaining(selectedLicense)} day(s) remaining. Extend to avoid interruption.`}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          selectLicense(null);
+                          // Scroll to purchase section
+                          setTimeout(() => {
+                            const details = document.querySelector('details');
+                            if (details) {
+                              details.open = true;
+                              details.scrollIntoView({ behavior: 'smooth' });
+                            }
+                          }, 100);
+                        }}
+                        className={`flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${
+                          getDaysRemaining(selectedLicense) <= 0 
+                            ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400 text-white shadow-lg shadow-red-500/20' 
+                            : 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black shadow-lg shadow-yellow-500/20'
+                        }`}
+                        style={{ fontFamily: 'Orbitron, sans-serif' }}
+                      >
+                        <span>🔄</span>
+                        EXTEND LICENSE
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </details>
