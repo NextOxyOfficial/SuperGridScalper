@@ -463,6 +463,16 @@ export default function Home() {
                   <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button 
+                  onClick={() => router.push('/demo')}
+                  className="group inline-flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-cyan-500 hover:from-green-400 hover:to-cyan-400 text-black px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-105 shadow-lg shadow-green-500/25"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                  DEMO
+                </button>
+                <button 
                   onClick={() => router.push('/guideline')}
                   className="inline-flex items-center justify-center gap-2 bg-black/50 hover:bg-black/70 text-cyan-300 px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl font-semibold text-sm sm:text-base transition-all border border-cyan-500/50 hover:border-cyan-400 backdrop-blur-sm"
                 >

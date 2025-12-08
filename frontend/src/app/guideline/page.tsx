@@ -215,29 +215,29 @@ export default function GuidelinePage() {
 
       {/* Navigation */}
       <nav className="relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
-              <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                <Bot className="w-5 h-5 text-black" />
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-3 flex justify-between items-center">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link href="/" className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+                <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
               </div>
-              <span className="text-white font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+              <span className="text-white font-bold text-xs sm:text-base hidden sm:inline" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
             </Link>
-            <div className="h-5 w-px bg-cyan-500/30"></div>
-            <span className="flex items-center gap-1.5 text-cyan-400 text-sm font-medium" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-              <BookOpen className="w-4 h-4" /> GUIDELINES
+            <div className="h-4 sm:h-5 w-px bg-cyan-500/30"></div>
+            <span className="flex items-center gap-1 sm:gap-1.5 text-cyan-400 text-[10px] sm:text-sm font-medium" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              <BookOpen className="w-3 h-3 sm:w-4 sm:h-4" /> GUIDELINES
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Link 
               href="/ea-store" 
-              className="flex items-center gap-1.5 text-yellow-300 hover:text-yellow-200 text-sm px-3 py-1.5 hover:bg-yellow-500/20 rounded-lg transition border border-yellow-500/30"
+              className="flex items-center gap-1 sm:gap-1.5 text-yellow-300 hover:text-yellow-200 text-[10px] sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 hover:bg-yellow-500/20 rounded-lg transition border border-yellow-500/30"
             >
-              <Store className="w-4 h-4" /> EA Store
+              <Store className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">EA</span> Store
             </Link>
             <Link 
               href="/" 
-              className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-sm font-medium transition"
+              className="px-2 sm:px-4 py-1 sm:py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-[10px] sm:text-sm font-medium transition"
             >
               Home
             </Link>
@@ -246,31 +246,30 @@ export default function GuidelinePage() {
       </nav>
 
       {/* Main Content */}
-      <div className="relative z-10 max-w-7xl mx-auto px-4 py-10">
+      <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-10">
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-4 py-2 mb-4">
-            <BookOpen className="w-4 h-4 text-cyan-400" />
-            <span className="text-cyan-400 text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>VIDEO TUTORIALS</span>
+        <div className="text-center mb-6 sm:mb-12">
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-3 sm:mb-4">
+            <BookOpen className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-400" />
+            <span className="text-cyan-400 text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>VIDEO TUTORIALS</span>
           </div>
-          <h1 className="text-3xl md:text-5xl font-bold text-white mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-            Complete EA Guidelines
+          <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+            EA Guidelines
           </h1>
-          <p className="text-gray-400 max-w-2xl mx-auto">
-            Learn everything about setting up, configuring, and managing your trading EA. 
-            Watch our video tutorials to maximize your profits and minimize risks.
+          <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">
+            Learn everything about setting up and managing your trading EA.
           </p>
         </div>
 
         {/* Quick Tips */}
-        <div className="grid md:grid-cols-4 gap-4 mb-12">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-12">
           {quickTips.map((tip, idx) => (
-            <div key={idx} className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-4 hover:border-cyan-400/50 transition">
-              <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center mb-3">
-                <tip.icon className="w-5 h-5 text-cyan-400" />
+            <div key={idx} className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-3 sm:p-4 hover:border-cyan-400/50 transition">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center mb-2 sm:mb-3">
+                <tip.icon className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
               </div>
-              <h3 className="text-white font-semibold mb-1">{tip.title}</h3>
-              <p className="text-gray-500 text-sm">{tip.description}</p>
+              <h3 className="text-white font-semibold text-xs sm:text-base mb-0.5 sm:mb-1">{tip.title}</h3>
+              <p className="text-gray-500 text-[10px] sm:text-sm line-clamp-2">{tip.description}</p>
             </div>
           ))}
         </div>
@@ -282,33 +281,33 @@ export default function GuidelinePage() {
             const isExpanded = expandedCategory === category.id;
             
             return (
-              <div key={category.id} className="bg-[#12121a] border border-cyan-500/20 rounded-2xl overflow-hidden">
+              <div key={category.id} className="bg-[#12121a] border border-cyan-500/20 rounded-xl sm:rounded-2xl overflow-hidden">
                 {/* Category Header */}
                 <button
                   onClick={() => setExpandedCategory(isExpanded ? null : category.id)}
-                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-white/5 transition"
+                  className="w-full px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between hover:bg-white/5 transition"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 ${colors.bg} ${colors.border} border rounded-xl flex items-center justify-center`}>
-                      <category.icon className={`w-6 h-6 ${colors.text}`} />
+                  <div className="flex items-center gap-2 sm:gap-4">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 ${colors.bg} ${colors.border} border rounded-xl flex items-center justify-center`}>
+                      <category.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${colors.text}`} />
                     </div>
                     <div className="text-left">
-                      <h2 className="text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                      <h2 className="text-sm sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                         {category.category}
                       </h2>
-                      <p className="text-gray-500 text-sm">{category.videos.length} videos</p>
+                      <p className="text-gray-500 text-[10px] sm:text-sm">{category.videos.length} videos</p>
                     </div>
                   </div>
                   {isExpanded ? (
-                    <ChevronUp className="w-6 h-6 text-gray-400" />
+                    <ChevronUp className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
                   ) : (
-                    <ChevronDown className="w-6 h-6 text-gray-400" />
+                    <ChevronDown className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
                   )}
                 </button>
 
                 {/* Videos List */}
                 {isExpanded && (
-                  <div className="px-6 pb-6 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="px-3 sm:px-6 pb-4 sm:pb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                     {category.videos.map((video, idx) => (
                       <div
                         key={idx}
@@ -318,19 +317,19 @@ export default function GuidelinePage() {
                         {/* Video Thumbnail */}
                         <div className="relative aspect-video bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                          <div className="w-14 h-14 bg-cyan-500/80 rounded-full flex items-center justify-center group-hover:bg-cyan-400 transition">
-                            <Play className="w-6 h-6 text-black ml-1" />
+                          <div className="w-10 h-10 sm:w-14 sm:h-14 bg-cyan-500/80 rounded-full flex items-center justify-center group-hover:bg-cyan-400 transition">
+                            <Play className="w-4 h-4 sm:w-6 sm:h-6 text-black ml-0.5 sm:ml-1" />
                           </div>
-                          <span className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                          <span className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 bg-black/70 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded">
                             {video.duration}
                           </span>
                         </div>
                         {/* Video Info */}
-                        <div className="p-4">
-                          <h3 className="text-white font-semibold mb-1 group-hover:text-cyan-400 transition">
+                        <div className="p-3 sm:p-4">
+                          <h3 className="text-white font-semibold text-sm sm:text-base mb-0.5 sm:mb-1 group-hover:text-cyan-400 transition line-clamp-1">
                             {video.title}
                           </h3>
-                          <p className="text-gray-500 text-sm line-clamp-2">{video.description}</p>
+                          <p className="text-gray-500 text-[10px] sm:text-sm line-clamp-2">{video.description}</p>
                         </div>
                       </div>
                     ))}

@@ -146,26 +146,26 @@ export default function PublicEAStorePage() {
 
       {/* Navigation */}
       <nav className="relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
-              <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                <Bot className="w-5 h-5 text-black" />
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-3 flex justify-between items-center">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link href="/" className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+                <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
               </div>
-              <span className="text-white font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+              <span className="text-white font-bold text-xs sm:text-base hidden sm:inline" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
             </Link>
-            <div className="h-5 w-px bg-cyan-500/30"></div>
-            <span className="flex items-center gap-1.5 text-yellow-400 text-sm font-medium" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-              <Store className="w-4 h-4" /> EA STORE
+            <div className="h-4 sm:h-5 w-px bg-cyan-500/30"></div>
+            <span className="flex items-center gap-1 sm:gap-1.5 text-yellow-400 text-[10px] sm:text-sm font-medium" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              <Store className="w-3 h-3 sm:w-4 sm:h-4" /> EA STORE
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {isLoggedIn ? (
               <>
-                <span className="text-cyan-300 text-sm hidden sm:block">{userName}</span>
+                <span className="text-cyan-300 text-xs sm:text-sm hidden sm:block">{userName}</span>
                 <Link 
                   href="/dashboard" 
-                  className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-sm font-medium transition"
+                  className="px-2 sm:px-4 py-1 sm:py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-[10px] sm:text-sm font-medium transition"
                 >
                   Dashboard
                 </Link>
@@ -174,15 +174,15 @@ export default function PublicEAStorePage() {
               <>
                 <Link 
                   href="/" 
-                  className="text-cyan-300 hover:text-white text-sm px-3 py-1.5 hover:bg-cyan-500/20 rounded-lg transition"
+                  className="text-cyan-300 hover:text-white text-[10px] sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 hover:bg-cyan-500/20 rounded-lg transition"
                 >
                   Home
                 </Link>
                 <Link 
                   href="/#pricing" 
-                  className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-sm font-medium transition"
+                  className="px-2 sm:px-4 py-1 sm:py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-[10px] sm:text-sm font-medium transition"
                 >
-                  Get License
+                  License
                 </Link>
               </>
             )}
@@ -191,105 +191,104 @@ export default function PublicEAStorePage() {
       </nav>
 
       {/* Main Content */}
-      <div className="relative z-10 max-w-7xl mx-auto px-4 py-10">
+      <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-10">
         {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-4 py-2 mb-4">
-            <Bot className="w-4 h-4 text-yellow-400" />
-            <span className="text-yellow-400 text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA STORE</span>
+        <div className="text-center mb-6 sm:mb-10">
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-3 sm:mb-4">
+            <Bot className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
+            <span className="text-yellow-400 text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA STORE</span>
           </div>
-          <h1 className="text-3xl md:text-5xl font-bold text-white mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+          <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
             Choose Your Trading AI
           </h1>
-          <p className="text-gray-400 max-w-2xl mx-auto">
-            Select the EA that matches your investment size and trading style. 
-            Each EA is optimized for different capital ranges and risk preferences.
+          <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">
+            Select the EA that matches your investment size and trading style.
           </p>
           
           {/* Call to action for non-logged in users */}
           {!isLoggedIn && (
-            <div className="mt-6 inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-xl px-5 py-3">
-              <LogIn className="w-5 h-5 text-cyan-400" />
-              <span className="text-gray-300 text-sm">
-                <Link href="/" className="text-cyan-400 hover:text-cyan-300 font-medium">Create an account</Link> to get your license key after downloading
+            <div className="mt-4 sm:mt-6 inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-xl px-3 sm:px-5 py-2 sm:py-3">
+              <LogIn className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
+              <span className="text-gray-300 text-xs sm:text-sm">
+                <Link href="/" className="text-cyan-400 hover:text-cyan-300 font-medium">Create account</Link> to get license key
               </span>
             </div>
           )}
         </div>
 
         {/* EA Products Grid */}
-        <div className="grid md:grid-cols-2 gap-6 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-10">
           {eaProducts.map((ea) => {
             const colors = getColorClasses(ea.color);
             return (
               <div
                 key={ea.id}
-                className={`relative bg-gradient-to-br ${colors.bg} border ${colors.border} rounded-2xl p-6 transition-all hover:shadow-lg ${colors.glow} group`}
+                className={`relative bg-gradient-to-br ${colors.bg} border ${colors.border} rounded-xl sm:rounded-2xl p-4 sm:p-6 transition-all hover:shadow-lg ${colors.glow} group`}
               >
                 {/* Popular Badge */}
                 {ea.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="bg-yellow-500 text-black text-xs font-bold px-4 py-1 rounded-full flex items-center gap-1">
-                      <Star className="w-3 h-3" /> MOST POPULAR
+                  <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2">
+                    <span className="bg-yellow-500 text-black text-[10px] sm:text-xs font-bold px-2 sm:px-4 py-0.5 sm:py-1 rounded-full flex items-center gap-1">
+                      <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> POPULAR
                     </span>
                   </div>
                 )}
 
                 {/* Header */}
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-3 sm:mb-4">
                   <div>
-                    <p className={`text-xs ${colors.text} mb-1`}>{ea.subtitle}</p>
-                    <h3 className="text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    <p className={`text-[10px] sm:text-xs ${colors.text} mb-0.5 sm:mb-1`}>{ea.subtitle}</p>
+                    <h3 className="text-base sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                       {ea.name}
                     </h3>
                   </div>
-                  <div className={`w-12 h-12 bg-gradient-to-br ${colors.bg} rounded-xl flex items-center justify-center border ${colors.border}`}>
-                    <Bot className={`w-6 h-6 ${colors.text}`} />
+                  <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br ${colors.bg} rounded-xl flex items-center justify-center border ${colors.border}`}>
+                    <Bot className={`w-5 h-5 sm:w-6 sm:h-6 ${colors.text}`} />
                   </div>
                 </div>
 
                 {/* Description */}
-                <p className="text-gray-400 text-sm mb-4">{ea.description}</p>
+                <p className="text-gray-400 text-xs sm:text-sm mb-3 sm:mb-4 line-clamp-2">{ea.description}</p>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="bg-black/30 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <DollarSign className="w-4 h-4 text-green-400" />
-                      <span className="text-gray-500 text-xs">Investment</span>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
+                  <div className="bg-black/30 rounded-lg p-2 sm:p-3">
+                    <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
+                      <DollarSign className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" />
+                      <span className="text-gray-500 text-[10px] sm:text-xs">Investment</span>
                     </div>
-                    <p className="text-white font-bold">${ea.minInvestment.toLocaleString()} - ${ea.maxInvestment.toLocaleString()}</p>
+                    <p className="text-white font-bold text-xs sm:text-base">${ea.minInvestment} - ${ea.maxInvestment >= 1000 ? `${ea.maxInvestment/1000}K` : ea.maxInvestment}</p>
                   </div>
-                  <div className="bg-black/30 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <TrendingUp className="w-4 h-4 text-cyan-400" />
-                      <span className="text-gray-500 text-xs">Expected Profit</span>
+                  <div className="bg-black/30 rounded-lg p-2 sm:p-3">
+                    <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
+                      <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-400" />
+                      <span className="text-gray-500 text-[10px] sm:text-xs">Profit</span>
                     </div>
-                    <p className={`font-bold ${colors.text}`}>{ea.expectedProfit}</p>
+                    <p className={`font-bold text-xs sm:text-base ${colors.text}`}>{ea.expectedProfit}</p>
                   </div>
-                  <div className="bg-black/30 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Shield className="w-4 h-4 text-yellow-400" />
-                      <span className="text-gray-500 text-xs">Risk Level</span>
+                  <div className="bg-black/30 rounded-lg p-2 sm:p-3">
+                    <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
+                      <Shield className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
+                      <span className="text-gray-500 text-[10px] sm:text-xs">Risk</span>
                     </div>
-                    <p className="text-white font-medium">{ea.riskLevel}</p>
+                    <p className="text-white font-medium text-xs sm:text-base">{ea.riskLevel}</p>
                   </div>
-                  <div className="bg-black/30 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Target className="w-4 h-4 text-purple-400" />
-                      <span className="text-gray-500 text-xs">Strategy</span>
+                  <div className="bg-black/30 rounded-lg p-2 sm:p-3">
+                    <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
+                      <Target className="w-3 h-3 sm:w-4 sm:h-4 text-purple-400" />
+                      <span className="text-gray-500 text-[10px] sm:text-xs">Style</span>
                     </div>
-                    <p className="text-white font-medium text-sm">{ea.tradingStyle}</p>
+                    <p className="text-white font-medium text-[10px] sm:text-sm">{ea.tradingStyle}</p>
                   </div>
                 </div>
 
-                {/* Features */}
-                <div className="mb-5">
+                {/* Features - Hidden on mobile, shown on larger screens */}
+                <div className="mb-3 sm:mb-5 hidden sm:block">
                   <p className="text-gray-500 text-xs mb-2">Features:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {ea.features.map((feature, idx) => (
-                      <span key={idx} className="inline-flex items-center gap-1 bg-black/30 text-gray-300 text-xs px-2 py-1 rounded-full">
-                        <CheckCircle className="w-3 h-3 text-green-400" />
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                    {ea.features.slice(0, 3).map((feature, idx) => (
+                      <span key={idx} className="inline-flex items-center gap-1 bg-black/30 text-gray-300 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">
+                        <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-400" />
                         {feature}
                       </span>
                     ))}
@@ -305,11 +304,11 @@ export default function PublicEAStorePage() {
                     ea.color === 'cyan' ? 'from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400' :
                     ea.color === 'purple' ? 'from-purple-500 to-purple-400 hover:from-purple-400 hover:to-cyan-400' :
                     'from-orange-500 to-orange-400 hover:from-orange-400 hover:to-yellow-400'
-                  } text-black py-3 rounded-xl font-bold transition-all transform hover:scale-[1.02] shadow-lg`}
+                  } text-black py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-[1.02] shadow-lg`}
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  <Download className="w-5 h-5" />
-                  DOWNLOAD EA
+                  <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                  DOWNLOAD
                 </a>
               </div>
             );
@@ -317,25 +316,25 @@ export default function PublicEAStorePage() {
         </div>
 
         {/* Installation Guide */}
-        <div className="bg-[#12121a] border border-cyan-500/20 rounded-2xl p-6 mb-8">
-          <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-            <Zap className="w-5 h-5 text-yellow-400" />
-            QUICK INSTALLATION GUIDE
+        <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8">
+          <h2 className="text-sm sm:text-xl font-bold text-white mb-3 sm:mb-4 flex items-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+            <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />
+            INSTALLATION GUIDE
           </h2>
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             {[
-              { step: 1, title: 'Download EA', desc: 'Click download button for your chosen EA' },
-              { step: 2, title: 'Install in MT5', desc: 'Copy .ex5 file to MQL5/Experts folder' },
-              { step: 3, title: 'Get License', desc: 'Register and purchase a license key' },
-              { step: 4, title: 'Activate', desc: 'Enter license key and start trading' }
+              { step: 1, title: 'Download', desc: 'Get EA file' },
+              { step: 2, title: 'Install', desc: 'Copy to MT5' },
+              { step: 3, title: 'License', desc: 'Get key' },
+              { step: 4, title: 'Activate', desc: 'Start trading' }
             ].map((item) => (
-              <div key={item.step} className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-cyan-500/20 border border-cyan-500/30 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-cyan-400 font-bold text-sm">{item.step}</span>
+              <div key={item.step} className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-cyan-500/20 border border-cyan-500/30 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-cyan-400 font-bold text-xs sm:text-sm">{item.step}</span>
                 </div>
                 <div>
-                  <h4 className="text-white font-semibold">{item.title}</h4>
-                  <p className="text-gray-500 text-sm">{item.desc}</p>
+                  <h4 className="text-white font-semibold text-xs sm:text-base">{item.title}</h4>
+                  <p className="text-gray-500 text-[10px] sm:text-sm">{item.desc}</p>
                 </div>
               </div>
             ))}
@@ -343,11 +342,11 @@ export default function PublicEAStorePage() {
         </div>
 
         {/* Important Notes */}
-        <div className="bg-yellow-500/5 border border-yellow-500/30 rounded-xl p-5 mb-8">
-          <h3 className="text-yellow-400 font-bold mb-3 flex items-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-            <Shield className="w-5 h-5" /> IMPORTANT NOTES
+        <div className="bg-yellow-500/5 border border-yellow-500/30 rounded-xl p-3 sm:p-5 mb-6 sm:mb-8">
+          <h3 className="text-yellow-400 font-bold text-sm sm:text-base mb-2 sm:mb-3 flex items-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+            <Shield className="w-4 h-4 sm:w-5 sm:h-5" /> IMPORTANT
           </h3>
-          <ul className="space-y-2 text-yellow-400/80 text-sm">
+          <ul className="space-y-1.5 sm:space-y-2 text-yellow-400/80 text-xs sm:text-sm">
             <li className="flex gap-2">
               <span>•</span>
               <span>Choose EA based on your investment capital for optimal performance</span>
@@ -373,19 +372,19 @@ export default function PublicEAStorePage() {
 
         {/* CTA for non-logged in users */}
         {!isLoggedIn && (
-          <div className="text-center bg-gradient-to-r from-cyan-500/10 to-yellow-500/10 border border-cyan-500/30 rounded-2xl p-8">
-            <h3 className="text-2xl font-bold text-white mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-              Ready to Start Trading?
+          <div className="text-center bg-gradient-to-r from-cyan-500/10 to-yellow-500/10 border border-cyan-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-8">
+            <h3 className="text-lg sm:text-2xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              Ready to Start?
             </h3>
-            <p className="text-gray-400 mb-6 max-w-xl mx-auto">
-              Create an account and get your license key to activate the EA and start automated gold trading today.
+            <p className="text-gray-400 text-sm sm:text-base mb-4 sm:mb-6 max-w-xl mx-auto">
+              Get your license key to activate the EA.
             </p>
             <Link 
               href="/"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/25"
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black px-5 sm:px-8 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/25"
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              GET YOUR LICENSE <ArrowRight className="w-5 h-5" />
+              GET LICENSE <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </Link>
           </div>
         )}

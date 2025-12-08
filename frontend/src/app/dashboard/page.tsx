@@ -390,40 +390,42 @@ export default function DashboardHome() {
           {/* Open Positions Table */}
           {tradeData && (
             <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl overflow-hidden">
-              <div className="p-3 border-b border-cyan-500/10 flex justify-between items-center">
-                <h3 className="font-bold text-white text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>OPEN POSITIONS</h3>
-                <span className="text-xs text-cyan-400">{tradeData.symbol} @ {tradeData.current_price}</span>
+              <div className="p-2 sm:p-3 border-b border-cyan-500/10 flex justify-between items-center">
+                <h3 className="font-bold text-white text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>OPEN POSITIONS</h3>
+                <span className="text-[10px] sm:text-xs text-cyan-400">{tradeData.symbol} @ {tradeData.current_price}</span>
               </div>
               {tradeData.open_positions?.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-[10px] sm:text-sm">
                     <thead className="bg-[#0a0a0f]">
                       <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Ticket</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Lots</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Open</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">SL</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">TP</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Profit</th>
+                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Ticket</th>
+                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Symbol</th>
+                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500">Type</th>
+                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">Lots</th>
+                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">Open</th>
+                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 hidden sm:table-cell">SL</th>
+                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 hidden sm:table-cell">TP</th>
+                        <th className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500">P/L</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800">
                       {tradeData.open_positions.map((pos: any, i: number) => (
                         <tr key={i} className="hover:bg-white/5">
-                          <td className="px-3 py-2 font-mono text-xs text-gray-400">{pos.ticket}</td>
-                          <td className="px-3 py-2">
-                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 font-mono text-[10px] sm:text-xs text-gray-400">{pos.ticket}</td>
+                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs text-yellow-400 font-medium">{pos.symbol || tradeData.symbol}</td>
+                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2">
+                            <span className={`px-1 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold ${
                               pos.type === 'BUY' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
                             }`}>
                               {pos.type}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-right text-gray-300">{pos.lots}</td>
-                          <td className="px-3 py-2 text-right font-mono text-gray-300">{pos.open_price}</td>
-                          <td className="px-3 py-2 text-right font-mono text-red-400">{pos.sl || '-'}</td>
-                          <td className="px-3 py-2 text-right font-mono text-green-400">{pos.tp || '-'}</td>
-                          <td className={`px-3 py-2 text-right font-bold ${
+                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right text-gray-300">{pos.lots}</td>
+                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-gray-300">{pos.open_price}</td>
+                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-red-400 hidden sm:table-cell">{pos.sl || '-'}</td>
+                          <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-mono text-green-400 hidden sm:table-cell">{pos.tp || '-'}</td>
+                          <td className={`px-1.5 sm:px-3 py-1.5 sm:py-2 text-right font-bold ${
                             pos.profit >= 0 ? 'text-cyan-400' : 'text-red-400'
                           }`}>
                             {pos.profit >= 0 ? '+' : ''}{pos.profit?.toFixed(2)}
@@ -434,7 +436,7 @@ export default function DashboardHome() {
                   </table>
                 </div>
               ) : (
-                <div className="p-4 text-center text-gray-500 text-sm">
+                <div className="p-3 sm:p-4 text-center text-gray-500 text-xs sm:text-sm">
                   No open positions
                 </div>
               )}
@@ -445,42 +447,47 @@ export default function DashboardHome() {
           {tradeData && (
             <div className="bg-[#12121a] border border-yellow-500/20 rounded-lg overflow-hidden">
               <div className="p-2 border-b border-yellow-500/10 flex justify-between items-center">
-                <h3 className="font-semibold text-yellow-400 text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>PENDING ORDERS</h3>
-                <span className="text-xs text-yellow-400/70">{tradeData.pending_orders?.length || 0} orders</span>
+                <h3 className="font-semibold text-yellow-400 text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>PENDING ORDERS</h3>
+                <span className="text-[10px] sm:text-xs text-yellow-400/70">{tradeData.pending_orders?.length || 0} orders</span>
               </div>
               {tradeData.pending_orders?.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-[10px] sm:text-xs">
                     <thead className="bg-[#0a0a0f]">
                       <tr>
-                        <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500">Ticket</th>
-                        <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500">Type</th>
-                        <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500">Lots</th>
-                        <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500">Price</th>
-                        <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500">SL</th>
-                        <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500">TP</th>
+                        <th className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-left text-[10px] sm:text-xs font-medium text-gray-500">Ticket</th>
+                        <th className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-left text-[10px] sm:text-xs font-medium text-gray-500">Symbol</th>
+                        <th className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-left text-[10px] sm:text-xs font-medium text-gray-500">Type</th>
+                        <th className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-right text-[10px] sm:text-xs font-medium text-gray-500">Lots</th>
+                        <th className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-right text-[10px] sm:text-xs font-medium text-gray-500">Price</th>
+                        <th className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-right text-[10px] sm:text-xs font-medium text-gray-500 hidden sm:table-cell">SL</th>
+                        <th className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-right text-[10px] sm:text-xs font-medium text-gray-500">TP</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800">
                       {tradeData.pending_orders?.map((order: any, i: number) => (
                         <tr key={i} className="hover:bg-white/5">
-                          <td className="px-2 py-1.5 font-mono text-gray-400">{order.ticket}</td>
-                          <td className="px-2 py-1.5">
-                            <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+                          <td className="px-1.5 sm:px-2 py-1 sm:py-1.5 font-mono text-gray-400">{order.ticket}</td>
+                          <td className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-[10px] sm:text-xs text-yellow-400 font-medium">{order.symbol || tradeData.symbol}</td>
+                          <td className="px-1.5 sm:px-2 py-1 sm:py-1.5">
+                            <span className={`px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-bold ${
                               order.type?.includes('BUY') ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                            }`}>{order.type?.replace('_', ' ')}</span>
+                            }`}>
+                              <span className="hidden sm:inline">{order.type?.replace('_', ' ')}</span>
+                              <span className="sm:hidden">{order.type?.includes('BUY') ? 'BUY' : 'SELL'}</span>
+                            </span>
                           </td>
-                          <td className="px-2 py-1.5 text-right text-gray-300">{order.lots}</td>
-                          <td className="px-2 py-1.5 text-right font-mono text-gray-300">{order.price}</td>
-                          <td className="px-2 py-1.5 text-right font-mono text-red-400">{order.sl || '-'}</td>
-                          <td className="px-2 py-1.5 text-right font-mono text-green-400">{order.tp || '-'}</td>
+                          <td className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-right text-gray-300">{order.lots}</td>
+                          <td className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-right font-mono text-gray-300">{order.price}</td>
+                          <td className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-right font-mono text-red-400 hidden sm:table-cell">{order.sl || '-'}</td>
+                          <td className="px-1.5 sm:px-2 py-1 sm:py-1.5 text-right font-mono text-green-400">{order.tp || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="p-3 text-center text-gray-500 text-sm">
+                <div className="p-2 sm:p-3 text-center text-gray-500 text-xs sm:text-sm">
                   No pending orders
                 </div>
               )}
