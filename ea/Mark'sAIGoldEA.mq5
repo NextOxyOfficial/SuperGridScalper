@@ -1785,6 +1785,14 @@ void CheckBERecoveryOrders()
         double buyGapPrice = BuyGapPips * pip;
         double correctRecoveryPrice = NormalizeDouble(lowestBuyPrice - buyGapPrice, digits);
         
+        // If price has moved down significantly, place recovery order below current bid price
+        // This ensures recovery orders are always placed where they can be triggered
+        if(correctRecoveryPrice >= bidPrice)
+        {
+            // Place recovery order at current bid - gap (so it can be triggered when price goes down)
+            correctRecoveryPrice = NormalizeDouble(bidPrice - buyGapPrice, digits);
+        }
+        
         // Always use the correct calculated price
         nextBuyBERecoveryPrice = correctRecoveryPrice;
         
@@ -1881,6 +1889,14 @@ void CheckBERecoveryOrders()
         // Recovery order is placed at: highestPrice + SellGapPips (always above all positions)
         double sellGapPrice = SellGapPips * pip;
         double correctRecoveryPrice = NormalizeDouble(highestSellPrice + sellGapPrice, digits);
+        
+        // If price has moved up significantly, place recovery order above current ask price
+        // This ensures recovery orders are always placed where they can be triggered
+        if(correctRecoveryPrice <= askPrice)
+        {
+            // Place recovery order at current ask + gap (so it can be triggered when price goes up)
+            correctRecoveryPrice = NormalizeDouble(askPrice + sellGapPrice, digits);
+        }
         
         // Always use the correct calculated price
         nextSellBERecoveryPrice = correctRecoveryPrice;
