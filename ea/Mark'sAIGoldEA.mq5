@@ -126,6 +126,58 @@ int OnInit()
 }
 
 //+------------------------------------------------------------------+
+//| Expert deinitialization function                                  |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+    // Delete all chart objects
+    ObjectDelete(0, "EA_ModeStatus");
+    ObjectDelete(0, "EA_SellHeader");
+    ObjectDelete(0, "EA_SellMode");
+    ObjectDelete(0, "EA_SellCount");
+    ObjectDelete(0, "EA_SellAvg");
+    ObjectDelete(0, "EA_SellBE");
+    ObjectDelete(0, "EA_SellProfit");
+    ObjectDelete(0, "EA_BuyHeader");
+    ObjectDelete(0, "EA_BuyMode");
+    ObjectDelete(0, "EA_BuyCount");
+    ObjectDelete(0, "EA_BuyAvg");
+    ObjectDelete(0, "EA_BuyBE");
+    ObjectDelete(0, "EA_BuyProfit");
+    ObjectDelete(0, "EA_PriceHeader");
+    ObjectDelete(0, "EA_PriceInfo");
+    ObjectDelete(0, "EA_TotalProfit");
+    ObjectDelete(0, "EA_LicenseTitle");
+    ObjectDelete(0, "EA_LicenseURL");
+    ObjectDelete(0, "EA_LicensePlan");
+    ObjectDelete(0, "EA_LicenseExpiry");
+    ObjectDelete(0, "EA_LicenseDays");
+    ObjectDelete(0, "EA_LicenseStatus");
+    ObjectDelete(0, "EA_LicenseWarning");
+    
+    // Only delete pending orders when EA is actually removed
+    if(reason == REASON_REMOVE || reason == REASON_CHARTCLOSE || reason == REASON_PROGRAM)
+    {
+        Print("=== EA Removed - Deleting pending orders ===");
+        int total = OrdersTotal();
+        for(int i = total - 1; i >= 0; i--)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket > 0)
+            {
+                if(OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == MagicNumber)
+                {
+                    trade.OrderDelete(ticket);
+                }
+            }
+        }
+    }
+    
+    Comment("");
+    Print("=== Mark's AI Gold EA Stopped ===");
+}
+
+//+------------------------------------------------------------------+
 //| Expert tick function                                              |
 //+------------------------------------------------------------------+
 void OnTick()
@@ -171,14 +223,26 @@ void OnTick()
     
     // Manage grids based on mode
     if(!buyInRecovery)
-        ManageNormalGrid(true);  // BUY
+    {
+        ManageNormalGrid(true);  // BUY Normal Mode
+    }
     else
+    {
+        // BUY Recovery Mode - delete normal pending orders first
+        DeleteNormalPendingOrders(true);
         ManageRecoveryGrid(true); // BUY Recovery
+    }
         
     if(!sellInRecovery)
-        ManageNormalGrid(false); // SELL
+    {
+        ManageNormalGrid(false); // SELL Normal Mode
+    }
     else
+    {
+        // SELL Recovery Mode - delete normal pending orders first
+        DeleteNormalPendingOrders(false);
         ManageRecoveryGrid(false); // SELL Recovery
+    }
     
     // Apply trailing stops
     ApplyTrailing();
@@ -210,7 +274,12 @@ void CountPositions()
     totalBuyOrders = 0;
     totalSellOrders = 0;
     
-    // Count filled positions (for recovery mode detection)
+    int normalBuyCount = 0;
+    int normalSellCount = 0;
+    int recoveryBuyCount = 0;
+    int recoverySellCount = 0;
+    
+    // Count ALL filled positions
     for(int i = 0; i < PositionsTotal(); i++)
     {
         ulong ticket = PositionGetTicket(i);
@@ -219,20 +288,52 @@ void CountPositions()
         if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
         
         string comment = PositionGetString(POSITION_COMMENT);
-        if(StringFind(comment, "Recovery") >= 0) continue; // Skip recovery positions
-        
         ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        
+        bool isRecovery = (StringFind(comment, "Recovery") >= 0);
+        
         if(type == POSITION_TYPE_BUY)
-            currentBuyPositions++;
+        {
+            if(isRecovery)
+                recoveryBuyCount++;
+            else
+                normalBuyCount++;
+        }
         else
-            currentSellPositions++;
+        {
+            if(isRecovery)
+                recoverySellCount++;
+            else
+                normalSellCount++;
+        }
     }
     
-    // Total = Positions (for grid limit)
-    totalBuyOrders = currentBuyPositions;
-    totalSellOrders = currentSellPositions;
+    // Recovery mode logic:
+    // - Enter recovery when normal positions >= MaxOrders
+    // - Stay in recovery as long as ANY position exists (normal OR recovery)
+    // - Exit recovery only when ALL positions are closed
     
-    // Add pending orders to total (for grid limit only, NOT for recovery mode)
+    int totalBuyPositions = normalBuyCount + recoveryBuyCount;
+    int totalSellPositions = normalSellCount + recoverySellCount;
+    
+    // For recovery mode detection:
+    // If we have recovery positions, we're still in recovery mode
+    // If we only have normal positions >= max, enter recovery mode
+    if(recoveryBuyCount > 0 || normalBuyCount >= MaxBuyOrders)
+        currentBuyPositions = MaxBuyOrders; // Force recovery mode
+    else
+        currentBuyPositions = normalBuyCount;
+    
+    if(recoverySellCount > 0 || normalSellCount >= MaxSellOrders)
+        currentSellPositions = MaxSellOrders; // Force recovery mode
+    else
+        currentSellPositions = normalSellCount;
+    
+    // Total = Normal positions only (for grid limit in normal mode)
+    totalBuyOrders = normalBuyCount;
+    totalSellOrders = normalSellCount;
+    
+    // Add normal pending orders to total (for grid limit only)
     for(int i = 0; i < OrdersTotal(); i++)
     {
         ulong ticket = OrderGetTicket(i);
@@ -252,75 +353,87 @@ void CountPositions()
 }
 
 //+------------------------------------------------------------------+
+//| Delete Normal Pending Orders (when entering recovery mode)        |
+//+------------------------------------------------------------------+
+void DeleteNormalPendingOrders(bool isBuy)
+{
+    for(int i = OrdersTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue; // Keep recovery orders
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
+        {
+            trade.OrderDelete(ticket);
+            Print("[RECOVERY] Deleted normal ", isBuy ? "BUY" : "SELL", " pending order #", ticket);
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
 //| Manage Normal Grid (Static Grid - Pre-calculated Levels)         |
 //+------------------------------------------------------------------+
 void ManageNormalGrid(bool isBuy)
 {
     double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-    double rangeStart = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
-    double rangeEnd = isBuy ? MathMin(BuyRangeStart, BuyRangeEnd) : MathMin(SellRangeStart, SellRangeEnd);
+    
+    // Range settings
+    double rangeHigh = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
+    double rangeLow = isBuy ? MathMin(BuyRangeStart, BuyRangeEnd) : MathMin(SellRangeStart, SellRangeEnd);
     double gapPips = isBuy ? BuyGapPips : SellGapPips;
     int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
+    double gapPrice = gapPips * pip;
     
-    // Calculate ALL possible grid levels within range (static grid)
-    double allGridLevels[];
-    int gridCount = 0;
+    // Check if current price is within trading range
+    if(currentPrice < rangeLow || currentPrice > rangeHigh) return;
     
-    // Start from rangeEnd and go up by gap until rangeStart
-    double level = rangeEnd;
-    while(level <= rangeStart)
-    {
-        ArrayResize(allGridLevels, gridCount + 1);
-        allGridLevels[gridCount] = NormalizeDouble(level, _Digits);
-        gridCount++;
-        level += (gapPips * pip);
-    }
+    // ===== DYNAMIC GRID: Calculate target levels based on CURRENT PRICE =====
+    // For BUY: 4 levels below current price (closest first)
+    // For SELL: 4 levels above current price (closest first)
     
-    // Find the closest grid levels to current price
-    // For BUY: find levels below current price (start from highest below)
-    // For SELL: find levels above current price (start from lowest above)
     double targetLevels[];
-    int targetCount = 0;
+    ArrayResize(targetLevels, maxOrders);
+    
+    // Find the nearest grid level to current price
+    double baseLevel = rangeLow + MathFloor((currentPrice - rangeLow) / gapPrice) * gapPrice;
     
     if(isBuy)
     {
-        // BUY: scan from top to bottom, take levels below current price
-        for(int i = gridCount - 1; i >= 0 && targetCount < maxOrders; i--)
+        // BUY LIMIT: place below current price
+        // Start from just below current price and go down
+        double startLevel = baseLevel;
+        if(startLevel >= currentPrice) startLevel -= gapPrice;
+        
+        for(int i = 0; i < maxOrders; i++)
         {
-            if(allGridLevels[i] < currentPrice)
-            {
-                ArrayResize(targetLevels, targetCount + 1);
-                targetLevels[targetCount] = allGridLevels[i];
-                targetCount++;
-            }
+            targetLevels[i] = NormalizeDouble(startLevel - (i * gapPrice), _Digits);
         }
     }
     else
     {
-        // SELL: scan from bottom to top, take levels above current price
-        for(int i = 0; i < gridCount && targetCount < maxOrders; i++)
+        // SELL LIMIT: place above current price
+        // Start from just above current price and go up
+        double startLevel = baseLevel + gapPrice;
+        if(startLevel <= currentPrice) startLevel += gapPrice;
+        
+        for(int i = 0; i < maxOrders; i++)
         {
-            if(allGridLevels[i] > currentPrice)
-            {
-                ArrayResize(targetLevels, targetCount + 1);
-                targetLevels[targetCount] = allGridLevels[i];
-                targetCount++;
-            }
+            targetLevels[i] = NormalizeDouble(startLevel + (i * gapPrice), _Digits);
         }
     }
     
-    // If not enough levels found, return
-    if(targetCount == 0) return;
-    
-    // Limit to maxOrders to respect position limit
-    int actualOrderCount = MathMin(targetCount, maxOrders);
-    
-    // Get existing positions and orders at these levels
+    // ===== Check which target levels are occupied by POSITIONS =====
     bool levelOccupied[];
-    ArrayResize(levelOccupied, actualOrderCount);
+    ArrayResize(levelOccupied, maxOrders);
     ArrayInitialize(levelOccupied, false);
     
-    // Check positions
+    int positionCount = 0;
     for(int i = 0; i < PositionsTotal(); i++)
     {
         ulong ticket = PositionGetTicket(i);
@@ -328,15 +441,19 @@ void ManageNormalGrid(bool isBuy)
         if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
         if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
         
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue; // Skip recovery positions
+        
         ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
         if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
         
+        positionCount++;
         double posPrice = PositionGetDouble(POSITION_PRICE_OPEN);
         
-        // Mark closest grid level as occupied
-        for(int j = 0; j < actualOrderCount; j++)
+        // Mark closest target level as occupied
+        for(int j = 0; j < maxOrders; j++)
         {
-            if(MathAbs(posPrice - targetLevels[j]) < gapPips * pip * 0.4)
+            if(MathAbs(posPrice - targetLevels[j]) < gapPrice * 0.5)
             {
                 levelOccupied[j] = true;
                 break;
@@ -344,7 +461,53 @@ void ManageNormalGrid(bool isBuy)
         }
     }
     
-    // Check pending orders
+    // ===== DYNAMIC: Delete orders NOT matching current target levels =====
+    // This ensures orders always follow current price
+    for(int i = OrdersTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue; // Skip recovery orders
+        
+        ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if((isBuy && orderType != ORDER_TYPE_BUY_LIMIT) || (!isBuy && orderType != ORDER_TYPE_SELL_LIMIT)) continue;
+        
+        double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
+        
+        // Check if order matches ANY of the current target levels
+        bool matchesTarget = false;
+        int matchedIdx = -1;
+        for(int j = 0; j < maxOrders; j++)
+        {
+            if(MathAbs(orderPrice - targetLevels[j]) < gapPrice * 0.3)
+            {
+                matchesTarget = true;
+                matchedIdx = j;
+                break;
+            }
+        }
+        
+        if(matchesTarget)
+        {
+            // Order is at a valid target level - keep it and mark level as occupied
+            levelOccupied[matchedIdx] = true;
+        }
+        else
+        {
+            // Order is NOT at current target level - DELETE it so we can place new one closer to price
+            trade.OrderDelete(ticket);
+            Print("[DYNAMIC GRID] Deleted ", isBuy ? "BUY" : "SELL", " order at ", orderPrice, " (not near current price)");
+        }
+    }
+    
+    // ===== Place orders at unoccupied target levels =====
+    int currentTotal = positionCount;
+    
+    // Count existing pending orders for this side
     for(int i = 0; i < OrdersTotal(); i++)
     {
         ulong ticket = OrderGetTicket(i);
@@ -352,77 +515,37 @@ void ManageNormalGrid(bool isBuy)
         if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
         if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
         
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue;
+        
         ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-        if((isBuy && orderType != ORDER_TYPE_BUY_LIMIT) || (!isBuy && orderType != ORDER_TYPE_SELL_LIMIT)) continue;
-        
-        double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
-        
-        // Check if order is within valid grid range
-        bool isInRange = (orderPrice >= rangeEnd && orderPrice <= rangeStart);
-        
-        // Check if order matches any target level
-        bool matchesTarget = false;
-        for(int j = 0; j < actualOrderCount; j++)
-        {
-            if(MathAbs(orderPrice - targetLevels[j]) < gapPips * pip * 0.4)
-            {
-                levelOccupied[j] = true;
-                matchesTarget = true;
-                break;
-            }
-        }
-        
-        // DON'T delete orders that are in valid range - let them stay
-        // Only delete if order is completely outside the grid range
-        if(!isInRange)
-        {
-            trade.OrderDelete(ticket);
-            Print("[GRID] Deleted out-of-range ", isBuy ? "BUY" : "SELL", " order at ", orderPrice);
-        }
-        // If order is in range, mark the closest target level as occupied
-        // This prevents placing duplicate orders near existing ones
-        else
-        {
-            // Find closest target level and mark it occupied
-            double minDist = 999999;
-            int closestIdx = -1;
-            for(int j = 0; j < actualOrderCount; j++)
-            {
-                double dist = MathAbs(orderPrice - targetLevels[j]);
-                if(dist < minDist)
-                {
-                    minDist = dist;
-                    closestIdx = j;
-                }
-            }
-            if(closestIdx >= 0 && minDist < gapPips * pip * 0.8)
-            {
-                levelOccupied[closestIdx] = true;
-            }
-        }
+        if((isBuy && orderType == ORDER_TYPE_BUY_LIMIT) || (!isBuy && orderType == ORDER_TYPE_SELL_LIMIT))
+            currentTotal++;
     }
     
-    // Count current total (positions + pending orders) to respect limit
-    int currentTotal = isBuy ? totalBuyOrders : totalSellOrders;
-    
-    // Place missing orders at unoccupied levels (but don't exceed max limit)
-    for(int i = 0; i < actualOrderCount; i++)
+    // Place missing orders
+    for(int i = 0; i < maxOrders; i++)
     {
         if(levelOccupied[i]) continue;
+        if(currentTotal >= maxOrders) break;
         
-        // Check if we've reached max limit
-        if(currentTotal >= maxOrders)
-        {
-            Print("[GRID] Max ", isBuy ? "BUY" : "SELL", " orders reached (", currentTotal, "/", maxOrders, ")");
-            break;
-        }
+        // Validate level is within range
+        if(targetLevels[i] < rangeLow || targetLevels[i] > rangeHigh) continue;
         
-        // Check if level is within range
-        if(targetLevels[i] < rangeEnd || targetLevels[i] > rangeStart) continue;
-        
-        // Check if level is valid (below current for BUY, above for SELL)
+        // Validate level is valid for pending order
         if(isBuy && targetLevels[i] >= currentPrice) continue;
         if(!isBuy && targetLevels[i] <= currentPrice) continue;
+        
+        // Validate and normalize lot size
+        double lotToUse = LotSize;
+        double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+        double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+        double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+        if(minLot <= 0) minLot = 0.01;
+        if(maxLot <= 0) maxLot = 100.0;
+        if(lotStep <= 0) lotStep = 0.01;
+        lotToUse = MathFloor(lotToUse / lotStep) * lotStep;
+        lotToUse = MathMax(minLot, MathMin(maxLot, lotToUse));
         
         // Place order
         double tp = 0, sl = 0;
@@ -430,24 +553,26 @@ void ManageNormalGrid(bool isBuy)
         {
             tp = (BuyTakeProfitPips > 0) ? NormalizeDouble(targetLevels[i] + (BuyTakeProfitPips * pip), _Digits) : 0;
             sl = (BuyStopLossPips > 0) ? NormalizeDouble(targetLevels[i] - (BuyStopLossPips * pip), _Digits) : 0;
-            if(trade.BuyLimit(LotSize, targetLevels[i], _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
+            if(trade.BuyLimit(lotToUse, targetLevels[i], _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
-                currentTotal++; // Increment count after successful placement
-                AddToLog(StringFormat("BUY LIMIT @ %.2f | Lot: %.2f", targetLevels[i], LotSize), "OPEN_BUY");
+                currentTotal++;
+                levelOccupied[i] = true;
+                Print("[DYNAMIC GRID] Placed BUY at ", targetLevels[i], " | Lot: ", lotToUse);
+                AddToLog(StringFormat("BUY LIMIT @ %.2f | Lot: %.2f", targetLevels[i], lotToUse), "OPEN_BUY");
             }
         }
         else
         {
             tp = (SellTakeProfitPips > 0) ? NormalizeDouble(targetLevels[i] - (SellTakeProfitPips * pip), _Digits) : 0;
             sl = (SellStopLossPips > 0) ? NormalizeDouble(targetLevels[i] + (SellStopLossPips * pip), _Digits) : 0;
-            if(trade.SellLimit(LotSize, targetLevels[i], _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
+            if(trade.SellLimit(lotToUse, targetLevels[i], _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
-                currentTotal++; // Increment count after successful placement
-                AddToLog(StringFormat("SELL LIMIT @ %.2f | Lot: %.2f", targetLevels[i], LotSize), "OPEN_SELL");
+                currentTotal++;
+                levelOccupied[i] = true;
+                Print("[DYNAMIC GRID] Placed SELL at ", targetLevels[i], " | Lot: ", lotToUse);
+                AddToLog(StringFormat("SELL LIMIT @ %.2f | Lot: %.2f", targetLevels[i], lotToUse), "OPEN_SELL");
             }
         }
-        
-        Print("[GRID] Placed ", isBuy ? "BUY" : "SELL", " order at ", targetLevels[i], " (Total: ", currentTotal, "/", maxOrders, ")");
     }
 }
 
@@ -503,8 +628,8 @@ void ManageRecoveryGrid(bool isBuy)
         }
     }
     
-    // Count recovery orders
-    int recoveryCount = 0;
+    // Count recovery FILLED positions
+    int recoveryFilledCount = 0;
     for(int i = 0; i < PositionsTotal(); i++)
     {
         ulong ticket = PositionGetTicket(i);
@@ -517,14 +642,34 @@ void ManageRecoveryGrid(bool isBuy)
         {
             ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
             if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
-                recoveryCount++;
+                recoveryFilledCount++;
         }
     }
     
-    // Place recovery order if needed
-    if(recoveryCount < MaxRecoveryOrders && EnableRecovery)
+    // Count recovery PENDING orders
+    int recoveryPendingCount = 0;
+    for(int i = 0; i < OrdersTotal(); i++)
     {
-        // Find extreme position
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0)
+        {
+            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
+                recoveryPendingCount++;
+        }
+    }
+    
+    int totalRecoveryCount = recoveryFilledCount + recoveryPendingCount;
+    
+    // Place recovery order if needed (only 1 pending at a time, max total = MaxRecoveryOrders)
+    if(totalRecoveryCount < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery)
+    {
+        // Find extreme position (lowest BUY or highest SELL)
         double extremePrice = isBuy ? 999999 : 0;
         double extremeLot = LotSize;
         
@@ -548,40 +693,44 @@ void ManageRecoveryGrid(bool isBuy)
             }
         }
         
+        // Safety check - if no extreme found, skip
+        if((isBuy && extremePrice >= 999999) || (!isBuy && extremePrice <= 0)) return;
+        
         // Calculate recovery order price and lot
         double gapPips = isBuy ? BuyGapPips : SellGapPips;
         double recoveryPrice = isBuy ?
             NormalizeDouble(extremePrice - (gapPips * pip), _Digits) :
             NormalizeDouble(extremePrice + (gapPips * pip), _Digits);
         
-        double recoveryLot = NormalizeDouble(extremeLot * (1.0 + RecoveryLotIncrease / 100.0), 2);
+        // Validate recovery price is valid for pending order
+        double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
         
-        // Check if no order exists at this price
-        bool orderExists = false;
-        for(int i = 0; i < OrdersTotal(); i++)
-        {
-            ulong ticket = OrderGetTicket(i);
-            if(ticket <= 0) continue;
-            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-            
-            double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
-            if(MathAbs(orderPrice - recoveryPrice) < pip * 0.5)
-            {
-                orderExists = true;
-                break;
-            }
-        }
+        // BUY LIMIT must be below current price, SELL LIMIT must be above current price
+        if(isBuy && recoveryPrice >= currentPrice) return;
+        if(!isBuy && recoveryPrice <= currentPrice) return;
+        
+        double recoveryLot = extremeLot * (1.0 + RecoveryLotIncrease / 100.0);
+        
+        // Ensure lot is within broker limits and properly normalized
+        double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+        double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+        double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+        if(minLot <= 0) minLot = 0.01;
+        if(maxLot <= 0) maxLot = 100.0;
+        if(lotStep <= 0) lotStep = 0.01;
+        recoveryLot = MathFloor(recoveryLot / lotStep) * lotStep;
+        recoveryLot = MathMax(minLot, MathMin(maxLot, recoveryLot));
         
         // Place recovery order
-        if(!orderExists)
+        if(isBuy)
         {
-            if(isBuy)
-                trade.BuyLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_BUY");
-            else
-                trade.SellLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_SELL");
-            
-            Print("[RECOVERY] Placed ", isBuy ? "BUY" : "SELL", " order at ", recoveryPrice, " | Lot: ", recoveryLot);
+            if(trade.BuyLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_BUY"))
+                Print("[RECOVERY] Placed BUY order at ", recoveryPrice, " | Lot: ", recoveryLot, " | Total: ", totalRecoveryCount + 1);
+        }
+        else
+        {
+            if(trade.SellLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_SELL"))
+                Print("[RECOVERY] Placed SELL order at ", recoveryPrice, " | Lot: ", recoveryLot, " | Total: ", totalRecoveryCount + 1);
         }
     }
 }
@@ -736,11 +885,12 @@ void UpdateInfoPanel()
     
     int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
     
-    // Calculate statistics
+    // Calculate statistics - count ALL positions for display
     double buyAvgPrice = 0, sellAvgPrice = 0;
     double buyTotalLots = 0, sellTotalLots = 0;
     double buyWeightedPrice = 0, sellWeightedPrice = 0;
     double buyTotalProfit = 0, sellTotalProfit = 0;
+    int actualBuyCount = 0, actualSellCount = 0;
     
     for(int i = 0; i < PositionsTotal(); i++)
     {
@@ -759,12 +909,14 @@ void UpdateInfoPanel()
             buyWeightedPrice += openPrice * lots;
             buyTotalLots += lots;
             buyTotalProfit += profit;
+            actualBuyCount++;
         }
         else
         {
             sellWeightedPrice += openPrice * lots;
             sellTotalLots += lots;
             sellTotalProfit += profit;
+            actualSellCount++;
         }
     }
     
@@ -829,8 +981,8 @@ void UpdateInfoPanel()
     ObjectSetString(0, "EA_SellMode", OBJPROP_FONT, "Arial Bold");
     sellYPos += 16;
     
-    // SELL Count & Lots
-    string sellCountInfo = StringFormat("Orders: %d / %d | Lots: %.2f", currentSellPositions, MaxSellOrders, sellTotalLots);
+    // SELL Count & Lots (show actual count, not recovery-adjusted count)
+    string sellCountInfo = StringFormat("Positions: %d | Lots: %.2f", actualSellCount, sellTotalLots);
     ObjectCreate(0, "EA_SellCount", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_SellCount", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_SellCount", OBJPROP_XDISTANCE, 10);
@@ -905,8 +1057,8 @@ void UpdateInfoPanel()
     ObjectSetString(0, "EA_BuyMode", OBJPROP_FONT, "Arial Bold");
     buyYPos += 16;
     
-    // BUY Count & Lots
-    string buyCountInfo = StringFormat("Orders: %d / %d | Lots: %.2f", currentBuyPositions, MaxBuyOrders, buyTotalLots);
+    // BUY Count & Lots (show actual count, not recovery-adjusted count)
+    string buyCountInfo = StringFormat("Positions: %d | Lots: %.2f", actualBuyCount, buyTotalLots);
     ObjectCreate(0, "EA_BuyCount", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_BuyCount", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_BuyCount", OBJPROP_XDISTANCE, rightX);
@@ -1321,7 +1473,7 @@ void UpdateLicensePanel()
     ObjectSetInteger(0, "EA_LicenseURL", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
     ObjectSetInteger(0, "EA_LicenseURL", OBJPROP_XDISTANCE, rightX);
     ObjectSetInteger(0, "EA_LicenseURL", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_LicenseURL", OBJPROP_TEXT, "https:www.markstrades.com");
+    ObjectSetString(0, "EA_LicenseURL", OBJPROP_TEXT, "https://www.markstrades.com");
     ObjectSetInteger(0, "EA_LicenseURL", OBJPROP_COLOR, clrGold);
     ObjectSetInteger(0, "EA_LicenseURL", OBJPROP_FONTSIZE, 9);
     ObjectSetString(0, "EA_LicenseURL", OBJPROP_FONT, "Arial Bold");
