@@ -465,14 +465,14 @@ export default function Home() {
             </div>
           </div>
           
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-12">
+          <div className="flex flex-col lg:flex-row max-sm:items-center justify-between gap-12">
             
             {/* Left Side - Text Content */}
             <div className="flex-1 text-center lg:text-left max-w-2xl">
               {/* Main Content */}
               <div>
               {/* AI Badge */}
-              <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-black/50 border border-cyan-500/50 rounded-full px-3 sm:px-5 py-1.5 sm:py-2 mb-4 sm:mb-6 backdrop-blur-md">
+              <div className="inline-flex items-center sm:mt-24 gap-1.5 sm:gap-2 bg-black/50 border border-cyan-500/50 rounded-full px-3 sm:px-5 py-1.5 sm:py-2 mb-4 sm:mb-6 backdrop-blur-md">
                 <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400 animate-pulse" />
                 <span className="text-cyan-300 text-[10px] sm:text-sm tracking-wider" style={{ fontFamily: 'Orbitron, sans-serif' }}>POWERED BY AI</span>
               </div>
@@ -519,10 +519,8 @@ export default function Home() {
                 </button>
               </div>
               
-              </div>
-              
-              {/* Stats Row - Full Width */}
-              <div className="w-full grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:justify-center lg:justify-start sm:gap-6 md:gap-8 py-3 sm:py-4 px-3 sm:px-6 bg-black/30 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-cyan-500/20">
+              {/* Stats Row */}
+              <div className="w-full grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:justify-center lg:justify-start sm:gap-6 md:gap-8 py-3 sm:py-4 px-3 sm:px-6 bg-black/30 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-cyan-500/20 mt-4 sm:mt-6">
                 <div className="text-center">
                   <div className="text-lg sm:text-2xl md:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>99.2%</div>
                   <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Accuracy</div>
@@ -539,6 +537,7 @@ export default function Home() {
                   <div className="text-lg sm:text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>5000+</div>
                   <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Traders</div>
                 </div>
+              </div>
               </div>
             </div>
             
@@ -600,9 +599,6 @@ export default function Home() {
             </div>
           </div>
         </div>
-        
-      
-        
       </div>
 
       {/* Main Content Section */}
