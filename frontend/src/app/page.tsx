@@ -414,77 +414,65 @@ export default function Home() {
         </div>
       )}
 
-      {/* Navigation - Mobile Optimized with 2 Rows */}
-      <nav className="relative z-10 container mx-auto px-3 sm:px-4 py-3 sm:py-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-0">
-          
-          {/* Row 1: Logo + Login/Dashboard */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
-              </div>
-              <span className="text-sm sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+      {/* Navigation - Mobile Optimized */}
+      <nav className="relative z-10 container mx-auto px-3 sm:px-4 py-4 sm:py-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+              <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
             </div>
-            
-            {/* Right side buttons - visible on all screens */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              {isLoggedIn ? (
-                <>
-                  <button onClick={() => router.push('/dashboard')} className="px-3 sm:px-5 py-1.5 sm:py-2 text-xs sm:text-sm bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                    Dashboard
-                  </button>
-                  <button 
-                    onClick={handleLogout} 
-                    className="p-1.5 sm:p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all border border-red-500/30"
-                    title="Logout"
-                  >
-                    <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button onClick={() => setShowLoginModal(true)} className="px-2 sm:px-4 py-1.5 sm:py-2 text-cyan-400 hover:text-cyan-300 font-medium transition-all text-xs sm:text-sm border border-cyan-500/30 rounded-lg hover:bg-cyan-500/10">
-                    Login
-                  </button>
-                  <button onClick={() => setShowRegisterModal(true)} className="px-3 sm:px-6 py-1.5 sm:py-2 text-xs sm:text-base bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all">
-                    Get Started
-                  </button>
-                </>
-              )}
-            </div>
+            <span className="text-sm sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
           </div>
           
-          {/* Row 2: Menu Items - Full width on mobile, center on desktop */}
-          <div className="flex items-center justify-between md:justify-center gap-2 md:gap-6">
+          {/* Center Menu - Desktop */}
+          <div className="hidden md:flex items-center gap-6">
             <button 
               onClick={() => router.push('/demo')}
-              className="flex-1 md:flex-none text-center py-2 md:py-0 text-gray-300 hover:text-cyan-400 text-[10px] md:text-sm font-medium transition-all border border-cyan-500/30 md:border-0 rounded-lg md:rounded-none hover:bg-cyan-500/10 md:hover:bg-transparent"
+              className="text-gray-300 hover:text-cyan-400 text-sm font-medium transition-all"
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
               Demo
             </button>
             <button 
               onClick={() => router.push('/guideline')}
-              className="flex-1 md:flex-none text-center py-2 md:py-0 text-gray-300 hover:text-cyan-400 text-[10px] md:text-sm font-medium transition-all border border-cyan-500/30 md:border-0 rounded-lg md:rounded-none hover:bg-cyan-500/10 md:hover:bg-transparent"
+              className="text-gray-300 hover:text-cyan-400 text-sm font-medium transition-all"
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
               Guidelines
             </button>
             <button 
-              onClick={() => {
-                const pricingEl = document.getElementById('pricing');
-                if (pricingEl) {
-                  const offset = 100; // Account for header height
-                  const elementPosition = pricingEl.getBoundingClientRect().top + window.pageYOffset;
-                  window.scrollTo({ top: elementPosition - offset, behavior: 'smooth' });
-                }
-              }}
-              className="flex-1 md:flex-none text-center py-2 md:py-0 text-gray-300 hover:text-cyan-400 text-[10px] md:text-sm font-medium transition-all border border-cyan-500/30 md:border-0 rounded-lg md:rounded-none hover:bg-cyan-500/10 md:hover:bg-transparent"
+              onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
+              className="text-gray-300 hover:text-cyan-400 text-sm font-medium transition-all"
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
               Pricing
             </button>
+          </div>
+          
+          <div className="flex items-center gap-2 sm:gap-3">
+            {isLoggedIn ? (
+              <>
+                <button onClick={() => router.push('/dashboard')} className="px-3 sm:px-5 py-1.5 sm:py-2 text-xs sm:text-sm bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  Dashboard
+                </button>
+                <button 
+                  onClick={handleLogout} 
+                  className="p-1.5 sm:p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all border border-red-500/30"
+                  title="Logout"
+                >
+                  <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setShowLoginModal(true)} className="px-2 sm:px-4 py-1.5 sm:py-2 text-cyan-400 hover:text-cyan-300 font-medium transition-all text-xs sm:text-sm border border-cyan-500/30 rounded-lg hover:bg-cyan-500/10">
+                  Login
+                </button>
+                <button onClick={() => setShowRegisterModal(true)} className="px-3 sm:px-6 py-1.5 sm:py-2 text-xs sm:text-base bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all">
+                  Get Started
+                </button>
+              </>
+            )}
           </div>
         </div>
       </nav>
