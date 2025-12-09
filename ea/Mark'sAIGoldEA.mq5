@@ -79,9 +79,6 @@ double    RecoveryInitialSLPips     = 2.0;
 int       MagicNumber       = 999888;
 string    OrderComment      = "MarksAI";
 
-//--- Demo/Trial Mode (VISIBLE - User can enable for testing)
-input bool    EnableDemoMode = true;  // Enable Demo Mode (No License Required)
-
 //--- Server URL (Hidden from user)
 string    LicenseServer     = "https://markstrades.com";
 
@@ -93,10 +90,6 @@ string g_PlanName = "";
 datetime g_LastVerification = 0;
 datetime g_LastLicenseCheck = 0;
 int LICENSE_CHECK_INTERVAL = 3600; // Check license every hour (3600 seconds)
-
-//--- Demo Mode Tracking
-datetime g_DemoStartTime = 0;
-int g_DemoTradesCount = 0;
 
 //--- Global Variables
 double pip = 1.0;
@@ -609,22 +602,10 @@ void CreateLicenseLabel()
         
         // Status Line
         color daysColor = clrLime;
-        string statusLine = "";
+        if(g_DaysRemaining <= 7) daysColor = clrOrange;
+        if(g_DaysRemaining <= 3) daysColor = clrRed;
         
-        if(EnableDemoMode)
-        {
-            // Demo mode display
-            statusLine = "DEMO MODE | Full Features | No License";
-            daysColor = clrCyan;
-        }
-        else
-        {
-            // Licensed mode display
-            if(g_DaysRemaining <= 7) daysColor = clrOrange;
-            if(g_DaysRemaining <= 3) daysColor = clrRed;
-            statusLine = "ACTIVE | " + g_PlanName + " | " + IntegerToString(g_DaysRemaining) + "d";
-        }
-        
+        string statusLine = "ACTIVE | " + g_PlanName + " | " + IntegerToString(g_DaysRemaining) + "d";
         ObjectCreate(0, "EA_LicenseStatus", OBJ_LABEL, 0, 0, 0);
         ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
         ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_XDISTANCE, xPos);
@@ -744,38 +725,20 @@ int OnInit()
     Print("Symbol: ", symbolName, " | Digits: ", digits, " | Pip Value: ", DoubleToString(pip, digits));
     Print("Example: 1 pip movement = ", DoubleToString(pip, digits), " price change");
     
-    // === LICENSE VERIFICATION ===
-    if(EnableDemoMode)
+    // === MANDATORY LICENSE VERIFICATION ===
+    Print("=== Verifying License ===");
+    
+    if(!VerifyLicense())
     {
-        // DEMO MODE - No license required
-        Print("=== DEMO MODE ENABLED ===");
-        Print("EA running in DEMO mode - No license verification");
-        Print("Demo mode allows full functionality for testing");
-        g_LicenseValid = true;
-        g_LicenseMessage = "DEMO MODE";
-        g_PlanName = "Demo";
-        g_DaysRemaining = 999;
-        g_DemoStartTime = TimeCurrent();
-        g_DemoTradesCount = 0;
+        Print("LICENSE ERROR: ", g_LicenseMessage);
+        Alert("License Error: ", g_LicenseMessage);
         CreateLicenseLabel();
+        return(INIT_FAILED);
     }
-    else
-    {
-        // LICENSED MODE - Verify license
-        Print("=== Verifying License ===");
-        
-        if(!VerifyLicense())
-        {
-            Print("LICENSE ERROR: ", g_LicenseMessage);
-            Alert("License Error: ", g_LicenseMessage);
-            CreateLicenseLabel();
-            return(INIT_FAILED);
-        }
-        
-        Print("LICENSE VERIFIED: ", g_LicenseMessage);
-        CreateLicenseLabel();
-        g_LastLicenseCheck = TimeCurrent();
-    }
+    
+    Print("LICENSE VERIFIED: ", g_LicenseMessage);
+    CreateLicenseLabel();
+    g_LastLicenseCheck = TimeCurrent();
     // === END LICENSE VERIFICATION ===
     
     // Validate input parameters first
@@ -940,31 +903,28 @@ void OnTick()
     bool isTesting = MQLInfoInteger(MQL_TESTER);
     
     // === PERIODIC LICENSE CHECK ===
-    if(!EnableDemoMode) // Skip license check in demo mode
+    if(TimeCurrent() - g_LastLicenseCheck > LICENSE_CHECK_INTERVAL)
     {
-        if(TimeCurrent() - g_LastLicenseCheck > LICENSE_CHECK_INTERVAL)
+        g_LastLicenseCheck = TimeCurrent();
+        Print("=== Periodic License Check ===");
+        
+        if(!VerifyLicense())
         {
-            g_LastLicenseCheck = TimeCurrent();
-            Print("=== Periodic License Check ===");
-            
-            if(!VerifyLicense())
-            {
-                g_LicenseValid = false;
-                Print("LICENSE EXPIRED OR INVALID: ", g_LicenseMessage);
-                CreateLicenseLabel();
-                Comment("LICENSE EXPIRED - EA STOPPED\n", g_LicenseMessage);
-                return; // Stop processing
-            }
-            
+            g_LicenseValid = false;
+            Print("LICENSE EXPIRED OR INVALID: ", g_LicenseMessage);
             CreateLicenseLabel();
+            Comment("LICENSE EXPIRED - EA STOPPED\n", g_LicenseMessage);
+            return; // Stop processing
         }
         
-        // === CHECK LICENSE BEFORE TRADING ===
-        if(!g_LicenseValid)
-        {
-            Comment("LICENSE INVALID - EA STOPPED\n", g_LicenseMessage);
-            return; // Don't trade if license invalid
-        }
+        CreateLicenseLabel();
+    }
+    
+    // === CHECK LICENSE BEFORE TRADING ===
+    if(!g_LicenseValid)
+    {
+        Comment("LICENSE INVALID - EA STOPPED\n", g_LicenseMessage);
+        return; // Don't trade if license invalid
     }
     
     // Count current positions
