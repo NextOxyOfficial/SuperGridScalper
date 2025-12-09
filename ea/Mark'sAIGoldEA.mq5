@@ -70,10 +70,10 @@ int       MaxSellBERecoveryOrders   = 30;
 
 //--- Recovery Mode Trailing Settings (HIDDEN)
 double    RecoveryTakeProfitPips    = 100.0;
-double    RecoveryTrailingStartPips = 4.0;
+double    RecoveryTrailingStartPips = 3.0;
 double    RecoveryTrailingRatio     = 0.5;
 double    RecoveryMaxSLDistance     = 12.0;
-double    RecoveryInitialSLPips     = 3.0;
+double    RecoveryInitialSLPips     = 2.0;
 
 //--- EA Settings (HIDDEN)
 int       MagicNumber       = 999888;
@@ -108,6 +108,10 @@ int prevSellCount = 0;
 // Breakeven Recovery tracking
 double nextBuyBERecoveryPrice = 0;
 double nextSellBERecoveryPrice = 0;
+
+// Average prices for recovery mode trailing (calculated in ApplyBreakevenTP)
+double buyAvgPrice = 0;
+double sellAvgPrice = 0;
 
 // Trading Log (keeps last 100 entries, oldest auto-deleted)
 #define MAX_LOG_ENTRIES 100
@@ -1005,16 +1009,18 @@ void OnTick()
         CheckBERecoveryOrders();
     }
     
-    // Apply trailing stop to positions
-    // Normal Mode: Uses individual BUY/SELL trailing settings
-    // Recovery Mode: Uses Recovery trailing settings
-    ApplyTrailingStop();
-    
     // Apply breakeven TP (only in recovery mode)
+    // This must be called BEFORE ApplyTrailingStop to set TP first
     if(buyInRecovery || sellInRecovery)
     {
         ApplyBreakevenTP();
     }
+    
+    // Apply trailing stop to positions
+    // Normal Mode: Uses individual BUY/SELL trailing settings
+    // Recovery Mode: Uses Recovery trailing settings
+    // This is called AFTER ApplyBreakevenTP so trailing SL is applied correctly
+    ApplyTrailingStop();
     
     // Update on-screen display
     UpdateInfoPanel();
@@ -1090,6 +1096,7 @@ void CountOpenPositions()
 
 //+------------------------------------------------------------------+
 //| Manage BUY Pending Orders Grid (Normal Mode Only)                 |
+//| DYNAMIC GRID: Orders update with market price movement            |
 //+------------------------------------------------------------------+
 void ManageBuyPendingGrid()
 {
@@ -1120,6 +1127,68 @@ void ManageBuyPendingGrid()
         Print("=== BUY NORMAL MODE ===");
         Print("Bid=", bidPrice, " | BuyRange=", buyEnd, "-", buyStart, " | InRange=", buyInRange ? "YES" : "NO");
         Print("BuyPos=", currentBuyCount, "/", MaxBuyOrders, " | BuyPending=", buyLimitCount);
+    }
+    
+    // DYNAMIC GRID UPDATE: Modify existing pending orders if price moved significantly
+    // This keeps grid orders always at fixed distance from current price
+    int ordTotal = OrdersTotal();
+    for(int i = ordTotal - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        if((ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE) != ORDER_TYPE_BUY_LIMIT) continue;
+        
+        double currentOrderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
+        
+        // Calculate what the order price SHOULD be based on current market
+        // Find the grid level this order should be at
+        double priceDiffFromBid = bidPrice - currentOrderPrice;
+        int gridLevel = (int)MathRound(priceDiffFromBid / buyGapPrice);
+        
+        // Only update if grid level is valid (1 to MaxBuyOrders)
+        if(gridLevel >= 1 && gridLevel <= MaxBuyOrders)
+        {
+            double targetOrderPrice = NormalizeDouble(bidPrice - (gridLevel * buyGapPrice), digits);
+            
+            // Only modify if price difference is significant (more than half a gap)
+            if(MathAbs(targetOrderPrice - currentOrderPrice) > buyGapPrice * 0.5)
+            {
+                // Check if target price is within range and no position/order exists there
+                if(targetOrderPrice >= buyEnd && targetOrderPrice <= buyStart)
+                {
+                    if(!PositionExistsAtPrice(targetOrderPrice, POSITION_TYPE_BUY) &&
+                       !OrderExistsAtPrice(targetOrderPrice, ORDER_TYPE_BUY_LIMIT))
+                    {
+                        double sl = (BuyStopLossPips > 0) ? NormalizeDouble(targetOrderPrice - (BuyStopLossPips * pip), digits) : 0;
+                        double tp = (BuyTakeProfitPips > 0) ? NormalizeDouble(targetOrderPrice + (BuyTakeProfitPips * pip), digits) : 0;
+                        
+                        // Modify the order to new price
+                        if(trade.OrderModify(ticket, targetOrderPrice, sl, tp, ORDER_TIME_GTC, 0))
+                        {
+                            Print("[DYNAMIC GRID] BUY order #", ticket, " updated: ", 
+                                  DoubleToString(currentOrderPrice, digits), " -> ", DoubleToString(targetOrderPrice, digits));
+                        }
+                    }
+                    else
+                    {
+                        // Target price already has order/position, delete this duplicate
+                        trade.OrderDelete(ticket);
+                    }
+                }
+                else
+                {
+                    // Order moved out of range, delete it
+                    trade.OrderDelete(ticket);
+                }
+            }
+        }
+        else if(gridLevel > MaxBuyOrders || priceDiffFromBid < 0)
+        {
+            // Order is too far or above current price, delete it
+            trade.OrderDelete(ticket);
+        }
     }
     
     if(buyHasRoom && buyInRange)
@@ -1191,6 +1260,7 @@ void ManageBuyPendingGrid()
 
 //+------------------------------------------------------------------+
 //| Manage SELL Pending Orders Grid (Normal Mode Only)                |
+//| DYNAMIC GRID: Orders update with market price movement            |
 //+------------------------------------------------------------------+
 void ManageSellPendingGrid()
 {
@@ -1221,6 +1291,68 @@ void ManageSellPendingGrid()
         Print("=== SELL NORMAL MODE ===");
         Print("Ask=", askPrice, " | SellRange=", sellStart, "-", sellEnd, " | InRange=", sellInRange ? "YES" : "NO");
         Print("SellPos=", currentSellCount, "/", MaxSellOrders, " | SellPending=", sellLimitCount);
+    }
+    
+    // DYNAMIC GRID UPDATE: Modify existing pending orders if price moved significantly
+    // This keeps grid orders always at fixed distance from current price
+    int ordTotal = OrdersTotal();
+    for(int i = ordTotal - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        if((ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE) != ORDER_TYPE_SELL_LIMIT) continue;
+        
+        double currentOrderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
+        
+        // Calculate what the order price SHOULD be based on current market
+        // Find the grid level this order should be at
+        double priceDiffFromAsk = currentOrderPrice - askPrice;
+        int gridLevel = (int)MathRound(priceDiffFromAsk / sellGapPrice);
+        
+        // Only update if grid level is valid (1 to MaxSellOrders)
+        if(gridLevel >= 1 && gridLevel <= MaxSellOrders)
+        {
+            double targetOrderPrice = NormalizeDouble(askPrice + (gridLevel * sellGapPrice), digits);
+            
+            // Only modify if price difference is significant (more than half a gap)
+            if(MathAbs(targetOrderPrice - currentOrderPrice) > sellGapPrice * 0.5)
+            {
+                // Check if target price is within range and no position/order exists there
+                if(targetOrderPrice >= sellStart && targetOrderPrice <= sellEnd)
+                {
+                    if(!PositionExistsAtPrice(targetOrderPrice, POSITION_TYPE_SELL) &&
+                       !OrderExistsAtPrice(targetOrderPrice, ORDER_TYPE_SELL_LIMIT))
+                    {
+                        double sl = (SellStopLossPips > 0) ? NormalizeDouble(targetOrderPrice + (SellStopLossPips * pip), digits) : 0;
+                        double tp = (SellTakeProfitPips > 0) ? NormalizeDouble(targetOrderPrice - (SellTakeProfitPips * pip), digits) : 0;
+                        
+                        // Modify the order to new price
+                        if(trade.OrderModify(ticket, targetOrderPrice, sl, tp, ORDER_TIME_GTC, 0))
+                        {
+                            Print("[DYNAMIC GRID] SELL order #", ticket, " updated: ", 
+                                  DoubleToString(currentOrderPrice, digits), " -> ", DoubleToString(targetOrderPrice, digits));
+                        }
+                    }
+                    else
+                    {
+                        // Target price already has order/position, delete this duplicate
+                        trade.OrderDelete(ticket);
+                    }
+                }
+                else
+                {
+                    // Order moved out of range, delete it
+                    trade.OrderDelete(ticket);
+                }
+            }
+        }
+        else if(gridLevel > MaxSellOrders || priceDiffFromAsk < 0)
+        {
+            // Order is too far or below current price, delete it
+            trade.OrderDelete(ticket);
+        }
     }
     
     if(sellHasRoom && sellInRange)
@@ -2038,18 +2170,42 @@ void ApplyTrailingStop()
             }
         }
         
-        // Calculate profit in pips (price difference / pip value)
+        // Calculate profit in pips
+        // RECOVERY MODE: Use profit from AVERAGE BREAKEVEN price (not individual position)
+        // NORMAL MODE: Use profit from individual position open price
         double profitPips = 0;
         double priceDiff = 0;
-        if(posType == POSITION_TYPE_BUY)
+        
+        if(isRecoveryMode)
         {
-            priceDiff = currentPrice - openPrice;
-            profitPips = priceDiff / pip;
+            // In recovery mode, calculate profit from average breakeven price
+            double avgPrice = 0;
+            if(posType == POSITION_TYPE_BUY)
+            {
+                avgPrice = buyAvgPrice; // Use global average
+                priceDiff = currentPrice - avgPrice;
+                profitPips = priceDiff / pip;
+            }
+            else
+            {
+                avgPrice = sellAvgPrice; // Use global average
+                priceDiff = avgPrice - currentPrice;
+                profitPips = priceDiff / pip;
+            }
         }
         else
         {
-            priceDiff = openPrice - currentPrice;
-            profitPips = priceDiff / pip;
+            // Normal mode: use individual position profit
+            if(posType == POSITION_TYPE_BUY)
+            {
+                priceDiff = currentPrice - openPrice;
+                profitPips = priceDiff / pip;
+            }
+            else
+            {
+                priceDiff = openPrice - currentPrice;
+                profitPips = priceDiff / pip;
+            }
         }
         
         // Debug trailing every 30 seconds
@@ -2073,12 +2229,16 @@ void ApplyTrailingStop()
             
             if(posType == POSITION_TYPE_BUY)
             {
-                // For BUY: Initial SL at entry + InitialSLPips when profit reaches TrailingStartPips
-                double priceMovement = currentPrice - (openPrice + (trailingStartPips * pip));
+                // For BUY: Initial SL calculation
+                // Recovery Mode: Use average breakeven price as base
+                // Normal Mode: Use individual position open price as base
+                double basePrice = isRecoveryMode ? buyAvgPrice : openPrice;
+                
+                double priceMovement = currentPrice - (basePrice + (trailingStartPips * pip));
                 if(priceMovement < 0) priceMovement = 0;
                 
                 double slMovement = priceMovement * trailingRatio;
-                newSL = openPrice + (initialSLPips * pip) + slMovement;
+                newSL = basePrice + (initialSLPips * pip) + slMovement;
                 
                 // Enforce maximum SL distance from current price
                 double minAllowedSL = currentPrice - (maxSLDistance * pip);
@@ -2093,12 +2253,16 @@ void ApplyTrailingStop()
             }
             else // SELL
             {
-                // For SELL: Initial SL at entry - InitialSLPips when profit reaches TrailingStartPips
-                double priceMovement = (openPrice - (trailingStartPips * pip)) - currentPrice;
+                // For SELL: Initial SL calculation
+                // Recovery Mode: Use average breakeven price as base
+                // Normal Mode: Use individual position open price as base
+                double basePrice = isRecoveryMode ? sellAvgPrice : openPrice;
+                
+                double priceMovement = (basePrice - (trailingStartPips * pip)) - currentPrice;
                 if(priceMovement < 0) priceMovement = 0;
                 
                 double slMovement = priceMovement * trailingRatio;
-                newSL = openPrice - (initialSLPips * pip) - slMovement;
+                newSL = basePrice - (initialSLPips * pip) - slMovement;
                 
                 // Enforce maximum SL distance from current price
                 double maxAllowedSL = currentPrice + (maxSLDistance * pip);
@@ -2343,7 +2507,7 @@ void ApplyBreakevenTP()
     // Calculate breakeven TP for BUY positions - ONLY if max orders reached
     if(buyCount >= MaxBuyOrders && buyTotalLots > 0)
     {
-        double buyAvgPrice = buyWeightedPrice / buyTotalLots;
+        buyAvgPrice = buyWeightedPrice / buyTotalLots; // Store in global variable for trailing
         double buyBreakevenTP = NormalizeDouble(buyAvgPrice + (RecoveryTakeProfitPips * pip), digits);
         
         // Apply to all BUY positions
@@ -2372,11 +2536,16 @@ void ApplyBreakevenTP()
             }
         }
     }
+    else
+    {
+        // Not in BUY recovery mode - reset average
+        buyAvgPrice = 0;
+    }
     
     // Calculate breakeven TP for SELL positions - ONLY if max orders reached
     if(sellCount >= MaxSellOrders && sellTotalLots > 0)
     {
-        double sellAvgPrice = sellWeightedPrice / sellTotalLots;
+        sellAvgPrice = sellWeightedPrice / sellTotalLots; // Store in global variable for trailing
         double sellBreakevenTP = NormalizeDouble(sellAvgPrice - (RecoveryTakeProfitPips * pip), digits);
         
         // Apply to all SELL positions
@@ -2404,6 +2573,11 @@ void ApplyBreakevenTP()
                 }
             }
         }
+    }
+    else
+    {
+        // Not in SELL recovery mode - reset average
+        sellAvgPrice = 0;
     }
 }
 
