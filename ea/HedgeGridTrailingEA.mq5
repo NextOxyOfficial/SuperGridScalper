@@ -109,8 +109,8 @@ int prevSellCount = 0;
 double nextBuyBERecoveryPrice = 0;
 double nextSellBERecoveryPrice = 0;
 
-// Trading Log
-#define MAX_LOG_ENTRIES 10
+// Trading Log (keeps last 100 entries, oldest auto-deleted)
+#define MAX_LOG_ENTRIES 100
 string g_TradingLog[MAX_LOG_ENTRIES];
 int g_LogCount = 0;
 
@@ -373,7 +373,7 @@ void SendTradeDataToServer()
     // Determine trading mode
     bool buyInRecovery = (EnableBuyBERecovery && currentBuyCount >= MaxBuyOrders);
     bool sellInRecovery = (EnableSellBERecovery && currentSellCount >= MaxSellOrders);
-    string tradingMode = "Normal";
+    string tradingMode = "Normal Mode Running";
     if(buyInRecovery && sellInRecovery) tradingMode = "Buy & Sell Recovery Mode Activated!";
     else if(buyInRecovery) tradingMode = "Buy Recovery Mode Activated!";
     else if(sellInRecovery) tradingMode = "Sell Recovery Mode Activated!";
@@ -946,20 +946,75 @@ void OnTick()
     prevBuyCount = currentBuyCount;
     prevSellCount = currentSellCount;
     
-    // Manage pending orders grid (Buy Limit / Sell Limit)
-    ManagePendingGrid();
+    // Check if in recovery mode
+    bool buyInRecovery = (EnableBuyBERecovery && currentBuyCount >= MaxBuyOrders);
+    bool sellInRecovery = (EnableSellBERecovery && currentSellCount >= MaxSellOrders);
+    
+    // Track mode changes and log them
+    static bool prevBuyInRecovery = false;
+    static bool prevSellInRecovery = false;
+    
+    if(buyInRecovery != prevBuyInRecovery)
+    {
+        if(buyInRecovery)
+            AddToLog("BUY RECOVERY MODE ACTIVATED! Max orders reached.", "MODE_CHANGE");
+        else
+            AddToLog("BUY NORMAL MODE RESUMED. Recovery completed.", "MODE_CHANGE");
+        prevBuyInRecovery = buyInRecovery;
+    }
+    
+    if(sellInRecovery != prevSellInRecovery)
+    {
+        if(sellInRecovery)
+            AddToLog("SELL RECOVERY MODE ACTIVATED! Max orders reached.", "MODE_CHANGE");
+        else
+            AddToLog("SELL NORMAL MODE RESUMED. Recovery completed.", "MODE_CHANGE");
+        prevSellInRecovery = sellInRecovery;
+    }
+    
+    // ===== MODE-BASED PENDING ORDER MANAGEMENT =====
+    // Normal Mode: Place grid pending orders
+    // Recovery Mode: Delete normal pending orders, place only 1 recovery pending order
+    
+    if(!buyInRecovery)
+    {
+        // BUY Normal Mode - manage grid pending orders
+        ManageBuyPendingGrid();
+    }
+    else
+    {
+        // BUY Recovery Mode - delete normal pending orders (recovery orders handled separately)
+        DeletePendingOrders(ORDER_TYPE_BUY_LIMIT);
+    }
+    
+    if(!sellInRecovery)
+    {
+        // SELL Normal Mode - manage grid pending orders
+        ManageSellPendingGrid();
+    }
+    else
+    {
+        // SELL Recovery Mode - delete normal pending orders (recovery orders handled separately)
+        DeletePendingOrders(ORDER_TYPE_SELL_LIMIT);
+    }
     
     // Check breakeven recovery orders (after max trades hit)
+    // This places only 1 recovery pending order at a time
     if(EnableBuyBERecovery || EnableSellBERecovery)
     {
         CheckBERecoveryOrders();
     }
     
-    // Apply trailing stop to positions (regular orders)
+    // Apply trailing stop to positions
+    // Normal Mode: Uses individual BUY/SELL trailing settings
+    // Recovery Mode: Uses Recovery trailing settings
     ApplyTrailingStop();
     
-    // Apply breakeven TP (now handled by recovery trailing)
-    ApplyBreakevenTP();
+    // Apply breakeven TP (only in recovery mode)
+    if(buyInRecovery || sellInRecovery)
+    {
+        ApplyBreakevenTP();
+    }
     
     // Update on-screen display
     UpdateInfoPanel();
@@ -1034,20 +1089,16 @@ void CountOpenPositions()
 }
 
 //+------------------------------------------------------------------+
-//| Manage Pending Orders Grid                                        |
+//| Manage BUY Pending Orders Grid (Normal Mode Only)                 |
 //+------------------------------------------------------------------+
-void ManagePendingGrid()
+void ManageBuyPendingGrid()
 {
     double bidPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-    double askPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
     
     double buyGapPrice = BuyGapPips * pip;
-    double sellGapPrice = SellGapPips * pip;
     double buyStart = MathMax(BuyRangeStart, BuyRangeEnd);
     double buyEnd = MathMin(BuyRangeStart, BuyRangeEnd);
-    double sellStart = MathMin(SellRangeStart, SellRangeEnd);
-    double sellEnd = MathMax(SellRangeStart, SellRangeEnd);
     
     // Count existing pending orders
     int buyLimitCount = 0;
@@ -1056,22 +1107,19 @@ void ManagePendingGrid()
     
     // Total orders = positions + pending
     int totalBuyOrders = currentBuyCount + buyLimitCount;
-    int totalSellOrders = currentSellCount + sellLimitCount;
     
-    // ===== BUY LIMIT ORDERS =====
     // Only place if we have room and price is in range
     bool buyInRange = (bidPrice <= buyStart && bidPrice >= buyEnd);
     bool buyHasRoom = (currentBuyCount < MaxBuyOrders);
     
-    // Debug every 15 seconds
+    // Debug every 30 seconds
     static datetime lastDebug = 0;
-    if(TimeCurrent() - lastDebug > 15)
+    if(TimeCurrent() - lastDebug > 30)
     {
         lastDebug = TimeCurrent();
-        Print("=== ORDER CHECK ===");
+        Print("=== BUY NORMAL MODE ===");
         Print("Bid=", bidPrice, " | BuyRange=", buyEnd, "-", buyStart, " | InRange=", buyInRange ? "YES" : "NO");
-        Print("BuyPos=", currentBuyCount, "/", MaxBuyOrders, " | BuyPending=", buyLimitCount, " | HasRoom=", buyHasRoom ? "YES" : "NO");
-        Print("OrdersNeeded=", MaxBuyOrders - totalBuyOrders, " | Lot=", normalizedLotSize);
+        Print("BuyPos=", currentBuyCount, "/", MaxBuyOrders, " | BuyPending=", buyLimitCount);
     }
     
     if(buyHasRoom && buyInRange)
@@ -1135,24 +1183,47 @@ void ManagePendingGrid()
                         nextBuyPrice = buyLimitPrice;
                         placed++;
                     }
-                    else
-                    {
-                        AddToLog("BUY LIMIT FAILED @ " + DoubleToString(buyLimitPrice, digits) + " | Error: " + trade.ResultRetcodeDescription());
-                    }
                 }
             }
         }
     }
-    else if(currentBuyCount >= MaxBuyOrders)
+}
+
+//+------------------------------------------------------------------+
+//| Manage SELL Pending Orders Grid (Normal Mode Only)                |
+//+------------------------------------------------------------------+
+void ManageSellPendingGrid()
+{
+    double askPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+    
+    double sellGapPrice = SellGapPips * pip;
+    double sellStart = MathMin(SellRangeStart, SellRangeEnd);
+    double sellEnd = MathMax(SellRangeStart, SellRangeEnd);
+    
+    // Count existing pending orders
+    int buyLimitCount = 0;
+    int sellLimitCount = 0;
+    CountPendingOrders(buyLimitCount, sellLimitCount);
+    
+    // Total orders = positions + pending
+    int totalSellOrders = currentSellCount + sellLimitCount;
+    
+    // Only place if we have room and price is in range
+    bool sellInRange = (askPrice >= sellStart && askPrice <= sellEnd);
+    bool sellHasRoom = (currentSellCount < MaxSellOrders);
+    
+    // Debug every 30 seconds
+    static datetime lastDebugSell = 0;
+    if(TimeCurrent() - lastDebugSell > 30)
     {
-        // Max positions reached - delete any remaining buy limit orders
-        DeletePendingOrders(ORDER_TYPE_BUY_LIMIT);
-        nextBuyPrice = 0;
+        lastDebugSell = TimeCurrent();
+        Print("=== SELL NORMAL MODE ===");
+        Print("Ask=", askPrice, " | SellRange=", sellStart, "-", sellEnd, " | InRange=", sellInRange ? "YES" : "NO");
+        Print("SellPos=", currentSellCount, "/", MaxSellOrders, " | SellPending=", sellLimitCount);
     }
     
-    // ===== SELL LIMIT ORDERS =====
-    // Only place if we have room and price is in range
-    if(currentSellCount < MaxSellOrders && askPrice >= sellStart && askPrice <= sellEnd)
+    if(sellHasRoom && sellInRange)
     {
         int ordersNeeded = MaxSellOrders - totalSellOrders;
         
@@ -1213,23 +1284,10 @@ void ManagePendingGrid()
                         nextSellPrice = sellLimitPrice;
                         placed++;
                     }
-                    else
-                    {
-                        AddToLog("SELL LIMIT FAILED @ " + DoubleToString(sellLimitPrice, digits) + " | Error: " + trade.ResultRetcodeDescription());
-                    }
                 }
             }
         }
     }
-    else if(currentSellCount >= MaxSellOrders)
-    {
-        // Max positions reached - delete any remaining sell limit orders
-        DeletePendingOrders(ORDER_TYPE_SELL_LIMIT);
-        nextSellPrice = 0;
-    }
-    
-    // Modify existing orders to be at correct grid levels (instead of delete/recreate)
-    ModifyPendingOrdersToGrid(bidPrice, askPrice, buyGapPrice, sellGapPrice, digits);
 }
 
 //+------------------------------------------------------------------+

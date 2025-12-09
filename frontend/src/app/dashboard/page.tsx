@@ -33,12 +33,7 @@ export default function DashboardHome() {
 
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Scroll closed positions to bottom when tab changes or data updates
-  useEffect(() => {
-    if (positionsTab === 'closed' && closedPositionsRef.current) {
-      closedPositionsRef.current.scrollTop = closedPositionsRef.current.scrollHeight;
-    }
-  }, [positionsTab, tradeData?.closed_positions]);
+  // Keep closed positions scroll at top (latest positions shown first via reverse order)
 
   useEffect(() => {
     fetchPlans();
@@ -224,7 +219,7 @@ export default function DashboardHome() {
   if (selectedLicense) {
     const isRecoveryModeDetails = tradeData?.trading_mode?.toLowerCase().includes('recovery');
     return (
-      <div className="max-w-7xl mx-auto pt-3 sm:pt-5 px-2 sm:px-4 pb-6 sm:pb-8">
+      <div className="max-w-7xl mx-auto pt-3 sm:pt-5 px-0.5 sm:px-4 pb-6 sm:pb-8">
         <div className="space-y-3 sm:space-y-4">
           {/* Compact Header Bar */}
           <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg px-2 sm:px-4 py-2 flex items-center justify-between">
@@ -255,7 +250,7 @@ export default function DashboardHome() {
                     <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
                     <circle cx="12" cy="4" r="2" fill="currentColor" />
                   </svg>
-                  {tradeData?.trading_mode || 'Normal'}
+                  {tradeData?.trading_mode === 'Normal' ? 'Normal Mode Running' : (tradeData?.trading_mode || 'Normal Mode Running')}
                 </span>
               )}
               <span className="text-[10px] sm:text-xs text-gray-500">
@@ -512,7 +507,7 @@ export default function DashboardHome() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-800">
-                          {tradeData.closed_positions.slice(0, 100).map((pos: any, idx: number) => (
+                          {[...tradeData.closed_positions].reverse().slice(0, 100).map((pos: any, idx: number) => (
                             <tr key={pos.ticket || idx} className="hover:bg-white/5">
                               <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 font-mono text-[10px] sm:text-xs text-gray-400">{pos.ticket}</td>
                               <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs text-yellow-400 font-medium">{pos.symbol || '-'}</td>
@@ -847,7 +842,7 @@ export default function DashboardHome() {
             const totalPositions = (licTradeData?.total_buy_positions || 0) + (licTradeData?.total_sell_positions || 0);
             const isConnected = licTradeData && licTradeData.last_update && 
               (Math.abs(new Date().getTime() - new Date(licTradeData.last_update).getTime()) / 1000) < 15;
-            const tradingMode = licTradeData?.trading_mode || 'Normal';
+            const tradingMode = licTradeData?.trading_mode;
             const isRecoveryMode = tradingMode?.toLowerCase().includes('recovery');
             
             return (
@@ -873,8 +868,8 @@ export default function DashboardHome() {
                 </div>
               </div>
               
-              {/* Trading Mode Row */}
-              {isConnected && (
+              {/* Trading Mode Row - Only show when connected AND tradingMode exists */}
+              {isConnected && tradingMode && (
                 <div className="px-3 sm:px-5 py-2 border-b border-cyan-500/10">
                   <span className={`inline-flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold border ${
                     isRecoveryMode 
