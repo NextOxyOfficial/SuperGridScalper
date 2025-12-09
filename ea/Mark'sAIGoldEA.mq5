@@ -23,7 +23,7 @@ input string    LicenseKey        = "";    // License Key
 //--- BUY Grid Range Settings (HIDDEN)
 double    BuyRangeStart     = 4400;
 double    BuyRangeEnd       = 4000;
-double    BuyGapPips        = 3.0;
+double    BuyGapPips        = 4.0;
 int       MaxBuyOrders      = 4;
 
 //--- BUY TP/SL/Trailing Settings (HIDDEN)
@@ -38,14 +38,14 @@ double    BuyTrailingStepPips  = 0.5;
 //--- SELL Grid Range Settings (HIDDEN)
 double    SellRangeStart    = 4400;
 double    SellRangeEnd      = 4000;
-double    SellGapPips       = 3.0;
+double    SellGapPips       = 4.0;
 int       MaxSellOrders     = 4;
 
 //--- SELL TP/SL/Trailing Settings (HIDDEN)
 double    SellTakeProfitPips    = 50.0;
 double    SellStopLossPips      = 0.0;
-double    SellTrailingStartPips = 3.0;
-double    SellInitialSLPips     = 2.0;
+double    SellTrailingStartPips = 4.0;
+double    SellInitialSLPips     = 3.0;
 double    SellTrailingRatio     = 0.5;
 double    SellMaxSLDistance     = 15.0;
 double    SellTrailingStepPips  = 0.5;
@@ -70,10 +70,10 @@ int       MaxSellBERecoveryOrders   = 30;
 
 //--- Recovery Mode Trailing Settings (HIDDEN)
 double    RecoveryTakeProfitPips    = 100.0;
-double    RecoveryTrailingStartPips = 3.0;
+double    RecoveryTrailingStartPips = 4.0;
 double    RecoveryTrailingRatio     = 0.5;
 double    RecoveryMaxSLDistance     = 12.0;
-double    RecoveryInitialSLPips     = 2.0;
+double    RecoveryInitialSLPips     = 3.0;
 
 //--- EA Settings (HIDDEN)
 int       MagicNumber       = 999888;
