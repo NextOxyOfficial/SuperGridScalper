@@ -454,19 +454,23 @@ export default function Home() {
       {/* Hero Section */}
       <div className="relative z-10 min-h-screen flex items-center">
         <div className="container mx-auto px-3 sm:px-4 py-10 sm:py-20">
+          {/* Typing Effect Description - Full Width on Mobile */}
+          <div className="w-full mb-4 sm:mb-6 text-center lg:text-left">
+            <div className="h-[60px] sm:h-[80px] md:h-[90px] flex items-start justify-center lg:justify-start">
+              <p className="text-white text-xs sm:text-lg md:text-2xl lg:text-3xl font-bold tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                <span className="text-yellow-400">&gt;</span>{' '}
+                <span className="capitalize">{typedText}</span>
+                <span className="inline-block w-1 h-4 sm:h-7 md:h-8 bg-cyan-400 ml-1 sm:ml-2 animate-pulse" />
+              </p>
+            </div>
+          </div>
+          
           <div className="flex flex-col lg:flex-row items-center justify-between gap-12">
             
             {/* Left Side - Text Content */}
             <div className="flex-1 text-center lg:text-left max-w-2xl">
-              {/* Typing Effect Description - AT TOP (Fixed height to prevent layout shift) */}
-              <div className="h-[60px] sm:h-[80px] md:h-[90px] flex items-start justify-center lg:justify-start mb-4 sm:mb-6">
-                <p className="text-white max-w-3xl text-xs sm:text-lg md:text-2xl lg:text-3xl font-bold tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                  <span className="text-yellow-400">&gt;</span>{' '}
-                  <span className="capitalize">{typedText}</span>
-                  <span className="inline-block w-1 h-4 sm:h-7 md:h-8 bg-cyan-400 ml-1 sm:ml-2 animate-pulse" />
-                </p>
-              </div>
-              
+              {/* Main Content */}
+              <div>
               {/* AI Badge */}
               <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-black/50 border border-cyan-500/50 rounded-full px-3 sm:px-5 py-1.5 sm:py-2 mb-4 sm:mb-6 backdrop-blur-md">
                 <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400 animate-pulse" />
@@ -487,7 +491,7 @@ export default function Home() {
               </p>
               
               {/* CTA Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start mb-6 sm:mb-8">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start mb-6 sm:mb-8 max-w-[320px] sm:max-w-none mx-auto lg:mx-0">
                 <button 
                   onClick={() => router.push('/ea-store')}
                   className="group inline-flex items-center justify-center gap-2 sm:gap-3 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400 text-black px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-105 shadow-lg shadow-yellow-500/25"
@@ -515,8 +519,10 @@ export default function Home() {
                 </button>
               </div>
               
-              {/* Stats Row */}
-              <div className="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:justify-center lg:justify-start sm:gap-6 md:gap-8 py-3 sm:py-4 px-3 sm:px-6 bg-black/30 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-cyan-500/20">
+              </div>
+              
+              {/* Stats Row - Full Width */}
+              <div className="w-full grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:justify-center lg:justify-start sm:gap-6 md:gap-8 py-3 sm:py-4 px-3 sm:px-6 bg-black/30 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-cyan-500/20">
                 <div className="text-center">
                   <div className="text-lg sm:text-2xl md:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>99.2%</div>
                   <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Accuracy</div>
