@@ -312,7 +312,7 @@ export default function DashboardHome() {
               </div>
               <div 
                 ref={logContainerRef}
-                className="overflow-y-auto p-2 font-mono text-xs leading-relaxed"
+                className="overflow-y-auto overflow-x-auto p-2 font-mono text-xs leading-relaxed"
                 style={{ scrollbarWidth: 'thin', height: '220px' }}
               >
                 {(() => {
@@ -331,7 +331,7 @@ export default function DashboardHome() {
                   }
                   
                   return filteredLogs.map((log: any, i: number) => (
-                    <div key={i} className="flex gap-2 py-0.5 border-l-2 pl-2 mb-0.5" style={{
+                    <div key={i} className="flex gap-2 py-0.5 border-l-2 pl-2 mb-0.5 min-w-max" style={{
                       borderColor: 
                         log.type === 'OPEN_BUY' ? '#22c55e' :
                         log.type === 'OPEN_SELL' ? '#ef4444' :
@@ -347,7 +347,7 @@ export default function DashboardHome() {
                         log.type === 'MODE_CHANGE' ? 'text-purple-400' :
                         'text-gray-400'
                       }`}>{log.type}</span>
-                      <span className="text-gray-300 flex-1 truncate">{log.message}</span>
+                      <span className="text-gray-300 whitespace-nowrap">{log.message}</span>
                     </div>
                   ));
                 })()}
