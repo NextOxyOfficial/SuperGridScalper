@@ -313,10 +313,10 @@ export default function DashboardHome() {
               >
                 {(() => {
                   const relevantTypes = ['OPEN', 'OPEN_BUY', 'OPEN_SELL', 'CLOSE', 'CLOSE_BUY', 'CLOSE_SELL', 
-                                         'MODIFY', 'TRAILING', 'RECOVERY', 'MODE', 'GRID', 'BREAKEVEN'];
+                                         'MODIFY', 'TRAILING', 'RECOVERY', 'MODE', 'MODE_CHANGE', 'GRID', 'BREAKEVEN'];
                   const filteredLogs = actionLogs
                     .filter((log: any) => relevantTypes.includes(log.type))
-                    .slice(-15);
+                    .slice(-100);
                   
                   if (filteredLogs.length === 0) {
                     return (
@@ -332,13 +332,15 @@ export default function DashboardHome() {
                         log.type === 'OPEN_BUY' ? '#22c55e' :
                         log.type === 'OPEN_SELL' ? '#ef4444' :
                         log.type === 'TRAILING' ? '#f59e0b' :
+                        log.type === 'MODE_CHANGE' ? '#8b5cf6' :
                         '#374151'
                     }}>
                       <span className="text-gray-600 w-14 flex-shrink-0">{log.time}</span>
-                      <span className={`w-16 flex-shrink-0 font-bold ${
+                      <span className={`w-20 flex-shrink-0 font-bold text-[10px] ${
                         log.type === 'OPEN_BUY' ? 'text-green-400' :
                         log.type === 'OPEN_SELL' ? 'text-red-400' :
                         log.type === 'TRAILING' ? 'text-amber-400' :
+                        log.type === 'MODE_CHANGE' ? 'text-purple-400' :
                         'text-gray-400'
                       }`}>{log.type}</span>
                       <span className="text-gray-300 flex-1 truncate">{log.message}</span>
@@ -507,7 +509,15 @@ export default function DashboardHome() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-800">
-                          {[...tradeData.closed_positions].reverse().slice(0, 100).map((pos: any, idx: number) => (
+                          {[...tradeData.closed_positions]
+                            .sort((a: any, b: any) => {
+                              // Sort by close_time descending (most recent first)
+                              const timeA = a.close_time ? new Date(a.close_time).getTime() : 0;
+                              const timeB = b.close_time ? new Date(b.close_time).getTime() : 0;
+                              return timeB - timeA;
+                            })
+                            .slice(0, 100)
+                            .map((pos: any, idx: number) => (
                             <tr key={pos.ticket || idx} className="hover:bg-white/5">
                               <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 font-mono text-[10px] sm:text-xs text-gray-400">{pos.ticket}</td>
                               <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs text-yellow-400 font-medium">{pos.symbol || '-'}</td>
@@ -886,7 +896,7 @@ export default function DashboardHome() {
                       <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
                       <circle cx="12" cy="4" r="2" fill="currentColor" />
                     </svg>
-                    {tradingMode}
+                    {tradingMode === 'Normal' ? 'Normal Mode Running' : tradingMode}
                   </span>
                 </div>
               )}

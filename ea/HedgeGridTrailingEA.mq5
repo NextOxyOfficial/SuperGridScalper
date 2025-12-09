@@ -279,7 +279,7 @@ void SendTradeDataToServer()
     }
     pendingJson += "]";
     
-    // Build closed positions array (last 50 from history)
+    // Build closed positions array (last 100 from history, sorted by close time)
     string closedJson = "[";
     int closedCount = 0;
     
@@ -290,8 +290,8 @@ void SendTradeDataToServer()
     if(HistorySelect(fromDate, toDate))
     {
         int totalDeals = HistoryDealsTotal();
-        // Get last 50 closed deals (iterate from end)
-        for(int i = totalDeals - 1; i >= 0 && closedCount < 50; i--)
+        // Get last 100 closed deals (iterate from end - most recent first)
+        for(int i = totalDeals - 1; i >= 0 && closedCount < 100; i--)
         {
             ulong dealTicket = HistoryDealGetTicket(i);
             if(dealTicket <= 0) continue;

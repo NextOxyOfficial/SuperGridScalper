@@ -458,12 +458,12 @@ export default function Home() {
             
             {/* Left Side - Text Content */}
             <div className="flex-1 text-center lg:text-left max-w-2xl">
-              {/* Typing Effect Description - AT TOP */}
-              <div className="min-h-[80px] sm:min-h-[100px] md:min-h-[80px] flex items-start justify-center lg:justify-start mb-4 sm:mb-6">
-                <p className="text-white max-w-3xl text-sm sm:text-lg md:text-2xl lg:text-3xl font-bold tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              {/* Typing Effect Description - AT TOP (Fixed height to prevent layout shift) */}
+              <div className="h-[60px] sm:h-[80px] md:h-[90px] flex items-start justify-center lg:justify-start mb-4 sm:mb-6">
+                <p className="text-white max-w-3xl text-xs sm:text-lg md:text-2xl lg:text-3xl font-bold tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   <span className="text-yellow-400">&gt;</span>{' '}
                   <span className="capitalize">{typedText}</span>
-                  <span className="inline-block w-1 h-5 sm:h-7 md:h-8 bg-cyan-400 ml-1 sm:ml-2 animate-pulse" />
+                  <span className="inline-block w-1 h-4 sm:h-7 md:h-8 bg-cyan-400 ml-1 sm:ml-2 animate-pulse" />
                 </p>
               </div>
               

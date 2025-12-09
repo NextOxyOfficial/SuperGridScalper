@@ -20,43 +20,59 @@ function DashboardNav() {
   if (!selectedLicense && (pathname === '/dashboard' || pathname === '/dashboard/ea-store')) {
     return (
       <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6 flex justify-between items-center">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Link href="/" className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-6">
+          {/* Mobile: Two rows layout */}
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
+            
+            {/* Row 1: Logo + Logout (mobile) */}
+            <div className="flex items-center justify-between">
+              <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
+                <div className="w-7 h-7 sm:w-10 sm:h-10 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+                  <Bot className="w-4 h-4 sm:w-6 sm:h-6 text-black" />
+                </div>
+                <span className="text-xs sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+              </Link>
+              
+              {/* Mobile only: Logout on right */}
+              <button onClick={logout} className="sm:hidden text-cyan-300 hover:text-white text-[10px] px-2 py-1 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30">
+                Logout
+              </button>
+            </div>
+            
+            {/* Row 2: Nav buttons (mobile full width) */}
+            <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+              <Link
+                href="/dashboard"
+                className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
+                  pathname === '/dashboard' 
+                    ? 'bg-cyan-500 text-black' 
+                    : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
+                }`}
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/dashboard/ea-store"
+                className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center justify-center gap-1 sm:gap-2 ${
+                  pathname === '/dashboard/ea-store' 
+                    ? 'bg-yellow-500 text-black' 
+                    : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
+                }`}
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                <Store className="w-3.5 h-3.5 sm:w-5 sm:h-5" /> EA Store
+              </Link>
+              
+              {/* Desktop only: Email + Logout */}
+              <div className="hidden sm:flex items-center gap-3">
+                <div className="h-5 w-px bg-cyan-500/30"></div>
+                <span className="text-cyan-300 text-xs sm:text-sm">{user?.email}</span>
+                <button onClick={logout} className="text-cyan-300 hover:text-white text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30">
+                  Logout
+                </button>
               </div>
-              <span className="text-sm sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
-            </Link>
-            <div className="h-5 sm:h-6 w-px bg-cyan-500/30 mx-2 sm:mx-3"></div>
-            <Link
-              href="/dashboard"
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition ${
-                pathname === '/dashboard' 
-                  ? 'bg-cyan-500 text-black' 
-                  : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
-              }`}
-              style={{ fontFamily: 'Orbitron, sans-serif' }}
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/dashboard/ea-store"
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-1.5 sm:gap-2 ${
-                pathname === '/dashboard/ea-store' 
-                  ? 'bg-yellow-500 text-black' 
-                  : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
-              }`}
-              style={{ fontFamily: 'Orbitron, sans-serif' }}
-            >
-              <Store className="w-4 h-4 sm:w-5 sm:h-5" /> EA Store
-            </Link>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <span className="text-cyan-300 text-xs sm:text-sm hidden sm:block">{user?.email}</span>
-            <button onClick={logout} className="text-cyan-300 hover:text-white text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30">
-              Logout
-            </button>
+            </div>
           </div>
         </div>
       </nav>
