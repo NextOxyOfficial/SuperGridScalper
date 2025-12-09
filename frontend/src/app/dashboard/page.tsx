@@ -133,8 +133,16 @@ export default function DashboardHome() {
       const res = await fetch(`${API_URL}/action-logs/?license_key=${licenseKey}&limit=100`);
       const data = await res.json();
       if (data.success) {
+        const isFirstLoad = actionLogs.length === 0;
         setActionLogs(data.logs);
-        // No auto-scroll - let user scroll freely
+        // Only scroll to bottom on first load, then let user scroll freely
+        if (isFirstLoad) {
+          setTimeout(() => {
+            if (logContainerRef.current) {
+              logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+            }
+          }, 50);
+        }
       }
     } catch (e) {
       console.error('Failed to fetch action logs');
