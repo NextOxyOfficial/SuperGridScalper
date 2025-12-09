@@ -134,11 +134,7 @@ export default function DashboardHome() {
       const data = await res.json();
       if (data.success) {
         setActionLogs(data.logs);
-        setTimeout(() => {
-          if (logContainerRef.current) {
-            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
-          }
-        }, 50);
+        // No auto-scroll - let user scroll freely
       }
     } catch (e) {
       console.error('Failed to fetch action logs');
@@ -606,11 +602,11 @@ export default function DashboardHome() {
             </div>
           )}
 
-          {/* License Info (collapsible) */}
-          <details className="bg-[#12121a] border border-cyan-500/20 rounded-xl overflow-hidden">
-            <summary className="p-3 sm:p-4 cursor-pointer font-bold text-white hover:bg-white/5 rounded-xl text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-              ▼ LICENSE DETAILS
-            </summary>
+          {/* License Info (always visible) */}
+          <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl overflow-hidden">
+            <div className="p-3 sm:p-4 font-bold text-white text-xs sm:text-sm border-b border-cyan-500/10" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              LICENSE DETAILS
+            </div>
             <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-cyan-500/10">
               <div className="space-y-3 sm:space-y-4 pt-3 sm:pt-4">
                 {/* License Key */}
@@ -693,7 +689,7 @@ export default function DashboardHome() {
                 )}
               </div>
             </div>
-          </details>
+          </div>
         </div>
       </div>
     );
