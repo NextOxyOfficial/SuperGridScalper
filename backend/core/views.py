@@ -182,6 +182,7 @@ def register(request):
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
     name = data.get('name', '').strip()
+    referral_code = data.get('referral_code', '').strip()
     
     if not email or not password:
         return JsonResponse({'success': False, 'message': 'Email and password are required'})
@@ -203,51 +204,21 @@ def register(request):
         first_name=name
     )
     
+    # Track referral signup
+    if referral_code:
+        try:
+            referral = Referral.objects.get(referral_code=referral_code)
+            referral.signups += 1
+            referral.save()
+            
+            # Store referrer info for future purchase tracking
+            user.profile.referred_by = referral.referrer if hasattr(user, 'profile') else None
+        except Referral.DoesNotExist:
+            pass  # Invalid referral code, just ignore
+    
     return JsonResponse({
         'success': True,
         'message': 'Registration successful',
-        'user': {
-            'id': user.id,
-            'email': user.email,
-            'name': user.first_name
-        }
-    })
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def register(request):
-    """Register a new user"""
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
-    
-    email = data.get('email', '').strip().lower()
-    password = data.get('password', '')
-    first_name = data.get('first_name', '').strip()
-    
-    if not email or not password:
-        return JsonResponse({'success': False, 'message': 'Email and password are required'})
-    
-    if len(password) < 6:
-        return JsonResponse({'success': False, 'message': 'Password must be at least 6 characters'})
-    
-    # Check if user already exists
-    if User.objects.filter(email=email).exists():
-        return JsonResponse({'success': False, 'message': 'An account with this email already exists. Please login.'})
-    
-    # Create new user
-    user = User.objects.create_user(
-        username=email,
-        email=email,
-        password=password,
-        first_name=first_name
-    )
-    
-    return JsonResponse({
-        'success': True,
-        'message': 'Account created successfully!',
         'user': {
             'id': user.id,
             'email': user.email,
@@ -434,6 +405,44 @@ def subscribe(request):
         plan=plan,
         mt5_account=mt5_account
     )
+    
+    # Track referral purchase and commission
+    try:
+        # Check if user was referred
+        referral = Referral.objects.filter(signups__gt=0).first()  # Temporary - need better tracking
+        # Better approach: store referrer in user profile or session
+        
+        # For now, check localStorage referral_code from frontend
+        # We'll need to pass this from frontend
+        referral_code = data.get('referral_code', '').strip()
+        
+        if referral_code:
+            try:
+                referral = Referral.objects.get(referral_code=referral_code)
+                
+                # Calculate commission (10% of plan price)
+                commission_amount = plan.price * Decimal('0.10')
+                
+                # Create transaction
+                transaction = ReferralTransaction.objects.create(
+                    referral=referral,
+                    referred_user=user,
+                    purchase_amount=plan.price,
+                    commission_amount=commission_amount,
+                    status='pending'  # Will be 'paid' after payout
+                )
+                
+                # Update referral stats
+                referral.purchases += 1
+                referral.total_earnings += commission_amount
+                referral.pending_earnings += commission_amount
+                referral.save()
+                
+            except Referral.DoesNotExist:
+                pass  # Invalid referral code
+    except Exception as e:
+        # Don't fail the purchase if referral tracking fails
+        print(f"Referral tracking error: {e}")
     
     # Get ALL user's licenses to return
     all_licenses = License.objects.filter(user=user).select_related('plan').prefetch_related('ea_settings')
@@ -890,12 +899,16 @@ def create_referral(request):
     try:
         data = json.loads(request.body)
         username = data.get('username')
+        email = data.get('email')
         
-        if not username:
-            return JsonResponse({'success': False, 'message': 'Username required'}, status=400)
+        if not username and not email:
+            return JsonResponse({'success': False, 'message': 'Username or email required'}, status=400)
         
         try:
-            user = User.objects.get(username=username)
+            if username:
+                user = User.objects.get(username=username)
+            else:
+                user = User.objects.get(email=email)
         except User.DoesNotExist:
             return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
         
@@ -928,12 +941,16 @@ def get_referral_stats(request):
     """Get referral statistics for a user"""
     try:
         username = request.GET.get('username')
+        email = request.GET.get('email')
         
-        if not username:
-            return JsonResponse({'success': False, 'message': 'Username required'}, status=400)
+        if not username and not email:
+            return JsonResponse({'success': False, 'message': 'Username or email required'}, status=400)
         
         try:
-            user = User.objects.get(username=username)
+            if username:
+                user = User.objects.get(username=username)
+            else:
+                user = User.objects.get(email=email)
         except User.DoesNotExist:
             return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
         
@@ -1028,18 +1045,22 @@ def request_payout(request):
     try:
         data = json.loads(request.body)
         username = data.get('username')
+        email = data.get('email')
         amount = Decimal(str(data.get('amount', 0)))
         payment_method = data.get('payment_method', 'paypal')
         payment_details = data.get('payment_details', {})
         
-        if not username:
-            return JsonResponse({'success': False, 'message': 'Username required'}, status=400)
+        if not username and not email:
+            return JsonResponse({'success': False, 'message': 'Username or email required'}, status=400)
         
         if amount <= 0:
             return JsonResponse({'success': False, 'message': 'Invalid amount'}, status=400)
         
         try:
-            user = User.objects.get(username=username)
+            if username:
+                user = User.objects.get(username=username)
+            else:
+                user = User.objects.get(email=email)
             referral = Referral.objects.get(referrer=user)
         except User.DoesNotExist:
             return JsonResponse({'success': False, 'message': 'User not found'}, status=404)

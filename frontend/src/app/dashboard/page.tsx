@@ -232,11 +232,15 @@ export default function DashboardHome() {
     setPurchasing(true);
     setMessage({ type: '', text: '' });
     
+    // Get referral code from localStorage if exists
+    const referralCode = localStorage.getItem('referral_code') || '';
+    
     const requestBody = {
       email: user?.email,
       password: 'existing_user',
       plan_id: selectedPlan.id,
-      mt5_account: mt5Account.trim()
+      mt5_account: mt5Account.trim(),
+      referral_code: referralCode
     };
     
     console.log('Purchase request:', requestBody);

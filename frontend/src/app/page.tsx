@@ -43,6 +43,7 @@ export default function Home() {
   const [copied, setCopied] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userName, setUserName] = useState('')
+  const [referralCode, setReferralCode] = useState('')
   
   // Typing effect states
   const [typedText, setTypedText] = useState('')
@@ -72,6 +73,20 @@ export default function Home() {
       setIsLoggedIn(true)
       const user = JSON.parse(userData)
       setUserName(user.email || 'User')
+    }
+
+    // Capture referral code from URL
+    const urlParams = new URLSearchParams(window.location.search)
+    const ref = urlParams.get('ref')
+    if (ref) {
+      setReferralCode(ref)
+      localStorage.setItem('referral_code', ref)
+    } else {
+      // Check if stored in localStorage
+      const storedRef = localStorage.getItem('referral_code')
+      if (storedRef) {
+        setReferralCode(storedRef)
+      }
     }
 
     const fetchPlans = async () => {
@@ -162,7 +177,8 @@ export default function Home() {
       const response = await axios.post(`${API_URL}/register/`, {
         email,
         password,
-        first_name: firstName
+        first_name: firstName,
+        referral_code: referralCode
       })
 
       if (response.data.success) {
@@ -177,6 +193,9 @@ export default function Home() {
         setPassword('')
         setConfirmPassword('')
         setFirstName('')
+        // Clear referral code after successful registration
+        localStorage.removeItem('referral_code')
+        setReferralCode('')
         // Redirect to dashboard
         router.push('/dashboard')
       } else {
