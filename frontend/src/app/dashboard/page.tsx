@@ -238,7 +238,7 @@ export default function DashboardHome() {
                 <span className={`w-1.5 h-1.5 rounded-full ${isPolling ? 'bg-black animate-pulse' : 'bg-gray-500'}`}></span>
                 {isPolling ? 'LIVE' : 'PAUSED'}
               </button>
-              {tradeData?.trading_mode && (
+              {eaConnected && tradeData?.trading_mode ? (
                 <span className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium border ${
                   isRecoveryModeDetails 
                     ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' 
@@ -255,6 +255,14 @@ export default function DashboardHome() {
                     <circle cx="12" cy="4" r="2" fill="currentColor" />
                   </svg>
                   {tradeData?.trading_mode === 'Normal' ? 'Normal Mode Running' : (tradeData?.trading_mode || 'Normal Mode Running')}
+                </span>
+              ) : !eaConnected && (
+                <span className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium border bg-gray-500/20 text-gray-400 border-gray-500/30" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                    <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+                  </svg>
+                  Terminal Offline
                 </span>
               )}
               <span className="text-[10px] sm:text-xs text-gray-500">

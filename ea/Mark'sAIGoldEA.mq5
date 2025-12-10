@@ -95,13 +95,10 @@ int OnInit()
     g_DaysRemaining = 0;
     
     // MANDATORY license verification on startup
-    Print("[LICENSE] Checking license key: ", LicenseKey);
-    
     if(StringLen(LicenseKey) == 0)
     {
         g_LicenseMessage = "NO LICENSE KEY";
         Alert("NO LICENSE KEY ENTERED!\n\nPlease enter your license key in EA settings.");
-        Print("[LICENSE] No license key entered");
     }
     else
     {
@@ -109,19 +106,17 @@ int OnInit()
         
         if(!licenseOK)
         {
-            Print("[LICENSE] FAILED: ", g_LicenseMessage);
             Alert("LICENSE INVALID!\n\n" + g_LicenseMessage + "\n\nEA will not trade.");
         }
         else
         {
-            Print("[LICENSE] VALID - Plan: ", g_PlanName, " | Days: ", g_DaysRemaining);
+            // Send connect log to server
+            AddToLog(StringFormat("EA Connected | Account: %I64d | Symbol: %s", AccountInfoInteger(ACCOUNT_LOGIN), _Symbol), "CONNECT");
         }
     }
     
     // Update panel on startup
     UpdateLicensePanel();
-    
-    Print("Clean Grid EA Initialized");
     return(INIT_SUCCEEDED);
 }
 
@@ -158,7 +153,6 @@ void OnDeinit(const int reason)
     // Only delete pending orders when EA is actually removed
     if(reason == REASON_REMOVE || reason == REASON_CHARTCLOSE || reason == REASON_PROGRAM)
     {
-        Print("=== EA Removed - Deleting pending orders ===");
         int total = OrdersTotal();
         for(int i = total - 1; i >= 0; i--)
         {
@@ -174,7 +168,6 @@ void OnDeinit(const int reason)
     }
     
     Comment("");
-    Print("=== Mark's AI Gold EA Stopped ===");
 }
 
 //+------------------------------------------------------------------+
@@ -217,9 +210,35 @@ void OnTick()
     // Count current positions
     CountPositions();
     
+    // Track previous mode for logging mode changes
+    static bool prevBuyInRecovery = false;
+    static bool prevSellInRecovery = false;
+    
     // Determine mode
     buyInRecovery = (currentBuyPositions >= MaxBuyOrders);
     sellInRecovery = (currentSellPositions >= MaxSellOrders);
+    
+    // Log mode changes
+    if(buyInRecovery && !prevBuyInRecovery)
+    {
+        AddToLog("BUY RECOVERY MODE ACTIVATED", "MODE");
+    }
+    else if(!buyInRecovery && prevBuyInRecovery)
+    {
+        AddToLog("BUY NORMAL MODE RESTORED", "MODE");
+    }
+    
+    if(sellInRecovery && !prevSellInRecovery)
+    {
+        AddToLog("SELL RECOVERY MODE ACTIVATED", "MODE");
+    }
+    else if(!sellInRecovery && prevSellInRecovery)
+    {
+        AddToLog("SELL NORMAL MODE RESTORED", "MODE");
+    }
+    
+    prevBuyInRecovery = buyInRecovery;
+    prevSellInRecovery = sellInRecovery;
     
     // Manage grids based on mode
     if(!buyInRecovery)
@@ -369,15 +388,12 @@ void DeleteNormalPendingOrders(bool isBuy)
         
         ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
         if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
-        {
             trade.OrderDelete(ticket);
-            Print("[RECOVERY] Deleted normal ", isBuy ? "BUY" : "SELL", " pending order #", ticket);
-        }
     }
 }
 
 //+------------------------------------------------------------------+
-//| Manage Normal Grid (Static Grid - Pre-calculated Levels)         |
+//| Manage Normal Grid - STRICT GAP ENFORCEMENT                       |
 //+------------------------------------------------------------------+
 void ManageNormalGrid(bool isBuy)
 {
@@ -389,24 +405,109 @@ void ManageNormalGrid(bool isBuy)
     double gapPips = isBuy ? BuyGapPips : SellGapPips;
     int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
     double gapPrice = gapPips * pip;
+    double minGap = gapPrice * 0.8; // Minimum 80% of gap required between positions/orders
     
     // Check if current price is within trading range
     if(currentPrice < rangeLow || currentPrice > rangeHigh) return;
     
-    // ===== DYNAMIC GRID: Calculate target levels based on CURRENT PRICE =====
-    // For BUY: 4 levels below current price (closest first)
-    // For SELL: 4 levels above current price (closest first)
+    // ===== STEP 1: Collect ALL existing positions for this side =====
+    double positionPrices[];
+    int positionCount = 0;
     
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && posType != POSITION_TYPE_BUY) || (!isBuy && posType != POSITION_TYPE_SELL)) continue;
+        
+        ArrayResize(positionPrices, positionCount + 1);
+        positionPrices[positionCount] = PositionGetDouble(POSITION_PRICE_OPEN);
+        positionCount++;
+    }
+    
+    // If already at max positions, delete all pending orders and return
+    if(positionCount >= maxOrders)
+    {
+        for(int i = OrdersTotal() - 1; i >= 0; i--)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "Recovery") >= 0) continue;
+            
+            ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            if((isBuy && orderType == ORDER_TYPE_BUY_LIMIT) || (!isBuy && orderType == ORDER_TYPE_SELL_LIMIT))
+            {
+                trade.OrderDelete(ticket);
+            }
+        }
+        return;
+    }
+    
+    // ===== STEP 2: Collect existing pending orders and check if they need modification =====
+    ulong existingOrderTickets[];
+    double existingOrderPrices[];
+    int existingOrderCount = 0;
+    
+    for(int i = 0; i < OrdersTotal(); i++)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue;
+        
+        ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if((isBuy && orderType != ORDER_TYPE_BUY_LIMIT) || (!isBuy && orderType != ORDER_TYPE_SELL_LIMIT)) continue;
+        
+        ArrayResize(existingOrderTickets, existingOrderCount + 1);
+        ArrayResize(existingOrderPrices, existingOrderCount + 1);
+        existingOrderTickets[existingOrderCount] = ticket;
+        existingOrderPrices[existingOrderCount] = OrderGetDouble(ORDER_PRICE_OPEN);
+        existingOrderCount++;
+    }
+    
+    // Delete orders that are too close to positions
+    for(int i = existingOrderCount - 1; i >= 0; i--)
+    {
+        bool tooClose = false;
+        for(int j = 0; j < positionCount; j++)
+        {
+            if(MathAbs(existingOrderPrices[i] - positionPrices[j]) < minGap)
+            {
+                tooClose = true;
+                break;
+            }
+        }
+        
+        if(tooClose)
+        {
+            trade.OrderDelete(existingOrderTickets[i]);
+            // Remove from arrays
+            for(int k = i; k < existingOrderCount - 1; k++)
+            {
+                existingOrderTickets[k] = existingOrderTickets[k + 1];
+                existingOrderPrices[k] = existingOrderPrices[k + 1];
+            }
+            existingOrderCount--;
+        }
+    }
+    
+    // ===== STEP 3: Calculate valid grid levels =====
     double targetLevels[];
     ArrayResize(targetLevels, maxOrders);
     
-    // Find the nearest grid level to current price
     double baseLevel = rangeLow + MathFloor((currentPrice - rangeLow) / gapPrice) * gapPrice;
     
     if(isBuy)
     {
-        // BUY LIMIT: place below current price
-        // Start from just below current price and go down
         double startLevel = baseLevel;
         if(startLevel >= currentPrice) startLevel -= gapPrice;
         
@@ -417,8 +518,6 @@ void ManageNormalGrid(bool isBuy)
     }
     else
     {
-        // SELL LIMIT: place above current price
-        // Start from just above current price and go up
         double startLevel = baseLevel + gapPrice;
         if(startLevel <= currentPrice) startLevel += gapPrice;
         
@@ -428,124 +527,137 @@ void ManageNormalGrid(bool isBuy)
         }
     }
     
-    // ===== Track which target levels are occupied and collect existing orders =====
-    bool levelOccupied[];
-    ArrayResize(levelOccupied, maxOrders);
-    ArrayInitialize(levelOccupied, false);
+    // ===== STEP 4: MODIFY existing orders to match target levels (if far from current price) =====
+    bool targetOccupied[];
+    ArrayResize(targetOccupied, maxOrders);
+    ArrayInitialize(targetOccupied, false);
     
-    // Collect existing orders for this side
-    ulong existingTickets[];
-    double existingPrices[];
-    int existingCount = 0;
-    
-    for(int i = 0; i < OrdersTotal(); i++)
-    {
-        ulong ticket = OrderGetTicket(i);
-        if(ticket <= 0) continue;
-        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-        
-        string comment = OrderGetString(ORDER_COMMENT);
-        if(StringFind(comment, "Recovery") >= 0) continue; // Skip recovery orders
-        
-        ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-        if((isBuy && orderType != ORDER_TYPE_BUY_LIMIT) || (!isBuy && orderType != ORDER_TYPE_SELL_LIMIT)) continue;
-        
-        ArrayResize(existingTickets, existingCount + 1);
-        ArrayResize(existingPrices, existingCount + 1);
-        existingTickets[existingCount] = ticket;
-        existingPrices[existingCount] = OrderGetDouble(ORDER_PRICE_OPEN);
-        existingCount++;
-    }
-    
-    // ===== MODIFY existing orders to match target levels =====
-    // Match existing orders to closest target levels, modify if needed
     bool orderUsed[];
-    ArrayResize(orderUsed, existingCount);
+    ArrayResize(orderUsed, existingOrderCount);
     ArrayInitialize(orderUsed, false);
     
-    for(int i = 0; i < maxOrders; i++)
+    // First, mark targets occupied by positions
+    for(int i = 0; i < positionCount; i++)
     {
-        // Validate target level
-        if(targetLevels[i] < rangeLow || targetLevels[i] > rangeHigh) continue;
-        if(isBuy && targetLevels[i] >= currentPrice) continue;
-        if(!isBuy && targetLevels[i] <= currentPrice) continue;
-        
-        // Check if any existing order is already at this target level
-        bool foundExact = false;
-        for(int j = 0; j < existingCount; j++)
+        for(int j = 0; j < maxOrders; j++)
         {
-            if(orderUsed[j]) continue;
-            if(MathAbs(existingPrices[j] - targetLevels[i]) < gapPrice * 0.3)
+            if(MathAbs(positionPrices[i] - targetLevels[j]) < minGap)
             {
-                // Order already at correct level - keep it
-                levelOccupied[i] = true;
-                orderUsed[j] = true;
-                foundExact = true;
-                break;
+                targetOccupied[j] = true;
             }
         }
+    }
+    
+    // Try to match existing orders to target levels
+    for(int i = 0; i < maxOrders; i++)
+    {
+        if(targetOccupied[i]) continue;
         
-        if(foundExact) continue;
+        double targetPrice = targetLevels[i];
         
-        // Find an unused order to MODIFY to this target level
-        for(int j = 0; j < existingCount; j++)
+        // Validate target
+        if(targetPrice < rangeLow || targetPrice > rangeHigh) continue;
+        if(isBuy && targetPrice >= currentPrice) continue;
+        if(!isBuy && targetPrice <= currentPrice) continue;
+        
+        // Find closest unused order to this target
+        int closestOrderIdx = -1;
+        double closestDistance = 999999;
+        
+        for(int j = 0; j < existingOrderCount; j++)
         {
             if(orderUsed[j]) continue;
             
-            // Modify this order to the new target level
-            double tp = 0, sl = 0;
-            if(isBuy)
+            double distance = MathAbs(existingOrderPrices[j] - targetPrice);
+            if(distance < closestDistance)
             {
-                tp = (BuyTakeProfitPips > 0) ? NormalizeDouble(targetLevels[i] + (BuyTakeProfitPips * pip), _Digits) : 0;
-                sl = (BuyStopLossPips > 0) ? NormalizeDouble(targetLevels[i] - (BuyStopLossPips * pip), _Digits) : 0;
-            }
-            else
-            {
-                tp = (SellTakeProfitPips > 0) ? NormalizeDouble(targetLevels[i] - (SellTakeProfitPips * pip), _Digits) : 0;
-                sl = (SellStopLossPips > 0) ? NormalizeDouble(targetLevels[i] + (SellStopLossPips * pip), _Digits) : 0;
-            }
-            
-            if(trade.OrderModify(existingTickets[j], targetLevels[i], sl, tp, ORDER_TIME_GTC, 0))
-            {
-                Print("[DYNAMIC GRID] Modified ", isBuy ? "BUY" : "SELL", " #", existingTickets[j], 
-                      " from ", existingPrices[j], " to ", targetLevels[i]);
-                levelOccupied[i] = true;
-                orderUsed[j] = true;
-                break;
+                closestDistance = distance;
+                closestOrderIdx = j;
             }
         }
-    }
-    
-    // ===== Delete any unused orders (extra orders that don't fit target levels) =====
-    for(int j = 0; j < existingCount; j++)
-    {
-        if(!orderUsed[j])
+        
+        // If found an order, check if it needs modification
+        if(closestOrderIdx >= 0)
         {
-            trade.OrderDelete(existingTickets[j]);
-            Print("[DYNAMIC GRID] Deleted extra ", isBuy ? "BUY" : "SELL", " order #", existingTickets[j]);
+            // If order is already at correct level (within 50% of gap), keep it
+            if(closestDistance < gapPrice * 0.5)
+            {
+                targetOccupied[i] = true;
+                orderUsed[closestOrderIdx] = true;
+            }
+            // If order needs adjustment (more than 50% of gap away), modify it
+            else if(closestDistance >= gapPrice * 0.5)
+            {
+                double tp = 0, sl = 0;
+                if(isBuy)
+                {
+                    tp = (BuyTakeProfitPips > 0) ? NormalizeDouble(targetPrice + (BuyTakeProfitPips * pip), _Digits) : 0;
+                    sl = (BuyStopLossPips > 0) ? NormalizeDouble(targetPrice - (BuyStopLossPips * pip), _Digits) : 0;
+                }
+                else
+                {
+                    tp = (SellTakeProfitPips > 0) ? NormalizeDouble(targetPrice - (SellTakeProfitPips * pip), _Digits) : 0;
+                    sl = (SellStopLossPips > 0) ? NormalizeDouble(targetPrice + (SellStopLossPips * pip), _Digits) : 0;
+                }
+                
+                if(trade.OrderModify(existingOrderTickets[closestOrderIdx], targetPrice, sl, tp, ORDER_TIME_GTC, 0))
+                {
+                    AddToLog(StringFormat("%s order #%I64u modified: %.2f -> %.2f (%.1f pips)", 
+                        isBuy ? "BUY" : "SELL", existingOrderTickets[closestOrderIdx], 
+                        existingOrderPrices[closestOrderIdx], targetPrice, closestDistance/pip), "MODIFY");
+                    targetOccupied[i] = true;
+                    orderUsed[closestOrderIdx] = true;
+                }
+                else
+                {
+                    // Modification failed - keep order at current price and mark as used
+                    orderUsed[closestOrderIdx] = true;
+                }
+            }
         }
     }
     
-    // ===== Count remaining pending orders =====
-    int pendingOrderCount = 0;
-    for(int i = 0; i < maxOrders; i++)
+    // Delete any unused orders (orders that don't match any target)
+    for(int i = 0; i < existingOrderCount; i++)
     {
-        if(levelOccupied[i]) pendingOrderCount++;
+        if(!orderUsed[i])
+        {
+            trade.OrderDelete(existingOrderTickets[i]);
+            AddToLog(StringFormat("%s order deleted - out of range", isBuy ? "BUY" : "SELL"), "MODIFY");
+        }
     }
     
-    // ===== Place NEW orders for unoccupied target levels =====
+    // ===== STEP 5: Count occupied targets and calculate orders needed =====
+    int occupiedCount = 0;
     for(int i = 0; i < maxOrders; i++)
     {
-        if(levelOccupied[i]) continue;
-        if(pendingOrderCount >= maxOrders) break;
+        if(targetOccupied[i]) occupiedCount++;
+    }
+    
+    // Total slots = maxOrders - positions
+    // Occupied slots = occupiedCount (orders already at target levels)
+    // Need to place = (maxOrders - positions) - occupiedCount
+    int totalSlots = maxOrders - positionCount;
+    int ordersNeeded = totalSlots - occupiedCount;
+    
+    if(ordersNeeded <= 0) return;
+    
+    // ===== STEP 6: Place new orders at unoccupied target levels =====
+    int ordersPlaced = 0;
+    
+    for(int i = 0; i < maxOrders && ordersPlaced < ordersNeeded; i++)
+    {
+        // Skip if this target is already occupied
+        if(targetOccupied[i]) continue;
         
-        // Validate level
-        if(targetLevels[i] < rangeLow || targetLevels[i] > rangeHigh) continue;
-        if(isBuy && targetLevels[i] >= currentPrice) continue;
-        if(!isBuy && targetLevels[i] <= currentPrice) continue;
+        double targetPrice = targetLevels[i];
         
-        // Validate and normalize lot size
+        // Validate level is within range
+        if(targetPrice < rangeLow || targetPrice > rangeHigh) continue;
+        if(isBuy && targetPrice >= currentPrice) continue;
+        if(!isBuy && targetPrice <= currentPrice) continue;
+        
+        // ===== All checks passed - Place the order =====
         double lotToUse = LotSize;
         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
         double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
@@ -556,30 +668,26 @@ void ManageNormalGrid(bool isBuy)
         lotToUse = MathFloor(lotToUse / lotStep) * lotStep;
         lotToUse = MathMax(minLot, MathMin(maxLot, lotToUse));
         
-        // Place new order
         double tp = 0, sl = 0;
+        
         if(isBuy)
         {
-            tp = (BuyTakeProfitPips > 0) ? NormalizeDouble(targetLevels[i] + (BuyTakeProfitPips * pip), _Digits) : 0;
-            sl = (BuyStopLossPips > 0) ? NormalizeDouble(targetLevels[i] - (BuyStopLossPips * pip), _Digits) : 0;
-            if(trade.BuyLimit(lotToUse, targetLevels[i], _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
+            tp = (BuyTakeProfitPips > 0) ? NormalizeDouble(targetPrice + (BuyTakeProfitPips * pip), _Digits) : 0;
+            sl = (BuyStopLossPips > 0) ? NormalizeDouble(targetPrice - (BuyStopLossPips * pip), _Digits) : 0;
+            if(trade.BuyLimit(lotToUse, targetPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
-                pendingOrderCount++;
-                levelOccupied[i] = true;
-                Print("[DYNAMIC GRID] Placed NEW BUY at ", targetLevels[i], " | Lot: ", lotToUse);
-                AddToLog(StringFormat("BUY LIMIT @ %.2f | Lot: %.2f", targetLevels[i], lotToUse), "OPEN_BUY");
+                AddToLog(StringFormat("BUY LIMIT @ %.2f | Lot: %.2f", targetPrice, lotToUse), "OPEN_BUY");
+                ordersPlaced++;
             }
         }
         else
         {
-            tp = (SellTakeProfitPips > 0) ? NormalizeDouble(targetLevels[i] - (SellTakeProfitPips * pip), _Digits) : 0;
-            sl = (SellStopLossPips > 0) ? NormalizeDouble(targetLevels[i] + (SellStopLossPips * pip), _Digits) : 0;
-            if(trade.SellLimit(lotToUse, targetLevels[i], _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
+            tp = (SellTakeProfitPips > 0) ? NormalizeDouble(targetPrice - (SellTakeProfitPips * pip), _Digits) : 0;
+            sl = (SellStopLossPips > 0) ? NormalizeDouble(targetPrice + (SellStopLossPips * pip), _Digits) : 0;
+            if(trade.SellLimit(lotToUse, targetPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
-                pendingOrderCount++;
-                levelOccupied[i] = true;
-                Print("[DYNAMIC GRID] Placed NEW SELL at ", targetLevels[i], " | Lot: ", lotToUse);
-                AddToLog(StringFormat("SELL LIMIT @ %.2f | Lot: %.2f", targetLevels[i], lotToUse), "OPEN_SELL");
+                AddToLog(StringFormat("SELL LIMIT @ %.2f | Lot: %.2f", targetPrice, lotToUse), "OPEN_SELL");
+                ordersPlaced++;
             }
         }
     }
@@ -689,6 +797,16 @@ void ManageRecoveryGrid(bool isBuy)
             totalPositionsThisSide++;
     }
     
+    // Debug: Log recovery status every 10 seconds
+    static datetime lastStatusLog = 0;
+    if(TimeCurrent() - lastStatusLog > 10)
+    {
+        AddToLog(StringFormat("%s Recovery Status | Positions: %d/%d | Pending: %d | Enabled: %s", 
+            isBuy ? "BUY" : "SELL", totalPositionsThisSide, MaxRecoveryOrders, 
+            recoveryPendingCount, EnableRecovery ? "YES" : "NO"), "RECOVERY");
+        lastStatusLog = TimeCurrent();
+    }
+    
     // Place recovery order if needed (only 1 pending at a time, max total positions = MaxRecoveryOrders)
     if(totalPositionsThisSide < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery)
     {
@@ -725,12 +843,25 @@ void ManageRecoveryGrid(bool isBuy)
             NormalizeDouble(extremePrice - (gapPips * pip), _Digits) :
             NormalizeDouble(extremePrice + (gapPips * pip), _Digits);
         
+        // Debug log
+        AddToLog(StringFormat("%s Recovery: Extreme=%.2f | Target=%.2f | Gap=%.1f pips", 
+            isBuy ? "BUY" : "SELL", extremePrice, recoveryPrice, gapPips), "RECOVERY");
+        
         // Validate recovery price is valid for pending order
         double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
         
         // BUY LIMIT must be below current price, SELL LIMIT must be above current price
-        if(isBuy && recoveryPrice >= currentPrice) return;
-        if(!isBuy && recoveryPrice <= currentPrice) return;
+        // Allow orders that are at least 1 pip away from current price
+        if(isBuy && recoveryPrice >= currentPrice - pip) 
+        {
+            AddToLog(StringFormat("Recovery order skipped - too close to price (%.2f vs %.2f)", recoveryPrice, currentPrice), "RECOVERY");
+            return;
+        }
+        if(!isBuy && recoveryPrice <= currentPrice + pip)
+        {
+            AddToLog(StringFormat("Recovery order skipped - too close to price (%.2f vs %.2f)", recoveryPrice, currentPrice), "RECOVERY");
+            return;
+        }
         
         // ===== DUPLICATE CHECK for recovery order =====
         double gapPrice = gapPips * pip;
@@ -790,12 +921,12 @@ void ManageRecoveryGrid(bool isBuy)
         if(isBuy)
         {
             if(trade.BuyLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_BUY"))
-                Print("[RECOVERY] Placed BUY order at ", recoveryPrice, " | Lot: ", recoveryLot, " | Total: ", totalRecoveryCount + 1);
+                AddToLog(StringFormat("Recovery BUY @ %.2f | Lot: %.2f", recoveryPrice, recoveryLot), "RECOVERY");
         }
         else
         {
             if(trade.SellLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_SELL"))
-                Print("[RECOVERY] Placed SELL order at ", recoveryPrice, " | Lot: ", recoveryLot, " | Total: ", totalRecoveryCount + 1);
+                AddToLog(StringFormat("Recovery SELL @ %.2f | Lot: %.2f", recoveryPrice, recoveryLot), "RECOVERY");
         }
     }
 }
@@ -885,10 +1016,8 @@ void ApplyTrailing()
             if(needsUpdate)
             {
                 trade.PositionModify(ticket, newSL, currentTP);
-                string msg = StringFormat("Trailing SL: %s #%I64u | Profit: %.1f pips | New SL: %.5f",
-                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", ticket, profitPips, newSL);
-                Print("[TRAIL] ", msg);
-                AddToLog(msg, "TRAILING");
+                AddToLog(StringFormat("Trailing SL: %s | Profit: %.1f pips", 
+                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", profitPips), "TRAILING");
             }
         }
     }
@@ -916,6 +1045,39 @@ void AddToLog(string message, string type)
     tradingLog[size].timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
     tradingLog[size].type = type;
     tradingLog[size].message = message;
+    
+    // Send log to backend server
+    SendLogToServer(message, type);
+}
+
+//+------------------------------------------------------------------+
+//| Send Log to Backend Server                                        |
+//+------------------------------------------------------------------+
+void SendLogToServer(string message, string type)
+{
+    // Skip if no license key
+    if(StringLen(LicenseKey) == 0) return;
+    
+    // Build JSON request
+    string jsonRequest = "{";
+    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
+    jsonRequest += "\"log_type\":\"" + type + "\",";
+    jsonRequest += "\"message\":\"" + message + "\"";
+    jsonRequest += "}";
+    
+    // Prepare request
+    string url = LicenseServer + "/api/action-log/";
+    string headers = "Content-Type: application/json\r\n";
+    char postData[];
+    char result[];
+    string resultHeaders;
+    
+    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
+    
+    int timeout = 1000; // Short timeout for logs
+    int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
+    
+    // Don't print errors for logs to avoid spam
 }
 
 //+------------------------------------------------------------------+
@@ -1355,11 +1517,6 @@ void SendTradeDataToServer()
     int timeout = 2000;
     int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
     
-    // Debug: Log response status
-    if(response != 200 && response != -1)
-    {
-        Print("Trade data send failed: HTTP ", response);
-    }
 }
 
 //+------------------------------------------------------------------+
@@ -1376,7 +1533,6 @@ void CloseAllPendingOrders()
         if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
         
         trade.OrderDelete(ticket);
-        Print("[LICENSE] Pending order #", ticket, " deleted - License invalid");
     }
 }
 
@@ -1442,10 +1598,6 @@ bool VerifyLicense()
     // Parse response
     string responseStr = CharArrayToString(result);
     
-    // Debug: Print server response
-    Print("[LICENSE] Server response: ", responseStr);
-    Print("[LICENSE] HTTP code: ", response);
-    
     // Convert response to lowercase for easier checking
     string lowerResp = responseStr;
     StringToLower(lowerResp);
@@ -1457,8 +1609,6 @@ bool VerifyLicense()
     // Check if response contains "valid": false OR "valid":false  
     bool hasValidFalse = (StringFind(lowerResp, "\"valid\": false") >= 0 || 
                          StringFind(lowerResp, "\"valid\":false") >= 0);
-    
-    Print("[LICENSE] hasValidTrue: ", hasValidTrue, " | hasValidFalse: ", hasValidFalse);
     
     // Only valid if explicitly "valid": true
     if(hasValidTrue && !hasValidFalse)
@@ -1489,7 +1639,6 @@ bool VerifyLicense()
         
         g_LicenseMessage = "ACTIVE";
         g_LastVerification = TimeCurrent();
-        Print("[LICENSE] Valid! Plan: ", g_PlanName, " | Days: ", g_DaysRemaining);
         return true;
     }
     
@@ -1512,7 +1661,6 @@ bool VerifyLicense()
         g_LicenseMessage = "LICENSE INVALID";
     }
     
-    Print("[LICENSE] Invalid: ", g_LicenseMessage);
     return false;
 }
 
