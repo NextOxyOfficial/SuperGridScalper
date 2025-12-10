@@ -999,7 +999,7 @@ export default function Home() {
             <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
           </div>
           <p className="text-gray-500 text-xs sm:text-sm px-4">
-            © 2024 Mark's AI - Advance Gold Scalping EA
+            © 2025 Mark's AI - Advance Gold Scalping EA
           </p>
           <p className="text-gray-600 text-[10px] sm:text-xs mt-1 sm:mt-2 px-4">
             Trading involves risk. Past performance does not guarantee future results.
