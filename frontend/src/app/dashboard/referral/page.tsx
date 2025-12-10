@@ -113,24 +113,24 @@ export default function ReferralPage() {
 
   if (!referralData?.has_referral) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white p-4 sm:p-8">
+      <div className="min-h-screen bg-[#0a0a0f] text-white p-3 sm:p-4">
         <div className="max-w-4xl mx-auto">
-          <div className="bg-[#12121a] border border-cyan-500/20 rounded-2xl p-8 sm:p-12 text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500/20 to-green-400/10 border border-green-500/30 rounded-2xl mb-6">
-              <Gift className="w-10 h-10 text-green-400" />
+          <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-6 sm:p-8 text-center">
+            <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-green-500/20 to-green-400/10 border border-green-500/30 rounded-xl mb-4 sm:mb-6">
+              <Gift className="w-6 h-6 sm:w-8 sm:h-8 text-green-400" />
             </div>
-            <h1 className="text-3xl sm:text-4xl font-bold mb-4 text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-3 sm:mb-4 text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
               Start Earning with Referrals!
             </h1>
-            <p className="text-gray-400 text-base sm:text-lg mb-8 max-w-2xl mx-auto">
+            <p className="text-gray-400 text-sm sm:text-base mb-6 sm:mb-8 max-w-2xl mx-auto px-2">
               Refer friends and earn 10% commission on all their purchases. Share your unique referral link and start earning today!
             </p>
             <button
               onClick={createReferralCode}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg shadow-green-500/20"
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-6 sm:px-8 py-3 sm:py-4 rounded-lg sm:rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-105 shadow-lg shadow-green-500/20"
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              <Gift className="w-6 h-6" />
+              <Gift className="w-4 h-4 sm:w-5 sm:h-5" />
               Create My Referral Code
             </button>
           </div>
