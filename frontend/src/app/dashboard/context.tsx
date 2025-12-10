@@ -89,6 +89,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const selectLicense = (lic: any) => {
     setSelectedLicense(lic);
     localStorage.setItem('selectedLicense', JSON.stringify(lic));
+    
+    // Update the license in the licenses array
+    const updatedLicenses = licenses.map(license => 
+      license.license_key === lic.license_key ? lic : license
+    );
+    setLicenses(updatedLicenses);
+    localStorage.setItem('licenses', JSON.stringify(updatedLicenses));
+    
     if (lic && lic.ea_settings) {
       setSettings(lic.ea_settings);
     }

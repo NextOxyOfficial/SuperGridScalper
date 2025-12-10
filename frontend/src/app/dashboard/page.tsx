@@ -194,11 +194,18 @@ export default function DashboardHome() {
         // Show success message
         alert(`✅ ${data.message}\nNew expiry: ${new Date(data.license.expires_at).toLocaleDateString()}\nDays remaining: ${data.license.days_remaining}`);
         
+        // Update selectedLicense with new data
+        const updatedLicense = {
+          ...selectedLicense,
+          expires_at: data.license.expires_at,
+          status: data.license.status
+        };
+        
+        // Update the license in context
+        selectLicense(updatedLicense);
+        
         // Close modal
         setShowExtendModal(false);
-        
-        // Refresh licenses to show updated info
-        window.location.reload();
       } else {
         alert('❌ ' + (data.message || 'Failed to extend license.'));
       }
