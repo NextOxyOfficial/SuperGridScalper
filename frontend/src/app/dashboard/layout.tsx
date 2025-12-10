@@ -3,7 +3,7 @@
 import { DashboardProvider, useDashboard } from './context';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bot, Store } from 'lucide-react';
+import { Bot, Store, Gift } from 'lucide-react';
 
 function DashboardNav() {
   const { user, selectedLicense, logout, clearSelectedLicense } = useDashboard();
@@ -17,7 +17,7 @@ function DashboardNav() {
   };
 
   // Simple nav for license selection page or EA store without license
-  if (!selectedLicense && (pathname === '/dashboard' || pathname === '/dashboard/ea-store')) {
+  if (!selectedLicense && (pathname === '/dashboard' || pathname === '/dashboard/ea-store' || pathname === '/dashboard/referral')) {
     return (
       <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-6">
@@ -65,6 +65,17 @@ function DashboardNav() {
               >
                 <Store className="w-3.5 h-3.5 sm:w-5 sm:h-5" /> EA Store
               </Link>
+              <Link
+                href="/dashboard/referral"
+                className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center justify-center gap-1 sm:gap-2 ${
+                  pathname === '/dashboard/referral' 
+                    ? 'bg-green-500 text-black' 
+                    : 'text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30'
+                }`}
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                <Gift className="w-3.5 h-3.5 sm:w-5 sm:h-5" /> Referral
+              </Link>
               
               {/* Desktop only: Email + Logout */}
               <div className="hidden sm:flex items-center gap-3">
@@ -83,6 +94,7 @@ function DashboardNav() {
 
   const isDownloadPage = pathname === '/dashboard/download';
   const isEAStorePage = pathname === '/dashboard/ea-store';
+  const isReferralPage = pathname === '/dashboard/referral';
   const isDashboardPage = pathname === '/dashboard' && selectedLicense;
 
   return (
@@ -149,6 +161,17 @@ function DashboardNav() {
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
                   <Store className="w-4 h-4 sm:w-5 sm:h-5" /> EA Store
+                </Link>
+                <Link
+                  href="/dashboard/referral"
+                  className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center justify-center gap-1 sm:gap-2 ${
+                    isReferralPage 
+                      ? 'bg-green-500 text-black' 
+                      : 'text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30'
+                  }`}
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <Gift className="w-4 h-4 sm:w-5 sm:h-5" /> Referral
                 </Link>
                 <div className="h-5 sm:h-6 w-px bg-cyan-500/30 mx-1 sm:mx-2 hidden sm:block"></div>
               </>

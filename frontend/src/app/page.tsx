@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings } from 'lucide-react'
+import Link from 'next/link'
+import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift } from 'lucide-react'
 import axios from 'axios'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api'
@@ -991,19 +992,62 @@ export default function Home() {
         </div>
 
         {/* Footer */}
-        <div className="text-center border-t border-cyan-500/10 pt-6 sm:pt-8 pb-4">
-          <div className="flex items-center justify-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-              <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
+        <div className="border-t border-cyan-500/10 pt-6 sm:pt-8 pb-4">
+          {/* Referral CTA */}
+          <div className="text-center mb-6 sm:mb-8">
+            <div className="inline-block bg-gradient-to-r from-green-500/10 to-green-400/5 border border-green-500/30 rounded-2xl p-6 sm:p-8 max-w-2xl mx-4">
+              <Gift className="w-10 h-10 sm:w-12 sm:h-12 text-green-400 mx-auto mb-3" />
+              <h3 className="text-lg sm:text-2xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                Start Earning with Referrals!
+              </h3>
+              <p className="text-gray-400 text-sm sm:text-base mb-4">
+                Refer friends and earn 10% commission on all their purchases
+              </p>
+              <Link 
+                href="/login"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-6 py-3 rounded-lg font-bold transition-all transform hover:scale-105"
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                <Gift className="w-5 h-5" />
+                Get My Referral Code
+              </Link>
             </div>
-            <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
           </div>
-          <p className="text-gray-500 text-xs sm:text-sm px-4">
-            © 2025 Mark's AI - Advance Gold Scalping EA
-          </p>
-          <p className="text-gray-600 text-[10px] sm:text-xs mt-1 sm:mt-2 px-4">
-            Trading involves risk. Past performance does not guarantee future results.
-          </p>
+
+          {/* Footer Links */}
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 mb-4 px-4">
+            <Link href="/guideline" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
+              Guidelines
+            </Link>
+            <span className="text-gray-700">•</span>
+            <Link href="/ea-store" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
+              EA Store
+            </Link>
+            <span className="text-gray-700">•</span>
+            <Link href="/terms" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
+              Terms & Conditions
+            </Link>
+            <span className="text-gray-700">•</span>
+            <Link href="/privacy" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
+              Privacy Policy
+            </Link>
+          </div>
+
+          {/* Copyright */}
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-2 sm:gap-3 mb-3">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+                <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
+              </div>
+              <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+            </div>
+            <p className="text-gray-500 text-xs sm:text-sm px-4">
+              © 2025 Mark's AI - Advanced Gold Scalping EA
+            </p>
+            <p className="text-gray-600 text-[10px] sm:text-xs mt-1 sm:mt-2 px-4">
+              Trading involves risk. Past performance does not guarantee future results.
+            </p>
+          </div>
         </div>
       </div>
     </main>
