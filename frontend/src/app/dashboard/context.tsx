@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 interface DashboardContextType {
   user: any;
@@ -71,10 +71,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
     
     if (selectedLicenseData) {
-      const lic = JSON.parse(selectedLicenseData);
-      setSelectedLicense(lic);
-      if (lic.ea_settings) {
-        setSettings(lic.ea_settings);
+      try {
+        const lic = JSON.parse(selectedLicenseData);
+        setSelectedLicense(lic);
+        if (lic && lic.ea_settings) {
+          setSettings(lic.ea_settings);
+        }
+      } catch (error) {
+        console.error('Error parsing selected license:', error);
+        localStorage.removeItem('selectedLicense');
       }
     }
     
@@ -84,11 +89,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const selectLicense = (lic: any) => {
     setSelectedLicense(lic);
     localStorage.setItem('selectedLicense', JSON.stringify(lic));
-    if (lic.ea_settings) {
+    if (lic && lic.ea_settings) {
       setSettings(lic.ea_settings);
     }
     // Fetch fresh settings
-    fetchSettings(lic.license_key);
+    if (lic && lic.license_key) {
+      fetchSettings(lic.license_key);
+    }
   };
 
   const fetchSettings = async (licenseKey: string, symbol: string = 'BTCUSD') => {

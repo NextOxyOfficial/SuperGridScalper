@@ -87,20 +87,30 @@ export default function ValidationPage() {
   const handleExtendLicense = async (planId: number) => {
     setExtendingPlan(planId)
     try {
-      // TODO: Implement extend license API call
       const response = await axios.post(`${API_URL}/extend-license/`, {
         license_key: licenseKey,
         plan_id: planId
       })
       
-      // Show success message
-      alert('License extended successfully!')
-      setShowExtendModal(false)
-      
-      // Re-validate to show updated info
-      handleValidate(new Event('submit') as any)
+      if (response.data.success) {
+        // Update result with new license info
+        setResult({
+          valid: true,
+          message: response.data.message,
+          plan: response.data.license.plan,
+          days_remaining: response.data.license.days_remaining,
+          expires_at: response.data.license.expires_at,
+          mt5_account: response.data.license.mt5_account
+        })
+        
+        // Close modal
+        setShowExtendModal(false)
+        
+        // Show success message
+        alert(`✅ ${response.data.message}\nNew expiry: ${new Date(response.data.license.expires_at).toLocaleDateString()}\nDays remaining: ${response.data.license.days_remaining}`)
+      }
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to extend license')
+      alert('❌ ' + (error.response?.data?.message || 'Failed to extend license. Please try again.'))
     } finally {
       setExtendingPlan(null)
     }

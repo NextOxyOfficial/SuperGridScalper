@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, X, Sparkles, CheckCircle, Loader2 } from 'lucide-react';
 import { useDashboard } from './context';
+import axios from 'axios';
 
 const POLLING_INTERVAL = 2000; // Faster polling for real-time updates
 
@@ -30,6 +31,10 @@ export default function DashboardHome() {
   // Positions tab state
   const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
   const closedPositionsRef = useRef<HTMLDivElement>(null);
+
+  // Extend license modal state
+  const [showExtendModal, setShowExtendModal] = useState(false);
+  const [extendingPlan, setExtendingPlan] = useState<number | null>(null);
 
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -165,6 +170,46 @@ export default function DashboardHome() {
     }
   };
 
+  const handleExtendLicense = async (planId: number) => {
+    if (!selectedLicense) return;
+    
+    setExtendingPlan(planId);
+    try {
+      console.log('Extending license:', selectedLicense.license_key, 'with plan:', planId);
+      console.log('API URL:', `${API_URL}/extend-license/`);
+      
+      const response = await fetch(`${API_URL}/extend-license/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: selectedLicense.license_key,
+          plan_id: planId
+        })
+      });
+      
+      const data = await response.json();
+      console.log('Extend response:', data);
+      
+      if (data.success) {
+        // Show success message
+        alert(`✅ ${data.message}\nNew expiry: ${new Date(data.license.expires_at).toLocaleDateString()}\nDays remaining: ${data.license.days_remaining}`);
+        
+        // Close modal
+        setShowExtendModal(false);
+        
+        // Refresh licenses to show updated info
+        window.location.reload();
+      } else {
+        alert('❌ ' + (data.message || 'Failed to extend license.'));
+      }
+    } catch (error: any) {
+      console.error('Extend license error:', error);
+      alert('❌ Failed to extend license. Please make sure the backend server is running and try again.');
+    } finally {
+      setExtendingPlan(null);
+    }
+  };
+
   const handleSelectLicense = (lic: any) => {
     selectLicense(lic);
   };
@@ -225,6 +270,60 @@ export default function DashboardHome() {
     return (
       <div className="max-w-7xl mx-auto pt-3 sm:pt-5 px-0.5 sm:px-4 pb-6 sm:pb-8">
         <div className="space-y-3 sm:space-y-4">
+          {/* License Expiry Warning Banner */}
+          {getDaysRemaining(selectedLicense) <= 7 && (
+            <div className={`rounded-lg px-3 sm:px-4 py-2 sm:py-3 border ${
+              getDaysRemaining(selectedLicense) <= 0 
+                ? 'bg-red-500/10 border-red-500/30' 
+                : getDaysRemaining(selectedLicense) <= 3 
+                  ? 'bg-orange-500/10 border-orange-500/30' 
+                  : 'bg-yellow-500/10 border-yellow-500/30'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <span className="text-lg sm:text-xl">
+                    {getDaysRemaining(selectedLicense) <= 0 
+                      ? '🚨' 
+                      : getDaysRemaining(selectedLicense) <= 3 
+                        ? '⚠️' 
+                        : '⏰'}
+                  </span>
+                  <div>
+                    <p className={`font-bold text-sm sm:text-base ${
+                      getDaysRemaining(selectedLicense) <= 0 
+                        ? 'text-red-400' 
+                        : getDaysRemaining(selectedLicense) <= 3 
+                          ? 'text-orange-400' 
+                          : 'text-yellow-400'
+                    }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                      {getDaysRemaining(selectedLicense) <= 0 
+                        ? 'LICENSE EXPIRED!' 
+                        : `LICENSE EXPIRES IN ${getDaysRemaining(selectedLicense)} DAYS`}
+                    </p>
+                    <p className="text-xs sm:text-sm text-gray-400">
+                      {getDaysRemaining(selectedLicense) <= 0 
+                        ? 'Your license has expired. Click below to extend now.' 
+                        : 'Extend your license to avoid any trading interruption.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowExtendModal(true)}
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold text-xs sm:text-sm transition-all ${
+                    getDaysRemaining(selectedLicense) <= 0 
+                      ? 'bg-red-500 hover:bg-red-400 text-white' 
+                      : getDaysRemaining(selectedLicense) <= 3 
+                        ? 'bg-orange-500 hover:bg-orange-400 text-white' 
+                        : 'bg-yellow-500 hover:bg-yellow-400 text-black'
+                  }`}
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  EXTEND NOW
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Compact Header Bar */}
           <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg px-2 sm:px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
@@ -665,31 +764,39 @@ export default function DashboardHome() {
                 </div>
                 
                 {/* Extend Subscription - Show when expired or about to expire */}
-                {getDaysRemaining(selectedLicense) <= 3 && (
-                  <div className={`rounded-lg p-3 sm:p-4 border ${getDaysRemaining(selectedLicense) <= 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-yellow-500/10 border-yellow-500/30'}`}>
+                {getDaysRemaining(selectedLicense) <= 7 && (
+                  <div className={`rounded-lg p-3 sm:p-4 border ${
+                    getDaysRemaining(selectedLicense) <= 0 
+                      ? 'bg-red-500/10 border-red-500/30' 
+                      : getDaysRemaining(selectedLicense) <= 3 
+                        ? 'bg-orange-500/10 border-orange-500/30' 
+                        : 'bg-yellow-500/10 border-yellow-500/30'
+                  }`}>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div>
-                        <p className={`font-semibold text-sm sm:text-base ${getDaysRemaining(selectedLicense) <= 0 ? 'text-red-400' : 'text-yellow-400'}`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                          {getDaysRemaining(selectedLicense) <= 0 ? '⚠️ License Expired!' : '⏰ License Expiring Soon!'}
+                        <p className={`font-semibold text-sm sm:text-base ${
+                          getDaysRemaining(selectedLicense) <= 0 
+                            ? 'text-red-400' 
+                            : getDaysRemaining(selectedLicense) <= 3 
+                              ? 'text-orange-400' 
+                              : 'text-yellow-400'
+                        }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {getDaysRemaining(selectedLicense) <= 0 
+                            ? '🚨 License Expired!' 
+                            : getDaysRemaining(selectedLicense) <= 3 
+                              ? '⚠️ License Expiring Soon!' 
+                              : '⏰ License Expiring in 7 Days!'}
                         </p>
                         <p className="text-gray-400 text-[10px] sm:text-xs mt-1">
                           {getDaysRemaining(selectedLicense) <= 0 
                             ? 'Your license has expired. Extend now to continue trading.' 
-                            : `Only ${getDaysRemaining(selectedLicense)} day(s) remaining. Extend to avoid interruption.`}
+                            : getDaysRemaining(selectedLicense) <= 3 
+                              ? `Only ${getDaysRemaining(selectedLicense)} day(s) remaining. Extend to avoid interruption.`
+                              : `Your license expires in ${getDaysRemaining(selectedLicense)} days. Extend now to avoid any interruption.`}
                         </p>
                       </div>
                       <button
-                        onClick={() => {
-                          selectLicense(null);
-                          // Scroll to purchase section
-                          setTimeout(() => {
-                            const details = document.querySelector('details');
-                            if (details) {
-                              details.open = true;
-                              details.scrollIntoView({ behavior: 'smooth' });
-                            }
-                          }, 100);
-                        }}
+                        onClick={() => setShowExtendModal(true)}
                         className={`flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${
                           getDaysRemaining(selectedLicense) <= 0 
                             ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400 text-white shadow-lg shadow-red-500/20' 
@@ -697,7 +804,7 @@ export default function DashboardHome() {
                         }`}
                         style={{ fontFamily: 'Orbitron, sans-serif' }}
                       >
-                        <span>🔄</span>
+                        <Sparkles className="w-4 h-4" />
                         EXTEND LICENSE
                       </button>
                     </div>
@@ -707,6 +814,97 @@ export default function DashboardHome() {
             </div>
           </div>
         </div>
+
+        {/* Extend License Modal */}
+        {showExtendModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-purple-500/30">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <Sparkles className="w-6 h-6 text-cyan-400" />
+                  <h2 className="text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extend Your License</h2>
+                </div>
+                <button
+                  onClick={() => setShowExtendModal(false)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {plans.map((plan: any, index: number) => (
+                  <div
+                    key={plan.id}
+                    className={`relative bg-gradient-to-br from-white/5 to-transparent backdrop-blur-lg rounded-xl p-6 border transition-all hover:scale-105 ${
+                      index === 1
+                        ? 'border-cyan-400 ring-2 ring-cyan-400/30 shadow-lg shadow-cyan-500/10'
+                        : 'border-cyan-500/20 hover:border-cyan-500/40'
+                    }`}
+                  >
+                    {index === 1 && (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                        <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full">
+                          MOST POPULAR
+                        </span>
+                      </div>
+                    )}
+                    <h3 className="text-xl font-bold text-white mb-2 text-center" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                      {plan.name}
+                    </h3>
+                    <p className="text-gray-400 text-sm mb-4 text-center">
+                      {plan.description}
+                    </p>
+                    <div className="mb-6 text-center">
+                      <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                        ${plan.price}
+                      </span>
+                      <span className="text-gray-500 text-sm">
+                        /{plan.duration_days} days
+                      </span>
+                    </div>
+                    <ul className="space-y-2 mb-6">
+                      <li className="flex items-center gap-2 text-gray-300 text-sm">
+                        <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                        {plan.max_accounts} MT5 Account{plan.max_accounts > 1 ? 's' : ''}
+                      </li>
+                      <li className="flex items-center gap-2 text-gray-300 text-sm">
+                        <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                        AI-Powered Trading
+                      </li>
+                      <li className="flex items-center gap-2 text-gray-300 text-sm">
+                        <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                        24/7 Support
+                      </li>
+                      <li className="flex items-center gap-2 text-gray-300 text-sm">
+                        <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                        Regular Updates
+                      </li>
+                    </ul>
+                    <button
+                      onClick={() => handleExtendLicense(plan.id)}
+                      disabled={extendingPlan === plan.id}
+                      className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+                        index === 1
+                          ? 'bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black shadow-lg shadow-cyan-500/25'
+                          : 'bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {extendingPlan === plan.id ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>Extend Now</>
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -913,6 +1111,47 @@ export default function DashboardHome() {
                 </div>
               )}
               
+              {/* License Expiry Warning */}
+              {getDaysRemaining(lic) <= 7 && (
+                <div className={`px-3 sm:px-5 py-2 border-b border-cyan-500/10 ${
+                  getDaysRemaining(lic) <= 0 
+                    ? 'bg-red-500/10' 
+                    : getDaysRemaining(lic) <= 3 
+                      ? 'bg-orange-500/10' 
+                      : 'bg-yellow-500/10'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">
+                      {getDaysRemaining(lic) <= 0 
+                        ? '🚨' 
+                        : getDaysRemaining(lic) <= 3 
+                          ? '⚠️' 
+                          : '⏰'}
+                    </span>
+                    <div>
+                      <p className={`text-xs sm:text-sm font-semibold ${
+                        getDaysRemaining(lic) <= 0 
+                          ? 'text-red-400' 
+                          : getDaysRemaining(lic) <= 3 
+                            ? 'text-orange-400' 
+                            : 'text-yellow-400'
+                      }`}>
+                        {getDaysRemaining(lic) <= 0 
+                          ? 'License Expired!' 
+                          : getDaysRemaining(lic) <= 3 
+                            ? 'Expiring Soon!' 
+                            : 'Expires in 7 Days!'}
+                      </p>
+                      <p className="text-[10px] sm:text-xs text-gray-400">
+                        {getDaysRemaining(lic) <= 0 
+                          ? 'Click to extend your license' 
+                          : `${getDaysRemaining(lic)} days remaining`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Symbol & Price Row */}
               {symbol && (
                 <div className="px-3 sm:px-5 py-2 bg-gradient-to-r from-yellow-500/5 to-transparent border-b border-yellow-500/10">
@@ -999,6 +1238,97 @@ export default function DashboardHome() {
             </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Extend License Modal */}
+      {showExtendModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-purple-500/30">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-6 h-6 text-cyan-400" />
+                <h2 className="text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extend Your License</h2>
+              </div>
+              <button
+                onClick={() => setShowExtendModal(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {plans.map((plan: any, index: number) => (
+                <div
+                  key={plan.id}
+                  className={`relative bg-gradient-to-br from-white/5 to-transparent backdrop-blur-lg rounded-xl p-6 border transition-all hover:scale-105 ${
+                    index === 1
+                      ? 'border-cyan-400 ring-2 ring-cyan-400/30 shadow-lg shadow-cyan-500/10'
+                      : 'border-cyan-500/20 hover:border-cyan-500/40'
+                  }`}
+                >
+                  {index === 1 && (
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                      <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full">
+                        MOST POPULAR
+                      </span>
+                    </div>
+                  )}
+                  <h3 className="text-xl font-bold text-white mb-2 text-center" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    {plan.name}
+                  </h3>
+                  <p className="text-gray-400 text-sm mb-4 text-center">
+                    {plan.description}
+                  </p>
+                  <div className="mb-6 text-center">
+                    <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                      ${plan.price}
+                    </span>
+                    <span className="text-gray-500 text-sm">
+                      /{plan.duration_days} days
+                    </span>
+                  </div>
+                  <ul className="space-y-2 mb-6">
+                    <li className="flex items-center gap-2 text-gray-300 text-sm">
+                      <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                      {plan.max_accounts} MT5 Account{plan.max_accounts > 1 ? 's' : ''}
+                    </li>
+                    <li className="flex items-center gap-2 text-gray-300 text-sm">
+                      <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                      AI-Powered Trading
+                    </li>
+                    <li className="flex items-center gap-2 text-gray-300 text-sm">
+                      <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                      24/7 Support
+                    </li>
+                    <li className="flex items-center gap-2 text-gray-300 text-sm">
+                      <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                      Regular Updates
+                    </li>
+                  </ul>
+                  <button
+                    onClick={() => handleExtendLicense(plan.id)}
+                    disabled={extendingPlan === plan.id}
+                    className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+                      index === 1
+                        ? 'bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black shadow-lg shadow-cyan-500/25'
+                        : 'bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {extendingPlan === plan.id ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>Extend Now</>
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

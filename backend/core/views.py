@@ -486,6 +486,64 @@ def subscribe(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def extend_license(request):
+    """Extend an existing license by adding days from a new plan"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    license_key = data.get('license_key', '').strip().upper()
+    plan_id = data.get('plan_id')
+    
+    if not license_key or not plan_id:
+        return JsonResponse({'success': False, 'message': 'License key and plan are required'}, status=400)
+    
+    # Get the license - try both exact match and case-insensitive
+    try:
+        license_obj = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        # Try case-insensitive search
+        try:
+            license_obj = License.objects.get(license_key__iexact=license_key)
+        except License.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'Invalid license key'}, status=404)
+    
+    # Get the plan
+    try:
+        plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+    except SubscriptionPlan.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid plan selected'}, status=404)
+    
+    # Extend the license
+    from datetime import timedelta
+    from django.utils import timezone
+    
+    # If license is expired, start from today, otherwise extend from current expiry
+    if license_obj.expires_at < timezone.now():
+        license_obj.expires_at = timezone.now() + timedelta(days=plan.duration_days)
+    else:
+        license_obj.expires_at = license_obj.expires_at + timedelta(days=plan.duration_days)
+    
+    license_obj.status = 'active'
+    license_obj.save()
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'License extended successfully! Added {plan.duration_days} days.',
+        'license': {
+            'license_key': license_obj.license_key,
+            'plan': license_obj.plan.name,
+            'status': license_obj.status,
+            'expires_at': license_obj.expires_at.isoformat(),
+            'days_remaining': license_obj.days_remaining(),
+            'mt5_account': license_obj.mt5_account
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def get_ea_settings(request):
     """Get EA settings for a license and symbol"""
     try:

@@ -10,6 +10,7 @@ urlpatterns = [
     path('login/', views.login, name='login'),
     path('licenses/', views.get_licenses, name='get_licenses'),
     path('subscribe/', views.subscribe, name='subscribe'),
+    path('extend-license/', views.extend_license, name='extend_license'),
     path('settings/', views.get_ea_settings, name='get_ea_settings'),
     path('trade-data/update/', views.update_trade_data, name='update_trade_data'),
     path('trade-data/', views.get_trade_data, name='get_trade_data'),
