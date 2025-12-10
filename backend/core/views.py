@@ -5,14 +5,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct
-try:
-    from .models import Referral, ReferralTransaction, ReferralPayout
-except ImportError:
-    # Fallback if referral models don't exist yet
-    Referral = None
-    ReferralTransaction = None
-    ReferralPayout = None
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout
 from decimal import Decimal
 import json
 
@@ -212,16 +205,13 @@ def register(request):
     )
     
     # Track referral signup
-    if referral_code and Referral is not None:
+    if referral_code:
         try:
             referral = Referral.objects.get(referral_code=referral_code)
             referral.signups += 1
             referral.save()
-            
-            # Store referrer info for future purchase tracking
-            user.profile.referred_by = referral.referrer if hasattr(user, 'profile') else None
-        except (Referral.DoesNotExist, Exception):
-            pass  # Invalid referral code or model not available, just ignore
+        except Referral.DoesNotExist:
+            pass  # Invalid referral code, just ignore
     
     return JsonResponse({
         'success': True,
@@ -903,9 +893,6 @@ def get_ea_products(request):
 @require_http_methods(["POST"])
 def create_referral(request):
     """Create or get referral code for a user"""
-    if Referral is None:
-        return JsonResponse({'success': False, 'message': 'Referral system not available'}, status=503)
-    
     try:
         data = json.loads(request.body)
         username = data.get('username')

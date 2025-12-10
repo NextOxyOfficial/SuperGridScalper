@@ -1,9 +1,11 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
+from datetime import datetime, timedelta
+from decimal import Decimal
 import uuid
 import secrets
 from datetime import timedelta
-from django.utils import timezone
 
 
 class SubscriptionPlan(models.Model):
@@ -363,32 +365,25 @@ class EAProduct(models.Model):
 
 
 class Referral(models.Model):
-    """Referral program - tracks referrer and referred users"""
+    """Referral program - tracks referrer earnings and stats"""
     
-    STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('completed', 'Completed'),
-        ('paid', 'Paid'),
-    ]
-    
-    referrer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='referrals_made')
-    referred_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='referred_by', null=True, blank=True)
+    referrer = models.OneToOneField(User, on_delete=models.CASCADE, related_name='referral_account')
     referral_code = models.CharField(max_length=20, unique=True)
     
     # Commission settings
-    commission_percent = models.DecimalField(max_digits=5, decimal_places=2, default=10.00, help_text="Commission percentage")
+    commission_percent = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('10.00'))
     
-    # Tracking
-    clicks = models.IntegerField(default=0)
-    signups = models.IntegerField(default=0)
-    purchases = models.IntegerField(default=0)
+    # Tracking stats
+    clicks = models.PositiveIntegerField(default=0)
+    signups = models.PositiveIntegerField(default=0)
+    purchases = models.PositiveIntegerField(default=0)
     
     # Earnings
-    total_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    pending_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    paid_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    total_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    pending_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    paid_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -402,8 +397,11 @@ class Referral(models.Model):
         """Generate a unique referral code"""
         import random
         import string
-        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-        return f"REF-{code}"
+        while True:
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            referral_code = f"REF-{code}"
+            if not Referral.objects.filter(referral_code=referral_code).exists():
+                return referral_code
     
     def __str__(self):
         return f"{self.referrer.username} - {self.referral_code}"
@@ -411,45 +409,37 @@ class Referral(models.Model):
     class Meta:
         verbose_name = "Referral"
         verbose_name_plural = "Referrals"
-        ordering = ['-created_at']
 
 
 class ReferralTransaction(models.Model):
-    """Tracks individual referral transactions and commissions"""
+    """Track individual referral transactions"""
     
     STATUS_CHOICES = [
         ('pending', 'Pending'),
-        ('approved', 'Approved'),
         ('paid', 'Paid'),
         ('cancelled', 'Cancelled'),
     ]
     
     referral = models.ForeignKey(Referral, on_delete=models.CASCADE, related_name='transactions')
-    referred_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='referral_transactions')
-    license = models.ForeignKey(License, on_delete=models.CASCADE, related_name='referral_transactions', null=True, blank=True)
+    referred_user = models.ForeignKey(User, on_delete=models.CASCADE)
     
-    # Transaction details
     purchase_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    commission_percent = models.DecimalField(max_digits=5, decimal_places=2)
     commission_amount = models.DecimalField(max_digits=10, decimal_places=2)
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    paid_at = models.DateTimeField(null=True, blank=True)
-    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     def __str__(self):
-        return f"{self.referral.referrer.username} earned ${self.commission_amount} from {self.referred_user.username}"
+        return f"{self.referral.referral_code} - ${self.commission_amount}"
     
     class Meta:
         verbose_name = "Referral Transaction"
         verbose_name_plural = "Referral Transactions"
-        ordering = ['-created_at']
 
 
 class ReferralPayout(models.Model):
-    """Tracks payouts to referrers"""
+    """Track payout requests"""
     
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -458,26 +448,20 @@ class ReferralPayout(models.Model):
         ('failed', 'Failed'),
     ]
     
-    PAYMENT_METHODS = [
-        ('paypal', 'PayPal'),
-        ('bank', 'Bank Transfer'),
-        ('crypto', 'Cryptocurrency'),
-    ]
-    
     referral = models.ForeignKey(Referral, on_delete=models.CASCADE, related_name='payouts')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default='paypal')
-    payment_details = models.JSONField(default=dict, blank=True, help_text="Payment details like PayPal email, bank info, etc.")
+    
+    payment_method = models.CharField(max_length=50)  # paypal, bank, crypto
+    payment_details = models.JSONField()  # email, account details, etc.
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    transaction_id = models.CharField(max_length=100, blank=True, null=True)
-    notes = models.TextField(blank=True)
-    
     requested_at = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(null=True, blank=True)
     
+    admin_notes = models.TextField(blank=True)
+    
     def __str__(self):
-        return f"Payout ${self.amount} to {self.referral.referrer.username} ({self.status})"
+        return f"{self.referral.referral_code} - ${self.amount} ({self.status})"
     
     class Meta:
         verbose_name = "Referral Payout"

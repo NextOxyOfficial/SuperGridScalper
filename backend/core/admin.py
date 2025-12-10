@@ -331,8 +331,8 @@ class EAProductAdmin(admin.ModelAdmin):
 
 @admin.register(Referral)
 class ReferralAdmin(admin.ModelAdmin):
-    list_display = ['referrer', 'referral_code', 'signups', 'purchases', 'earnings_display', 'status', 'created_at']
-    list_filter = ['status', 'created_at']
+    list_display = ['referrer', 'referral_code', 'signups', 'purchases', 'earnings_display', 'is_active', 'created_at']
+    list_filter = ['is_active', 'created_at']
     search_fields = ['referrer__username', 'referral_code']
     readonly_fields = ['referral_code', 'clicks', 'signups', 'purchases', 'total_earnings', 'pending_earnings', 'paid_earnings', 'created_at', 'updated_at']
     
@@ -347,7 +347,7 @@ class ReferralAdmin(admin.ModelAdmin):
             'fields': (('total_earnings', 'pending_earnings', 'paid_earnings'),)
         }),
         ('⚙️ Status', {
-            'fields': ('status', ('created_at', 'updated_at'))
+            'fields': ('is_active', ('created_at', 'updated_at'))
         }),
     )
     
@@ -364,17 +364,17 @@ class ReferralTransactionAdmin(admin.ModelAdmin):
     list_display = ['referrer_display', 'referred_user', 'purchase_amount', 'commission_display', 'status', 'created_at']
     list_filter = ['status', 'created_at']
     search_fields = ['referral__referrer__username', 'referred_user__username']
-    readonly_fields = ['referral', 'referred_user', 'license', 'purchase_amount', 'commission_percent', 'commission_amount', 'created_at', 'updated_at']
+    readonly_fields = ['referral', 'referred_user', 'purchase_amount', 'commission_amount', 'created_at', 'updated_at']
     
     fieldsets = (
         ('🔗 Referral Info', {
-            'fields': ('referral', 'referred_user', 'license')
+            'fields': ('referral', 'referred_user')
         }),
         ('💵 Transaction', {
-            'fields': (('purchase_amount', 'commission_percent', 'commission_amount'),)
+            'fields': (('purchase_amount', 'commission_amount'),)
         }),
         ('⚙️ Status', {
-            'fields': ('status', 'paid_at', ('created_at', 'updated_at'))
+            'fields': ('status', ('created_at', 'updated_at'))
         }),
     )
     
