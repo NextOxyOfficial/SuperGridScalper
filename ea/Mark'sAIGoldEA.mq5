@@ -263,6 +263,9 @@ void OnTick()
         ManageRecoveryGrid(false); // SELL Recovery
     }
     
+    // Clean up invalid/out-of-range orders
+    CleanupInvalidOrders();
+    
     // Apply trailing stops
     ApplyTrailing();
     
@@ -348,6 +351,16 @@ void CountPositions()
     else
         currentSellPositions = normalSellCount;
     
+    // Debug log every 30 seconds
+    static datetime lastCountLog = 0;
+    if(TimeCurrent() - lastCountLog > 30)
+    {
+        AddToLog(StringFormat("Position Count | BUY: Normal=%d Recovery=%d (Mode=%s) | SELL: Normal=%d Recovery=%d (Mode=%s)", 
+            normalBuyCount, recoveryBuyCount, (currentBuyPositions >= MaxBuyOrders) ? "RECOVERY" : "NORMAL",
+            normalSellCount, recoverySellCount, (currentSellPositions >= MaxSellOrders) ? "RECOVERY" : "NORMAL"), "COUNT");
+        lastCountLog = TimeCurrent();
+    }
+    
     // Total = Normal positions only (for grid limit in normal mode)
     totalBuyOrders = normalBuyCount;
     totalSellOrders = normalSellCount;
@@ -393,10 +406,154 @@ void DeleteNormalPendingOrders(bool isBuy)
 }
 
 //+------------------------------------------------------------------+
+//| Cleanup Invalid/Out-of-Range Orders                               |
+//+------------------------------------------------------------------+
+void CleanupInvalidOrders()
+{
+    double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    
+    // Range settings
+    double buyRangeHigh = MathMax(BuyRangeStart, BuyRangeEnd);
+    double buyRangeLow = MathMin(BuyRangeStart, BuyRangeEnd);
+    double sellRangeHigh = MathMax(SellRangeStart, SellRangeEnd);
+    double sellRangeLow = MathMin(SellRangeStart, SellRangeEnd);
+    
+    int deletedCount = 0;
+    
+    for(int i = OrdersTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
+        string comment = OrderGetString(ORDER_COMMENT);
+        bool isRecovery = (StringFind(comment, "Recovery") >= 0);
+        bool shouldDelete = false;
+        string reason = "";
+        
+        // Check BUY LIMIT orders
+        if(type == ORDER_TYPE_BUY_LIMIT)
+        {
+            // Normal buy orders: must be within buy range
+            if(!isRecovery)
+            {
+                if(orderPrice < buyRangeLow || orderPrice > buyRangeHigh)
+                {
+                    shouldDelete = true;
+                    reason = "Outside buy range";
+                }
+                // Must be below current price
+                else if(orderPrice >= currentBid)
+                {
+                    shouldDelete = true;
+                    reason = "Above current price";
+                }
+            }
+            // Recovery orders: just check if above current price
+            else if(orderPrice >= currentBid)
+            {
+                shouldDelete = true;
+                reason = "Recovery order above price";
+            }
+        }
+        // Check SELL LIMIT orders
+        else if(type == ORDER_TYPE_SELL_LIMIT)
+        {
+            // Normal sell orders: must be within sell range
+            if(!isRecovery)
+            {
+                if(orderPrice < sellRangeLow || orderPrice > sellRangeHigh)
+                {
+                    shouldDelete = true;
+                    reason = "Outside sell range";
+                }
+                // Must be above current price
+                else if(orderPrice <= currentAsk)
+                {
+                    shouldDelete = true;
+                    reason = "Below current price";
+                }
+            }
+            // Recovery orders: just check if below current price
+            else if(orderPrice <= currentAsk)
+            {
+                shouldDelete = true;
+                reason = "Recovery order below price";
+            }
+        }
+        
+        // Delete invalid order
+        if(shouldDelete)
+        {
+            if(trade.OrderDelete(ticket))
+            {
+                AddToLog(StringFormat("Deleted invalid %s order #%I64u @ %.2f - %s", 
+                    (type == ORDER_TYPE_BUY_LIMIT) ? "BUY" : "SELL", 
+                    ticket, orderPrice, reason), "CLEANUP");
+                deletedCount++;
+            }
+        }
+    }
+    
+    // Check for duplicate orders (same price, same type)
+    for(int i = 0; i < OrdersTotal() - 1; i++)
+    {
+        ulong ticket1 = OrderGetTicket(i);
+        if(ticket1 <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        ENUM_ORDER_TYPE type1 = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        double price1 = OrderGetDouble(ORDER_PRICE_OPEN);
+        
+        // Check against all other orders
+        for(int j = i + 1; j < OrdersTotal(); j++)
+        {
+            ulong ticket2 = OrderGetTicket(j);
+            if(ticket2 <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            ENUM_ORDER_TYPE type2 = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            double price2 = OrderGetDouble(ORDER_PRICE_OPEN);
+            
+            // If same type and very close price (within 0.5 pips), delete the newer one
+            if(type1 == type2 && MathAbs(price1 - price2) < 0.5 * pip)
+            {
+                if(trade.OrderDelete(ticket2))
+                {
+                    AddToLog(StringFormat("Deleted duplicate order #%I64u @ %.2f (duplicate of #%I64u)", 
+                        ticket2, price2, ticket1), "CLEANUP");
+                    deletedCount++;
+                }
+            }
+        }
+    }
+    
+    // Log cleanup summary (only if orders were deleted)
+    if(deletedCount > 0)
+    {
+        AddToLog(StringFormat("Cleanup completed: %d invalid orders deleted", deletedCount), "CLEANUP");
+    }
+}
+
+//+------------------------------------------------------------------+
 //| Manage Normal Grid - STRICT GAP ENFORCEMENT                       |
 //+------------------------------------------------------------------+
 void ManageNormalGrid(bool isBuy)
 {
+    // SAFETY CHECK: Should not be called in recovery mode
+    bool inRecoveryMode = isBuy ? buyInRecovery : sellInRecovery;
+    if(inRecoveryMode)
+    {
+        AddToLog(StringFormat("ERROR: ManageNormalGrid called while in %s recovery mode!", isBuy ? "BUY" : "SELL"), "ERROR");
+        return;
+    }
+    
     double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     
     // Range settings
@@ -410,9 +567,9 @@ void ManageNormalGrid(bool isBuy)
     // Check if current price is within trading range
     if(currentPrice < rangeLow || currentPrice > rangeHigh) return;
     
-    // ===== STEP 1: Collect ALL existing positions for this side =====
+    // ===== STEP 1: Collect ONLY NORMAL positions for this side =====
     double positionPrices[];
-    int positionCount = 0;
+    int normalPositionCount = 0;
     
     for(int i = 0; i < PositionsTotal(); i++)
     {
@@ -424,13 +581,17 @@ void ManageNormalGrid(bool isBuy)
         ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
         if((isBuy && posType != POSITION_TYPE_BUY) || (!isBuy && posType != POSITION_TYPE_SELL)) continue;
         
-        ArrayResize(positionPrices, positionCount + 1);
-        positionPrices[positionCount] = PositionGetDouble(POSITION_PRICE_OPEN);
-        positionCount++;
+        // ONLY count NORMAL positions (skip recovery positions)
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue;
+        
+        ArrayResize(positionPrices, normalPositionCount + 1);
+        positionPrices[normalPositionCount] = PositionGetDouble(POSITION_PRICE_OPEN);
+        normalPositionCount++;
     }
     
-    // If already at max positions, delete all pending orders and return
-    if(positionCount >= maxOrders)
+    // If already at max NORMAL positions, delete all normal pending orders and return
+    if(normalPositionCount >= maxOrders)
     {
         for(int i = OrdersTotal() - 1; i >= 0; i--)
         {
@@ -474,11 +635,11 @@ void ManageNormalGrid(bool isBuy)
         existingOrderCount++;
     }
     
-    // Delete orders that are too close to positions
+    // Delete orders that are too close to NORMAL positions
     for(int i = existingOrderCount - 1; i >= 0; i--)
     {
         bool tooClose = false;
-        for(int j = 0; j < positionCount; j++)
+        for(int j = 0; j < normalPositionCount; j++)
         {
             if(MathAbs(existingOrderPrices[i] - positionPrices[j]) < minGap)
             {
@@ -536,8 +697,8 @@ void ManageNormalGrid(bool isBuy)
     ArrayResize(orderUsed, existingOrderCount);
     ArrayInitialize(orderUsed, false);
     
-    // First, mark targets occupied by positions
-    for(int i = 0; i < positionCount; i++)
+    // First, mark targets occupied by NORMAL positions
+    for(int i = 0; i < normalPositionCount; i++)
     {
         for(int j = 0; j < maxOrders; j++)
         {
@@ -634,13 +795,22 @@ void ManageNormalGrid(bool isBuy)
         if(targetOccupied[i]) occupiedCount++;
     }
     
-    // Total slots = maxOrders - positions
+    // Total slots = maxOrders - NORMAL positions
     // Occupied slots = occupiedCount (orders already at target levels)
-    // Need to place = (maxOrders - positions) - occupiedCount
-    int totalSlots = maxOrders - positionCount;
+    // Need to place = (maxOrders - NORMAL positions) - occupiedCount
+    int totalSlots = maxOrders - normalPositionCount;
     int ordersNeeded = totalSlots - occupiedCount;
     
-    if(ordersNeeded <= 0) return;
+    if(ordersNeeded <= 0) 
+    {
+        AddToLog(StringFormat("%s Normal Grid: %d positions, %d occupied, no orders needed", 
+            isBuy ? "BUY" : "SELL", normalPositionCount, occupiedCount), "GRID");
+        return;
+    }
+    
+    // Debug log
+    AddToLog(StringFormat("%s Normal Grid: %d positions, %d slots, %d occupied, placing %d orders", 
+        isBuy ? "BUY" : "SELL", normalPositionCount, totalSlots, occupiedCount, ordersNeeded), "GRID");
     
     // ===== STEP 6: Place new orders at unoccupied target levels =====
     int ordersPlaced = 0;
