@@ -1418,7 +1418,7 @@ void ManageRecoveryGrid(bool isBuy)
         double gapPrice = gapPips * pip;
         bool duplicateExists = false;
         
-        // Check all pending orders
+        // Check ONLY recovery pending orders (ignore normal orders as they will be deleted)
         for(int k = 0; k < OrdersTotal(); k++)
         {
             ulong ticket = OrderGetTicket(k);
@@ -1426,15 +1426,22 @@ void ManageRecoveryGrid(bool isBuy)
             if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
             if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
             
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "Recovery") < 0) continue; // Skip normal orders
+            
+            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            if((isBuy && type != ORDER_TYPE_BUY_LIMIT) || (!isBuy && type != ORDER_TYPE_SELL_LIMIT)) continue;
+            
             double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
             if(MathAbs(orderPrice - recoveryPrice) < gapPrice * 0.5)
             {
                 duplicateExists = true;
+                AddToLog(StringFormat("%s Recovery order already exists @ %.2f", isBuy ? "BUY" : "SELL", orderPrice), "RECOVERY");
                 break;
             }
         }
         
-        // Check all positions
+        // Check all positions (to avoid placing order too close to existing position)
         if(!duplicateExists)
         {
             for(int k = 0; k < PositionsTotal(); k++)
@@ -1444,10 +1451,14 @@ void ManageRecoveryGrid(bool isBuy)
                 if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
                 if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
                 
+                ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+                if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+                
                 double posPrice = PositionGetDouble(POSITION_PRICE_OPEN);
                 if(MathAbs(posPrice - recoveryPrice) < gapPrice * 0.5)
                 {
                     duplicateExists = true;
+                    AddToLog(StringFormat("%s Recovery skipped - position exists @ %.2f", isBuy ? "BUY" : "SELL", posPrice), "RECOVERY");
                     break;
                 }
             }
@@ -1499,8 +1510,17 @@ void ManageRecoveryGrid(bool isBuy)
     }
     else
     {
-        AddToLog(StringFormat("Recovery order NOT placed | Reason: Total=%d Max=%d Pending=%d Enabled=%s", 
-            totalPositionsThisSide, MaxRecoveryOrders, recoveryPendingCount, EnableRecovery ? "YES" : "NO"), "RECOVERY");
+        string reason = "";
+        if(totalPositionsThisSide >= MaxRecoveryOrders)
+            reason = StringFormat("Max positions reached (%d/%d)", totalPositionsThisSide, MaxRecoveryOrders);
+        else if(recoveryPendingCount > 0)
+            reason = StringFormat("Recovery order already pending (%d)", recoveryPendingCount);
+        else if(!EnableRecovery)
+            reason = "Recovery disabled";
+        else
+            reason = "Unknown";
+            
+        AddToLog(StringFormat("%s Recovery NOT placed | %s", isBuy ? "BUY" : "SELL", reason), "RECOVERY");
     }
 }
 
