@@ -818,7 +818,9 @@ export default function DashboardHome() {
         {/* Extend License Modal */}
         {showExtendModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-purple-500/30">
+            <div className={`bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-6 w-full max-h-[90vh] overflow-y-auto border border-purple-500/30 ${
+              plans.length === 1 ? 'max-w-md' : plans.length === 2 ? 'max-w-2xl' : 'max-w-4xl'
+            }`}>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <Sparkles className="w-6 h-6 text-cyan-400" />
@@ -832,7 +834,11 @@ export default function DashboardHome() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className={`grid gap-6 ${
+                plans.length === 1 ? 'grid-cols-1' : 
+                plans.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 
+                'grid-cols-1 md:grid-cols-3'
+              }`}>
                 {plans.map((plan: any, index: number) => (
                   <div
                     key={plan.id}
@@ -1244,7 +1250,9 @@ export default function DashboardHome() {
       {/* Extend License Modal */}
       {showExtendModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-purple-500/30">
+          <div className={`bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-6 w-full max-h-[90vh] overflow-y-auto border border-purple-500/30 ${
+            plans.length === 1 ? 'max-w-md' : plans.length === 2 ? 'max-w-2xl' : 'max-w-4xl'
+          }`}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <Sparkles className="w-6 h-6 text-cyan-400" />
@@ -1258,7 +1266,11 @@ export default function DashboardHome() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className={`grid gap-6 ${
+              plans.length === 1 ? 'grid-cols-1' : 
+              plans.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 
+              'grid-cols-1 md:grid-cols-3'
+            }`}>
               {plans.map((plan: any, index: number) => (
                 <div
                   key={plan.id}
