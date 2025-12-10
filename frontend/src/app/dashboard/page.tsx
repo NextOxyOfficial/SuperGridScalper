@@ -192,7 +192,9 @@ export default function DashboardHome() {
       
       if (data.success) {
         // Show success message
-        alert(`✅ ${data.message}\nNew expiry: ${new Date(data.license.expires_at).toLocaleDateString()}\nDays remaining: ${data.license.days_remaining}`);
+        const daysRemaining = data.license.days_remaining;
+        const dayText = daysRemaining === 1 ? 'day' : 'days';
+        alert(`✅ ${data.message}\nNew expiry: ${new Date(data.license.expires_at).toLocaleDateString()}\n${daysRemaining} ${dayText} remaining`);
         
         // Update selectedLicense with new data
         const updatedLicense = {
@@ -305,7 +307,7 @@ export default function DashboardHome() {
                     }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
                       {getDaysRemaining(selectedLicense) <= 0 
                         ? 'LICENSE EXPIRED!' 
-                        : `LICENSE EXPIRES IN ${getDaysRemaining(selectedLicense)} DAYS`}
+                        : `LICENSE EXPIRES IN ${getDaysRemaining(selectedLicense)} ${getDaysRemaining(selectedLicense) === 1 ? 'DAY' : 'DAYS'}`}
                     </p>
                     <p className="text-xs sm:text-sm text-gray-400">
                       {getDaysRemaining(selectedLicense) <= 0 
@@ -487,7 +489,7 @@ export default function DashboardHome() {
             </div>
             <div className="bg-[#12121a] border border-yellow-500/20 rounded-lg p-1.5 sm:p-2">
               <p className="text-gray-500 text-[10px] sm:text-xs">Expires</p>
-              <p className="text-xs sm:text-sm font-bold text-yellow-400">{getDaysRemaining(selectedLicense)}d</p>
+              <p className="text-xs sm:text-sm font-bold text-yellow-400">{getDaysRemaining(selectedLicense)} {getDaysRemaining(selectedLicense) === 1 ? 'day' : 'days'}</p>
             </div>
           </div>
           {/* Second Stats Row - Desktop only or collapsible */}
@@ -765,7 +767,7 @@ export default function DashboardHome() {
                       {selectedLicense.expires_at ? new Date(selectedLicense.expires_at).toLocaleDateString() : '-'}
                     </p>
                     <p className={`text-[10px] sm:text-xs mt-0.5 ${getDaysRemaining(selectedLicense) <= 0 ? 'text-red-400' : getDaysRemaining(selectedLicense) <= 3 ? 'text-yellow-400' : 'text-yellow-400'}`}>
-                      {getDaysRemaining(selectedLicense) <= 0 ? 'Expired!' : `(${getDaysRemaining(selectedLicense)} days left)`}
+                      {getDaysRemaining(selectedLicense) <= 0 ? 'Expired!' : `(${getDaysRemaining(selectedLicense)} ${getDaysRemaining(selectedLicense) === 1 ? 'day' : 'days'} left)`}
                     </p>
                   </div>
                 </div>
@@ -798,8 +800,8 @@ export default function DashboardHome() {
                           {getDaysRemaining(selectedLicense) <= 0 
                             ? 'Your license has expired. Extend now to continue trading.' 
                             : getDaysRemaining(selectedLicense) <= 3 
-                              ? `Only ${getDaysRemaining(selectedLicense)} day(s) remaining. Extend to avoid interruption.`
-                              : `Your license expires in ${getDaysRemaining(selectedLicense)} days. Extend now to avoid any interruption.`}
+                              ? `Only ${getDaysRemaining(selectedLicense)} ${getDaysRemaining(selectedLicense) === 1 ? 'day' : 'days'} remaining. Extend to avoid interruption.`
+                              : `Your license expires in ${getDaysRemaining(selectedLicense)} ${getDaysRemaining(selectedLicense) === 1 ? 'day' : 'days'}. Extend now to avoid any interruption.`}
                         </p>
                       </div>
                       <button
@@ -1158,7 +1160,7 @@ export default function DashboardHome() {
                       <p className="text-[10px] sm:text-xs text-gray-400">
                         {getDaysRemaining(lic) <= 0 
                           ? 'Click to extend your license' 
-                          : `${getDaysRemaining(lic)} days remaining`}
+                          : `${getDaysRemaining(lic)} ${getDaysRemaining(lic) === 1 ? 'day' : 'days'} remaining`}
                       </p>
                     </div>
                   </div>
@@ -1229,7 +1231,7 @@ export default function DashboardHome() {
                 <div className="text-center sm:text-left hidden sm:block">
                   <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Expires</p>
                   <p className={`text-sm sm:text-lg font-bold ${getDaysRemaining(lic) <= 7 ? 'text-orange-400' : 'text-yellow-400'}`}>
-                    {getDaysRemaining(lic)} days
+                    {getDaysRemaining(lic)} {getDaysRemaining(lic) === 1 ? 'day' : 'days'}
                   </p>
                 </div>
               </div>
@@ -1244,7 +1246,7 @@ export default function DashboardHome() {
                 <div className="text-center">
                   <p className="text-[10px] text-gray-500">Expires</p>
                   <p className={`text-sm font-bold ${getDaysRemaining(lic) <= 7 ? 'text-orange-400' : 'text-yellow-400'}`}>
-                    {getDaysRemaining(lic)} days
+                    {getDaysRemaining(lic)} {getDaysRemaining(lic) === 1 ? 'day' : 'days'}
                   </p>
                 </div>
               </div>
