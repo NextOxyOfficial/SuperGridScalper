@@ -10,7 +10,7 @@ const orbitron = Orbitron({
 })
 
 export const metadata: Metadata = {
-  title: "MARK'S AI 3.0 - Advance Scalper | Automated Gold AI Trading",
+  title: "MARK'S AI 3.0 - ADVANCE AI SCALPER | Automated Gold AI Trading",
   description: 'The Most Powerful Automated Gold AI Trading. Experience the future of trading with advanced neural network algorithms.',
 }
 

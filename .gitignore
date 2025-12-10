@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
+*.pyo
+*.pyd
 *.so
 .Python
 *.egg-info/
@@ -15,10 +18,12 @@ db.sqlite3
 
 # Django
 *.pot
-*.pyc
 local_settings.py
 media/
 staticfiles/
+*.pyc
+**/__pycache__/
+**/*.pyc
 
 # Database
 *.sql

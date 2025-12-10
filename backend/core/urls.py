@@ -18,4 +18,10 @@ urlpatterns = [
     path('action-log/', views.add_action_log, name='add_action_log'),
     path('action-logs/', views.get_action_logs, name='get_action_logs'),
     path('ea-products/', views.get_ea_products, name='get_ea_products'),
+    
+    # Referral System
+    path('referral/create/', views.create_referral, name='create_referral'),
+    path('referral/stats/', views.get_referral_stats, name='get_referral_stats'),
+    path('referral/track-click/', views.track_referral_click, name='track_referral_click'),
+    path('referral/request-payout/', views.request_payout, name='request_payout'),
 ]

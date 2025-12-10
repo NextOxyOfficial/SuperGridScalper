@@ -545,7 +545,7 @@ export default function Home() {
                 MARK'S AI 3.0
               </h1>
               <h2 className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white/90 mb-3 sm:mb-4 drop-shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                ADVANCE SCALPER
+                ADVANCE AI SCALPER
               </h2>
               
               {/* Tagline */}
@@ -585,7 +585,7 @@ export default function Home() {
               {/* Stats Row */}
               <div className="w-full grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:justify-center lg:justify-start sm:gap-6 md:gap-8 py-3 sm:py-4 px-3 sm:px-6 bg-black/30 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-cyan-500/20 mt-4 sm:mt-6">
                 <div className="text-center">
-                  <div className="text-lg sm:text-2xl md:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>99.2%</div>
+                  <div className="text-lg sm:text-2xl md:text-3xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>89.2%</div>
                   <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Accuracy</div>
                 </div>
                 <div className="text-center">
@@ -597,7 +597,7 @@ export default function Home() {
                   <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Speed</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg sm:text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>5000+</div>
+                  <div className="text-lg sm:text-2xl md:text-3xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>972+</div>
                   <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Traders</div>
                 </div>
               </div>
@@ -649,7 +649,7 @@ export default function Home() {
                       <div className="text-gray-500 text-[8px] sm:text-[10px]">STATUS</div>
                     </div>
                     <div className="bg-black/40 rounded-lg p-1.5 sm:p-2">
-                      <div className="text-green-400 text-sm sm:text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>98.7%</div>
+                      <div className="text-green-400 text-sm sm:text-lg font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>89.2%</div>
                       <div className="text-gray-500 text-[8px] sm:text-[10px]">WIN RATE</div>
                     </div>
                     <div className="bg-black/40 rounded-lg p-1.5 sm:p-2">

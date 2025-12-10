@@ -5,7 +5,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from .models import License, LicenseVerificationLog, SubscriptionPlan, EASettings, TradeData, EAActionLog, EAProduct
+from .models import License, LicenseVerificationLog, SubscriptionPlan, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout
 from decimal import Decimal
 import json
 
@@ -879,3 +879,200 @@ def get_ea_products(request):
         'success': True,
         'products': product_list
     })
+
+
+# ==================== REFERRAL SYSTEM ====================
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_referral(request):
+    """Create or get referral code for a user"""
+    try:
+        data = json.loads(request.body)
+        username = data.get('username')
+        
+        if not username:
+            return JsonResponse({'success': False, 'message': 'Username required'}, status=400)
+        
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+        
+        # Get or create referral
+        referral, created = Referral.objects.get_or_create(
+            referrer=user,
+            defaults={'commission_percent': Decimal('10.00')}
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'referral_code': referral.referral_code,
+            'commission_percent': float(referral.commission_percent),
+            'total_earnings': float(referral.total_earnings),
+            'pending_earnings': float(referral.pending_earnings),
+            'paid_earnings': float(referral.paid_earnings),
+            'clicks': referral.clicks,
+            'signups': referral.signups,
+            'purchases': referral.purchases,
+            'created': created
+        })
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_referral_stats(request):
+    """Get referral statistics for a user"""
+    try:
+        username = request.GET.get('username')
+        
+        if not username:
+            return JsonResponse({'success': False, 'message': 'Username required'}, status=400)
+        
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+        
+        try:
+            referral = Referral.objects.get(referrer=user)
+        except Referral.DoesNotExist:
+            return JsonResponse({
+                'success': True,
+                'has_referral': False,
+                'message': 'No referral code created yet'
+            })
+        
+        # Get transactions
+        transactions = ReferralTransaction.objects.filter(referral=referral).order_by('-created_at')[:10]
+        transaction_list = []
+        for t in transactions:
+            transaction_list.append({
+                'id': t.id,
+                'referred_user': t.referred_user.username,
+                'purchase_amount': float(t.purchase_amount),
+                'commission_amount': float(t.commission_amount),
+                'status': t.status,
+                'created_at': t.created_at.isoformat(),
+            })
+        
+        # Get payouts
+        payouts = ReferralPayout.objects.filter(referral=referral).order_by('-requested_at')[:10]
+        payout_list = []
+        for p in payouts:
+            payout_list.append({
+                'id': p.id,
+                'amount': float(p.amount),
+                'payment_method': p.payment_method,
+                'status': p.status,
+                'requested_at': p.requested_at.isoformat(),
+                'processed_at': p.processed_at.isoformat() if p.processed_at else None,
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'has_referral': True,
+            'referral_code': referral.referral_code,
+            'commission_percent': float(referral.commission_percent),
+            'stats': {
+                'total_earnings': float(referral.total_earnings),
+                'pending_earnings': float(referral.pending_earnings),
+                'paid_earnings': float(referral.paid_earnings),
+                'clicks': referral.clicks,
+                'signups': referral.signups,
+                'purchases': referral.purchases,
+            },
+            'transactions': transaction_list,
+            'payouts': payout_list,
+        })
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def track_referral_click(request):
+    """Track a referral link click"""
+    try:
+        data = json.loads(request.body)
+        referral_code = data.get('referral_code')
+        
+        if not referral_code:
+            return JsonResponse({'success': False, 'message': 'Referral code required'}, status=400)
+        
+        try:
+            referral = Referral.objects.get(referral_code=referral_code)
+            referral.clicks += 1
+            referral.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Click tracked',
+                'referrer': referral.referrer.username
+            })
+        except Referral.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'Invalid referral code'}, status=404)
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def request_payout(request):
+    """Request a payout for referral earnings"""
+    try:
+        data = json.loads(request.body)
+        username = data.get('username')
+        amount = Decimal(str(data.get('amount', 0)))
+        payment_method = data.get('payment_method', 'paypal')
+        payment_details = data.get('payment_details', {})
+        
+        if not username:
+            return JsonResponse({'success': False, 'message': 'Username required'}, status=400)
+        
+        if amount <= 0:
+            return JsonResponse({'success': False, 'message': 'Invalid amount'}, status=400)
+        
+        try:
+            user = User.objects.get(username=username)
+            referral = Referral.objects.get(referrer=user)
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+        except Referral.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'No referral account found'}, status=404)
+        
+        # Check if user has enough pending earnings
+        if referral.pending_earnings < amount:
+            return JsonResponse({
+                'success': False,
+                'message': f'Insufficient balance. Available: ${referral.pending_earnings}'
+            }, status=400)
+        
+        # Create payout request
+        payout = ReferralPayout.objects.create(
+            referral=referral,
+            amount=amount,
+            payment_method=payment_method,
+            payment_details=payment_details,
+            status='pending'
+        )
+        
+        # Update referral earnings
+        referral.pending_earnings -= amount
+        referral.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Payout request submitted',
+            'payout_id': payout.id,
+            'amount': float(amount),
+            'remaining_balance': float(referral.pending_earnings)
+        })
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)

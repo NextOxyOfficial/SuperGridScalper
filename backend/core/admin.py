@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout
 
 
 # Unregister default User admin and register with search
@@ -325,3 +325,104 @@ class EAProductAdmin(admin.ModelAdmin):
     def investment_range(self, obj):
         return f"${obj.min_investment:,.0f} - ${obj.max_investment:,.0f}"
     investment_range.short_description = 'Investment'
+
+
+# ==================== REFERRAL SYSTEM ADMIN ====================
+
+@admin.register(Referral)
+class ReferralAdmin(admin.ModelAdmin):
+    list_display = ['referrer', 'referral_code', 'signups', 'purchases', 'earnings_display', 'status', 'created_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['referrer__username', 'referral_code']
+    readonly_fields = ['referral_code', 'clicks', 'signups', 'purchases', 'total_earnings', 'pending_earnings', 'paid_earnings', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('👤 Referrer Info', {
+            'fields': ('referrer', 'referral_code', 'commission_percent')
+        }),
+        ('📊 Statistics', {
+            'fields': (('clicks', 'signups', 'purchases'),)
+        }),
+        ('💰 Earnings', {
+            'fields': (('total_earnings', 'pending_earnings', 'paid_earnings'),)
+        }),
+        ('⚙️ Status', {
+            'fields': ('status', ('created_at', 'updated_at'))
+        }),
+    )
+    
+    def earnings_display(self, obj):
+        return format_html(
+            '<span style="color: green;">${:,.2f}</span> <small>(Pending: ${:,.2f})</small>',
+            obj.total_earnings, obj.pending_earnings
+        )
+    earnings_display.short_description = 'Earnings'
+
+
+@admin.register(ReferralTransaction)
+class ReferralTransactionAdmin(admin.ModelAdmin):
+    list_display = ['referrer_display', 'referred_user', 'purchase_amount', 'commission_display', 'status', 'created_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['referral__referrer__username', 'referred_user__username']
+    readonly_fields = ['referral', 'referred_user', 'license', 'purchase_amount', 'commission_percent', 'commission_amount', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('🔗 Referral Info', {
+            'fields': ('referral', 'referred_user', 'license')
+        }),
+        ('💵 Transaction', {
+            'fields': (('purchase_amount', 'commission_percent', 'commission_amount'),)
+        }),
+        ('⚙️ Status', {
+            'fields': ('status', 'paid_at', ('created_at', 'updated_at'))
+        }),
+    )
+    
+    def referrer_display(self, obj):
+        return obj.referral.referrer.username
+    referrer_display.short_description = 'Referrer'
+    
+    def commission_display(self, obj):
+        return format_html(
+            '<span style="color: green; font-weight: bold;">${:,.2f}</span> <small>({}%)</small>',
+            obj.commission_amount, obj.commission_percent
+        )
+    commission_display.short_description = 'Commission'
+
+
+@admin.register(ReferralPayout)
+class ReferralPayoutAdmin(admin.ModelAdmin):
+    list_display = ['referrer_display', 'amount', 'payment_method', 'status_display', 'requested_at', 'processed_at']
+    list_filter = ['status', 'payment_method', 'requested_at']
+    search_fields = ['referral__referrer__username', 'transaction_id']
+    readonly_fields = ['referral', 'requested_at']
+    
+    fieldsets = (
+        ('👤 Referrer', {
+            'fields': ('referral',)
+        }),
+        ('💰 Payout Details', {
+            'fields': (('amount', 'payment_method'), 'payment_details')
+        }),
+        ('⚙️ Status & Processing', {
+            'fields': ('status', 'transaction_id', 'notes', ('requested_at', 'processed_at'))
+        }),
+    )
+    
+    def referrer_display(self, obj):
+        return obj.referral.referrer.username
+    referrer_display.short_description = 'Referrer'
+    
+    def status_display(self, obj):
+        colors = {
+            'pending': ('orange', '⏳'),
+            'processing': ('blue', '⚙️'),
+            'completed': ('green', '✅'),
+            'failed': ('red', '❌'),
+        }
+        color, icon = colors.get(obj.status, ('gray', ''))
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{} {}</span>',
+            color, icon, obj.status.upper()
+        )
+    status_display.short_description = 'Status'
