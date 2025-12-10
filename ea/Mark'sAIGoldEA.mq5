@@ -210,6 +210,20 @@ void OnTick()
     // Count current positions
     CountPositions();
     
+    // Debug: Log current state every 30 seconds
+    static datetime lastDebugLog = 0;
+    if(TimeCurrent() - lastDebugLog > 30)
+    {
+        double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+        AddToLog(StringFormat("DEBUG | Price: %.2f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d", 
+            currentBid,
+            buyInRecovery ? "RECOVERY" : "NORMAL",
+            sellInRecovery ? "RECOVERY" : "NORMAL",
+            currentBuyPositions,
+            currentSellPositions), "DEBUG");
+        lastDebugLog = TimeCurrent();
+    }
+    
     // Track previous mode for logging mode changes
     static bool prevBuyInRecovery = false;
     static bool prevSellInRecovery = false;
@@ -240,6 +254,12 @@ void OnTick()
     prevBuyInRecovery = buyInRecovery;
     prevSellInRecovery = sellInRecovery;
     
+    // Clean up invalid/out-of-range orders FIRST (before grid management)
+    CleanupInvalidOrders();
+    
+    // Auto-correction worker - ensures grid is always correct
+    AutoCorrectGridOrders();
+    
     // Manage grids based on mode
     if(!buyInRecovery)
     {
@@ -262,9 +282,6 @@ void OnTick()
         DeleteNormalPendingOrders(false);
         ManageRecoveryGrid(false); // SELL Recovery
     }
-    
-    // Clean up invalid/out-of-range orders
-    CleanupInvalidOrders();
     
     // Apply trailing stops
     ApplyTrailing();
@@ -421,6 +438,61 @@ void CleanupInvalidOrders()
     
     int deletedCount = 0;
     
+    // CRITICAL: Only delete orders that are in WRONG mode
+    // This runs BEFORE grid management, so it cleans up old orders from previous mode
+    for(int i = OrdersTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        string comment = OrderGetString(ORDER_COMMENT);
+        bool isRecovery = (StringFind(comment, "Recovery") >= 0);
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        
+        bool shouldDelete = false;
+        string reason = "";
+        
+        // Check BUY orders - delete ONLY if mode mismatch
+        if(type == ORDER_TYPE_BUY_LIMIT)
+        {
+            // In NORMAL mode: Delete recovery orders (they're from old recovery mode)
+            if(!buyInRecovery && isRecovery)
+            {
+                shouldDelete = true;
+                reason = "Recovery order while in normal mode";
+            }
+            // In RECOVERY mode: Delete normal orders (they're from old normal mode)
+            // This is already handled by DeleteNormalPendingOrders(), so skip here
+            // to avoid double deletion
+        }
+        // Check SELL orders - delete ONLY if mode mismatch
+        else if(type == ORDER_TYPE_SELL_LIMIT)
+        {
+            // In NORMAL mode: Delete recovery orders (they're from old recovery mode)
+            if(!sellInRecovery && isRecovery)
+            {
+                shouldDelete = true;
+                reason = "Recovery order while in normal mode";
+            }
+            // In RECOVERY mode: Delete normal orders (they're from old normal mode)
+            // This is already handled by DeleteNormalPendingOrders(), so skip here
+        }
+        
+        if(shouldDelete)
+        {
+            if(trade.OrderDelete(ticket))
+            {
+                AddToLog(StringFormat("Mode cleanup: Deleted %s %s order #%I64u - %s", 
+                    isRecovery ? "RECOVERY" : "NORMAL",
+                    (type == ORDER_TYPE_BUY_LIMIT) ? "BUY" : "SELL", 
+                    ticket, reason), "CLEANUP");
+                deletedCount++;
+            }
+        }
+    }
+    
     for(int i = OrdersTotal() - 1; i >= 0; i--)
     {
         ulong ticket = OrderGetTicket(i);
@@ -534,10 +606,307 @@ void CleanupInvalidOrders()
         }
     }
     
+    // Enforce max order limits - delete excess orders
+    // Count normal orders for each side
+    int normalBuyOrderCount = 0;
+    int normalSellOrderCount = 0;
+    
+    for(int i = 0; i < OrdersTotal(); i++)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue; // Skip recovery orders
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if(type == ORDER_TYPE_BUY_LIMIT) normalBuyOrderCount++;
+        else if(type == ORDER_TYPE_SELL_LIMIT) normalSellOrderCount++;
+    }
+    
+    // Count normal positions for each side
+    int normalBuyPosCount = 0;
+    int normalSellPosCount = 0;
+    
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue; // Skip recovery positions
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if(type == POSITION_TYPE_BUY) normalBuyPosCount++;
+        else if(type == POSITION_TYPE_SELL) normalSellPosCount++;
+    }
+    
+    // Delete excess BUY orders (if total > max)
+    int totalBuy = normalBuyPosCount + normalBuyOrderCount;
+    if(totalBuy > MaxBuyOrders)
+    {
+        int toDelete = totalBuy - MaxBuyOrders;
+        for(int i = OrdersTotal() - 1; i >= 0 && toDelete > 0; i--)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "Recovery") >= 0) continue;
+            
+            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            if(type == ORDER_TYPE_BUY_LIMIT)
+            {
+                if(trade.OrderDelete(ticket))
+                {
+                    AddToLog(StringFormat("Deleted excess BUY order #%I64u (total=%d, max=%d)", 
+                        ticket, totalBuy, MaxBuyOrders), "CLEANUP");
+                    deletedCount++;
+                    toDelete--;
+                }
+            }
+        }
+    }
+    
+    // Delete excess SELL orders (if total > max)
+    int totalSell = normalSellPosCount + normalSellOrderCount;
+    if(totalSell > MaxSellOrders)
+    {
+        int toDelete = totalSell - MaxSellOrders;
+        for(int i = OrdersTotal() - 1; i >= 0 && toDelete > 0; i--)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "Recovery") >= 0) continue;
+            
+            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            if(type == ORDER_TYPE_SELL_LIMIT)
+            {
+                if(trade.OrderDelete(ticket))
+                {
+                    AddToLog(StringFormat("Deleted excess SELL order #%I64u (total=%d, max=%d)", 
+                        ticket, totalSell, MaxSellOrders), "CLEANUP");
+                    deletedCount++;
+                    toDelete--;
+                }
+            }
+        }
+    }
+    
     // Log cleanup summary (only if orders were deleted)
     if(deletedCount > 0)
     {
         AddToLog(StringFormat("Cleanup completed: %d invalid orders deleted", deletedCount), "CLEANUP");
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Auto-Correction Worker - Ensures Grid is Always Correct          |
+//+------------------------------------------------------------------+
+void AutoCorrectGridOrders()
+{
+    // This worker runs every tick and ensures:
+    // 1. Correct number of orders exist
+    // 2. Orders are at correct grid levels
+    // 3. Orders match current mode (normal/recovery)
+    // 4. No gaps in the grid
+    
+    double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    
+    // Check BUY side
+    if(!buyInRecovery)
+    {
+        // Normal mode: Should have (MaxBuyOrders - positions) pending orders
+        int normalBuyPos = 0;
+        int normalBuyOrders = 0;
+        
+        // Count normal positions
+        for(int i = 0; i < PositionsTotal(); i++)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            string comment = PositionGetString(POSITION_COMMENT);
+            if(StringFind(comment, "Recovery") >= 0) continue;
+            
+            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if(type == POSITION_TYPE_BUY) normalBuyPos++;
+        }
+        
+        // Count normal pending orders
+        for(int i = 0; i < OrdersTotal(); i++)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "Recovery") >= 0) continue;
+            
+            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            if(type == ORDER_TYPE_BUY_LIMIT) normalBuyOrders++;
+        }
+        
+        int expectedOrders = MaxBuyOrders - normalBuyPos;
+        int currentTotal = normalBuyPos + normalBuyOrders;
+        
+        // Check if we're within buy range
+        double buyRangeHigh = MathMax(BuyRangeStart, BuyRangeEnd);
+        double buyRangeLow = MathMin(BuyRangeStart, BuyRangeEnd);
+        bool inBuyRange = (currentBid >= buyRangeLow && currentBid <= buyRangeHigh);
+        
+        // Log correction status every 60 seconds
+        static datetime lastBuyCorrection = 0;
+        if(TimeCurrent() - lastBuyCorrection > 60)
+        {
+            if(inBuyRange && currentTotal < MaxBuyOrders)
+            {
+                AddToLog(StringFormat("BUY Auto-Correct: Have %d/%d (Pos:%d Orders:%d) - Need %d more orders", 
+                    currentTotal, MaxBuyOrders, normalBuyPos, normalBuyOrders, expectedOrders - normalBuyOrders), "WORKER");
+                lastBuyCorrection = TimeCurrent();
+            }
+            else if(!inBuyRange)
+            {
+                AddToLog(StringFormat("BUY Auto-Correct: Price %.2f outside range [%.2f-%.2f]", 
+                    currentBid, buyRangeLow, buyRangeHigh), "WORKER");
+                lastBuyCorrection = TimeCurrent();
+            }
+        }
+    }
+    
+    // Check SELL side
+    if(!sellInRecovery)
+    {
+        // Normal mode: Should have (MaxSellOrders - positions) pending orders
+        int normalSellPos = 0;
+        int normalSellOrders = 0;
+        
+        // Count normal positions
+        for(int i = 0; i < PositionsTotal(); i++)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            string comment = PositionGetString(POSITION_COMMENT);
+            if(StringFind(comment, "Recovery") >= 0) continue;
+            
+            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if(type == POSITION_TYPE_SELL) normalSellPos++;
+        }
+        
+        // Count normal pending orders
+        for(int i = 0; i < OrdersTotal(); i++)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "Recovery") >= 0) continue;
+            
+            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            if(type == ORDER_TYPE_SELL_LIMIT) normalSellOrders++;
+        }
+        
+        int expectedOrders = MaxSellOrders - normalSellPos;
+        int currentTotal = normalSellPos + normalSellOrders;
+        
+        // Check if we're within sell range
+        double sellRangeHigh = MathMax(SellRangeStart, SellRangeEnd);
+        double sellRangeLow = MathMin(SellRangeStart, SellRangeEnd);
+        bool inSellRange = (currentAsk >= sellRangeLow && currentAsk <= sellRangeHigh);
+        
+        // Log correction status every 60 seconds
+        static datetime lastSellCorrection = 0;
+        if(TimeCurrent() - lastSellCorrection > 60)
+        {
+            if(inSellRange && currentTotal < MaxSellOrders)
+            {
+                AddToLog(StringFormat("SELL Auto-Correct: Have %d/%d (Pos:%d Orders:%d) - Need %d more orders", 
+                    currentTotal, MaxSellOrders, normalSellPos, normalSellOrders, expectedOrders - normalSellOrders), "WORKER");
+                lastSellCorrection = TimeCurrent();
+            }
+            else if(!inSellRange)
+            {
+                AddToLog(StringFormat("SELL Auto-Correct: Price %.2f outside range [%.2f-%.2f]", 
+                    currentAsk, sellRangeLow, sellRangeHigh), "WORKER");
+                lastSellCorrection = TimeCurrent();
+            }
+        }
+    }
+    
+    // Check recovery mode orders
+    if(buyInRecovery)
+    {
+        int recoveryBuyOrders = 0;
+        for(int i = 0; i < OrdersTotal(); i++)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "Recovery") < 0) continue;
+            
+            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            if(type == ORDER_TYPE_BUY_LIMIT) recoveryBuyOrders++;
+        }
+        
+        static datetime lastBuyRecoveryCheck = 0;
+        if(TimeCurrent() - lastBuyRecoveryCheck > 60)
+        {
+            if(recoveryBuyOrders == 0)
+            {
+                AddToLog("BUY Recovery Mode: No recovery orders found - will create", "WORKER");
+            }
+            lastBuyRecoveryCheck = TimeCurrent();
+        }
+    }
+    
+    if(sellInRecovery)
+    {
+        int recoverySellOrders = 0;
+        for(int i = 0; i < OrdersTotal(); i++)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "Recovery") < 0) continue;
+            
+            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            if(type == ORDER_TYPE_SELL_LIMIT) recoverySellOrders++;
+        }
+        
+        static datetime lastSellRecoveryCheck = 0;
+        if(TimeCurrent() - lastSellRecoveryCheck > 60)
+        {
+            if(recoverySellOrders == 0)
+            {
+                AddToLog("SELL Recovery Mode: No recovery orders found - will create", "WORKER");
+            }
+            lastSellRecoveryCheck = TimeCurrent();
+        }
     }
 }
 
@@ -565,7 +934,15 @@ void ManageNormalGrid(bool isBuy)
     double minGap = gapPrice * 0.8; // Minimum 80% of gap required between positions/orders
     
     // Check if current price is within trading range
-    if(currentPrice < rangeLow || currentPrice > rangeHigh) return;
+    if(currentPrice < rangeLow || currentPrice > rangeHigh)
+    {
+        AddToLog(StringFormat("%s Grid: Price %.2f outside range [%.2f - %.2f]", 
+            isBuy ? "BUY" : "SELL", currentPrice, rangeLow, rangeHigh), "GRID");
+        return;
+    }
+    
+    AddToLog(StringFormat("%s Grid: Price %.2f in range, managing grid...", 
+        isBuy ? "BUY" : "SELL", currentPrice), "GRID");
     
     // ===== STEP 1: Collect ONLY NORMAL positions for this side =====
     double positionPrices[];
@@ -1021,16 +1398,20 @@ void ManageRecoveryGrid(bool isBuy)
         double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
         
         // BUY LIMIT must be below current price, SELL LIMIT must be above current price
-        // Allow orders that are at least 1 pip away from current price
-        if(isBuy && recoveryPrice >= currentPrice - pip) 
+        // More lenient check - only skip if price is actually invalid for limit order
+        if(isBuy && recoveryPrice >= currentPrice) 
         {
-            AddToLog(StringFormat("Recovery order skipped - too close to price (%.2f vs %.2f)", recoveryPrice, currentPrice), "RECOVERY");
-            return;
+            AddToLog(StringFormat("Recovery order skipped - price %.2f >= current %.2f (will adjust)", recoveryPrice, currentPrice), "RECOVERY");
+            // Adjust price to be below current price
+            recoveryPrice = NormalizeDouble(currentPrice - (gapPips * pip), _Digits);
+            AddToLog(StringFormat("Adjusted recovery price to %.2f", recoveryPrice), "RECOVERY");
         }
-        if(!isBuy && recoveryPrice <= currentPrice + pip)
+        if(!isBuy && recoveryPrice <= currentPrice)
         {
-            AddToLog(StringFormat("Recovery order skipped - too close to price (%.2f vs %.2f)", recoveryPrice, currentPrice), "RECOVERY");
-            return;
+            AddToLog(StringFormat("Recovery order skipped - price %.2f <= current %.2f (will adjust)", recoveryPrice, currentPrice), "RECOVERY");
+            // Adjust price to be above current price
+            recoveryPrice = NormalizeDouble(currentPrice + (gapPips * pip), _Digits);
+            AddToLog(StringFormat("Adjusted recovery price to %.2f", recoveryPrice), "RECOVERY");
         }
         
         // ===== DUPLICATE CHECK for recovery order =====
@@ -1088,16 +1469,38 @@ void ManageRecoveryGrid(bool isBuy)
         recoveryLot = MathMax(minLot, MathMin(maxLot, recoveryLot));
         
         // Place recovery order
+        AddToLog(StringFormat("Attempting to place %s recovery order | Price: %.2f | Lot: %.2f | TP: %.2f", 
+            isBuy ? "BUY" : "SELL", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
+            
         if(isBuy)
         {
             if(trade.BuyLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_BUY"))
-                AddToLog(StringFormat("Recovery BUY @ %.2f | Lot: %.2f", recoveryPrice, recoveryLot), "RECOVERY");
+            {
+                AddToLog(StringFormat("✅ Recovery BUY placed @ %.2f | Lot: %.2f | TP: %.2f", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
+            }
+            else
+            {
+                AddToLog(StringFormat("❌ Failed to place recovery BUY | Error: %d | RetCode: %d", 
+                    GetLastError(), trade.ResultRetcode()), "RECOVERY");
+            }
         }
         else
         {
             if(trade.SellLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_SELL"))
-                AddToLog(StringFormat("Recovery SELL @ %.2f | Lot: %.2f", recoveryPrice, recoveryLot), "RECOVERY");
+            {
+                AddToLog(StringFormat("✅ Recovery SELL placed @ %.2f | Lot: %.2f | TP: %.2f", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
+            }
+            else
+            {
+                AddToLog(StringFormat("❌ Failed to place recovery SELL | Error: %d | RetCode: %d", 
+                    GetLastError(), trade.ResultRetcode()), "RECOVERY");
+            }
         }
+    }
+    else
+    {
+        AddToLog(StringFormat("Recovery order NOT placed | Reason: Total=%d Max=%d Pending=%d Enabled=%s", 
+            totalPositionsThisSide, MaxRecoveryOrders, recoveryPendingCount, EnableRecovery ? "YES" : "NO"), "RECOVERY");
     }
 }
 
