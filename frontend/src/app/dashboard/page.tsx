@@ -4,11 +4,12 @@ import { useState, useEffect, useRef } from 'react';
 import { Copy, Check, X, Sparkles, CheckCircle, Loader2 } from 'lucide-react';
 import { useDashboard } from './context';
 import axios from 'axios';
+import ExnessBroker from '@/components/ExnessBroker';
 
 const POLLING_INTERVAL = 2000; // Faster polling for real-time updates
 
 export default function DashboardHome() {
-  const { user, licenses, selectedLicense, selectLicense, settings, API_URL } = useDashboard();
+  const { user, licenses, selectedLicense, selectLicense, settings, API_URL, refreshLicenses } = useDashboard();
   
   // Trading state
   const [tradeData, setTradeData] = useState<any>(null);
@@ -258,7 +259,9 @@ export default function DashboardHome() {
       if (data.success) {
         setPurchaseSuccess(data.license);
         localStorage.setItem('licenses', JSON.stringify(data.licenses));
-        window.location.reload();
+        // Refresh licenses from context instead of page reload
+        // This keeps the success message visible until user navigates away
+        refreshLicenses();
       } else {
         setMessage({ type: 'error', text: data.message || 'Purchase failed' });
       }
@@ -954,9 +957,31 @@ export default function DashboardHome() {
               </div>
               <h4 className="text-lg font-bold text-cyan-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>License Activated!</h4>
               <p className="text-gray-400 text-sm mb-3">Your new AI license has been created</p>
-              <div className="bg-[#0a0a0f] rounded p-3 mb-3 border border-cyan-500/20">
-                <p className="text-xs text-gray-500 mb-1">License Key</p>
-                <p className="font-mono text-xs text-cyan-400">{purchaseSuccess.license_key}</p>
+              <div className="bg-[#0a0a0f] rounded-lg p-4 mb-4 border border-cyan-500/20 relative group">
+                <p className="text-xs text-gray-500 mb-2">License Key</p>
+                <div className="flex items-center justify-center gap-2">
+                  <code className="font-mono text-sm sm:text-base text-cyan-400 bg-cyan-500/10 px-3 py-2 rounded-lg border border-cyan-500/30 select-all">
+                    {purchaseSuccess.license_key}
+                  </code>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(purchaseSuccess.license_key);
+                      const btn = e.currentTarget;
+                      btn.classList.add('copied');
+                      setTimeout(() => btn.classList.remove('copied'), 2000);
+                    }}
+                    className="relative p-2.5 rounded-lg bg-gradient-to-r from-cyan-500/20 to-cyan-400/20 hover:from-cyan-500/40 hover:to-cyan-400/40 border border-cyan-500/30 hover:border-cyan-400/50 transition-all group/btn [&.copied]:from-green-500/30 [&.copied]:to-green-400/30 [&.copied]:border-green-500/50"
+                    title="Copy license key"
+                  >
+                    <Copy className="w-5 h-5 text-cyan-400 group-[.copied]/btn:hidden" />
+                    <Check className="w-5 h-5 text-green-400 hidden group-[.copied]/btn:block" />
+                    <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs px-2 py-1 rounded opacity-0 group-[.copied]/btn:opacity-100 transition-opacity whitespace-nowrap">
+                      Copied!
+                    </span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-600 mt-2">Click the button to copy your license key</p>
               </div>
               <button
                 onClick={() => setPurchaseSuccess(null)}
@@ -1031,8 +1056,13 @@ export default function DashboardHome() {
           )}
         </div>
       </details>
+
+      {/* Exness Broker Recommendation */}
+      <div className="mb-4 sm:mb-6">
+        <ExnessBroker variant="compact" />
+      </div>
       
-      <div className="flex justify-between items-center mb-3 mt-10 sm:mb-4">
+      <div className="flex justify-between items-center mb-3 mt-6 sm:mb-4">
         <div className="flex items-center gap-2 sm:gap-3">
           <h3 className="text-sm sm:text-lg font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>YOUR LICENSES</h3>
           <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-cyan-400 bg-cyan-500/10 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-cyan-500/30">

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Bot, Download, Shield, Zap, TrendingUp, DollarSign, Target, Star, CheckCircle, ArrowRight, LogIn, Store, Loader2 } from 'lucide-react';
+import ExnessBroker from '@/components/ExnessBroker';
 
 // Fallback EA Products Data (used if API fails)
 const fallbackProducts = [
@@ -368,6 +369,11 @@ export default function PublicEAStorePage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Exness Broker Recommendation */}
+        <div className="mb-6 sm:mb-8">
+          <ExnessBroker variant="full" />
         </div>
 
         {/* Important Notes */}

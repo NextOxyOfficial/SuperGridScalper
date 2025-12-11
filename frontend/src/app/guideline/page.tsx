@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Bot, Play, ChevronDown, ChevronUp, Shield, Settings, TrendingUp, AlertTriangle, Download, CheckCircle, DollarSign, Target, Zap, ArrowRight, Store, BookOpen, LogIn } from 'lucide-react';
+import ExnessBroker from '@/components/ExnessBroker';
 
 // Video tutorials data - Add your YouTube/video URLs here
 const videoTutorials = [
@@ -326,6 +327,11 @@ export default function GuidelinePage() {
           <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">
             Learn everything about setting up and managing your trading EA.
           </p>
+        </div>
+
+        {/* Exness Broker Recommendation */}
+        <div className="mb-6 sm:mb-10">
+          <ExnessBroker variant="full" />
         </div>
 
         {/* Quick Tips */}

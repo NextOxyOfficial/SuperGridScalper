@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift } from 'lucide-react'
 import axios from 'axios'
+import ExnessBroker from '@/components/ExnessBroker'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api'
 
@@ -1007,6 +1008,23 @@ export default function Home() {
               <h3 className="text-xs sm:text-xl font-bold text-white mb-1 sm:mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Profit</h3>
               <p className="text-gray-400 text-[10px] sm:text-base">Trade 24/5</p>
             </div>
+          </div>
+        </div>
+
+        {/* Exness Broker Recommendation */}
+        <div className="mb-12 sm:mb-24">
+          <div className="text-center mb-6 sm:mb-8">
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-3 sm:mb-4">
+              <Star className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
+              <span className="text-yellow-300 text-xs sm:text-sm">RECOMMENDED BROKER</span>
+            </div>
+            <h2 className="text-xl sm:text-4xl font-bold text-white mb-2 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Open Your Trading Account</h2>
+            <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto">
+              Our EA works best with Exness Standard Cent Account. Get started in minutes.
+            </p>
+          </div>
+          <div className="max-w-3xl mx-auto">
+            <ExnessBroker variant="full" />
           </div>
         </div>
 
