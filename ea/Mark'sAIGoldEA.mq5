@@ -2076,6 +2076,73 @@ void SendTradeDataToServer()
     else if(buyInRecovery) tradingMode = "Buy Recovery Mode Activated!";
     else if(sellInRecovery) tradingMode = "Sell Recovery Mode Activated!";
     
+    // Build closed positions array (last 24 hours)
+    string closedJson = "[";
+    int closedCount = 0;
+    datetime fromTime = TimeCurrent() - 86400; // Last 24 hours
+    
+    if(HistorySelect(fromTime, TimeCurrent()))
+    {
+        int totalDeals = HistoryDealsTotal();
+        for(int i = totalDeals - 1; i >= 0 && closedCount < 100; i--)
+        {
+            ulong dealTicket = HistoryDealGetTicket(i);
+            if(dealTicket <= 0) continue;
+            
+            string dealSymbol = HistoryDealGetString(dealTicket, DEAL_SYMBOL);
+            if(dealSymbol != _Symbol) continue;
+            
+            ENUM_DEAL_ENTRY dealEntry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+            if(dealEntry != DEAL_ENTRY_OUT) continue; // Only closed deals
+            
+            long dealMagic = HistoryDealGetInteger(dealTicket, DEAL_MAGIC);
+            if(!ManageAllTrades && dealMagic != MagicNumber) continue;
+            
+            ENUM_DEAL_TYPE dealType = (ENUM_DEAL_TYPE)HistoryDealGetInteger(dealTicket, DEAL_TYPE);
+            if(dealType != DEAL_TYPE_BUY && dealType != DEAL_TYPE_SELL) continue;
+            
+            double dealLots = HistoryDealGetDouble(dealTicket, DEAL_VOLUME);
+            double dealPrice = HistoryDealGetDouble(dealTicket, DEAL_PRICE);
+            double dealProfit = HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
+            datetime dealTime = (datetime)HistoryDealGetInteger(dealTicket, DEAL_TIME);
+            
+            // Get position ticket for open price
+            ulong posTicket = HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+            double openPrice = 0;
+            
+            // Find the opening deal for this position
+            for(int j = 0; j < totalDeals; j++)
+            {
+                ulong openDealTicket = HistoryDealGetTicket(j);
+                if(openDealTicket <= 0) continue;
+                ulong openPosId = HistoryDealGetInteger(openDealTicket, DEAL_POSITION_ID);
+                if(openPosId == posTicket)
+                {
+                    ENUM_DEAL_ENTRY openEntry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(openDealTicket, DEAL_ENTRY);
+                    if(openEntry == DEAL_ENTRY_IN)
+                    {
+                        openPrice = HistoryDealGetDouble(openDealTicket, DEAL_PRICE);
+                        break;
+                    }
+                }
+            }
+            
+            if(closedCount > 0) closedJson += ",";
+            closedJson += "{";
+            closedJson += "\"ticket\":" + IntegerToString(dealTicket) + ",";
+            closedJson += "\"symbol\":\"" + dealSymbol + "\",";
+            closedJson += "\"type\":\"" + (dealType == DEAL_TYPE_SELL ? "BUY" : "SELL") + "\","; // Reversed because closing deal
+            closedJson += "\"lots\":" + DoubleToString(dealLots, 2) + ",";
+            closedJson += "\"open_price\":" + DoubleToString(openPrice, digits) + ",";
+            closedJson += "\"close_price\":" + DoubleToString(dealPrice, digits) + ",";
+            closedJson += "\"profit\":" + DoubleToString(dealProfit, 2) + ",";
+            closedJson += "\"close_time\":\"" + TimeToString(dealTime, TIME_DATE|TIME_MINUTES) + "\"";
+            closedJson += "}";
+            closedCount++;
+        }
+    }
+    closedJson += "]";
+    
     // Build main JSON request
     string jsonRequest = "{";
     jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
@@ -2095,7 +2162,8 @@ void SendTradeDataToServer()
     jsonRequest += "\"symbol\":\"" + _Symbol + "\",";
     jsonRequest += "\"current_price\":" + DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_BID), digits) + ",";
     jsonRequest += "\"open_positions\":" + positionsJson + ",";
-    jsonRequest += "\"pending_orders\":" + pendingJson;
+    jsonRequest += "\"pending_orders\":" + pendingJson + ",";
+    jsonRequest += "\"closed_positions\":" + closedJson;
     jsonRequest += "}";
     
     // Prepare request

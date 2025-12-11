@@ -120,52 +120,90 @@ export default function PublicEAStorePage() {
       <div className="absolute top-20 left-10 w-72 h-72 bg-cyan-500/20 rounded-full blur-[100px] animate-pulse" />
       <div className="absolute bottom-20 right-10 w-96 h-96 bg-yellow-500/10 rounded-full blur-[120px] animate-pulse" />
 
-      {/* Navigation */}
+      {/* Navigation - Different for logged in vs non-logged in */}
       <nav className="relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-6">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
-            {/* Row 1: Logo + Title */}
-            <div className="flex items-center gap-2 sm:gap-4">
-              <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
-                <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                  <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
-                </div>
-                <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
-              </Link>
-              <div className="h-5 sm:h-6 w-px bg-cyan-500/30"></div>
-              <span className="flex items-center gap-1.5 sm:gap-2 text-yellow-400 text-xs sm:text-sm font-medium" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                <Store className="w-4 h-4 sm:w-5 sm:h-5" /> EA STORE
-              </span>
-            </div>
-            {/* Row 2: Nav buttons */}
-            <div className="flex items-center gap-2 sm:gap-3">
             {isLoggedIn ? (
               <>
-                <span className="text-cyan-300 text-xs sm:text-sm hidden md:inline">{userName}</span>
-                <Link 
-                  href="/dashboard" 
-                  className="px-3 sm:px-4 py-2 sm:py-2 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-xs sm:text-sm font-medium transition"
-                >
-                  Dashboard
-                </Link>
+                {/* Logged In: Dashboard Style Header */}
+                <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
+                      <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+                        <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
+                      </div>
+                      <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+                    </Link>
+                  </div>
+                </div>
+                
+                {/* Nav buttons row */}
+                <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+                  <Link
+                    href="/dashboard"
+                    className="flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    Dashboard
+                  </Link>
+                  <Link
+                    href="/ea-store"
+                    className="flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center justify-center gap-1 sm:gap-2 bg-yellow-500 text-black"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    <Store className="w-3.5 h-3.5 sm:w-5 sm:h-5" /> EA Store
+                  </Link>
+                  <Link
+                    href="/guideline"
+                    className="flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    Guidelines
+                  </Link>
+                  <div className="hidden sm:flex items-center gap-3">
+                    <div className="h-5 w-px bg-cyan-500/30"></div>
+                    <span className="text-cyan-300 text-xs sm:text-sm">{userName}</span>
+                  </div>
+                </div>
               </>
             ) : (
               <>
-                <Link 
-                  href="/" 
-                  className="px-3 sm:px-4 py-2 sm:py-2 text-cyan-300 hover:text-white hover:bg-cyan-500/20 rounded-lg text-xs sm:text-sm font-medium transition border border-cyan-500/30"
-                >
-                  Home
-                </Link>
-                <Link 
-                  href="/login" 
-                  className="px-3 sm:px-4 py-2 sm:py-2 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-1.5"
-                >
-                  <LogIn className="w-4 h-4 sm:w-4 sm:h-4" /> Login
-                </Link>
+                {/* Non-Logged In: Homepage Style Header */}
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+                      <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
+                    </div>
+                    <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+                  </Link>
+                  <div className="h-5 sm:h-6 w-px bg-cyan-500/30"></div>
+                  <span className="flex items-center gap-1.5 sm:gap-2 text-yellow-400 text-xs sm:text-sm font-medium" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    <Store className="w-4 h-4 sm:w-5 sm:h-5" /> EA STORE
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Link 
+                    href="/" 
+                    className="px-3 sm:px-4 py-2 sm:py-2 text-cyan-300 hover:text-white hover:bg-cyan-500/20 rounded-lg text-xs sm:text-sm font-medium transition border border-cyan-500/30"
+                  >
+                    Home
+                  </Link>
+                  <Link 
+                    href="/guideline" 
+                    className="px-3 sm:px-4 py-2 sm:py-2 text-cyan-300 hover:text-white hover:bg-cyan-500/20 rounded-lg text-xs sm:text-sm font-medium transition border border-cyan-500/30"
+                  >
+                    Guidelines
+                  </Link>
+                  <Link 
+                    href="/" 
+                    className="px-3 sm:px-4 py-2 sm:py-2 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-1.5"
+                  >
+                    <LogIn className="w-4 h-4 sm:w-4 sm:h-4" /> Login
+                  </Link>
+                </div>
               </>
             )}
-            </div>
           </div>
         </div>
       </nav>
@@ -392,12 +430,43 @@ export default function PublicEAStorePage() {
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-cyan-500/20 py-6 mt-10">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-gray-500 text-sm">
-            © 2025 Mark's AI - Advance Gold Scalping EA. All rights reserved.
-          </p>
+      {/* Footer - Same as Homepage */}
+      <footer className="relative z-10 border-t border-cyan-500/10 pt-6 sm:pt-8 pb-4 mt-10">
+        <div className="max-w-7xl mx-auto px-4">
+          {/* Footer Links */}
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 mb-4">
+            <Link href="/guideline" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
+              Guidelines
+            </Link>
+            <span className="text-gray-700">•</span>
+            <Link href="/ea-store" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
+              EA Store
+            </Link>
+            <span className="text-gray-700">•</span>
+            <Link href="/terms" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
+              Terms & Conditions
+            </Link>
+            <span className="text-gray-700">•</span>
+            <Link href="/privacy" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
+              Privacy Policy
+            </Link>
+          </div>
+
+          {/* Copyright */}
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-2 sm:gap-3 mb-3">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
+                <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
+              </div>
+              <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
+            </div>
+            <p className="text-gray-500 text-xs sm:text-sm">
+              © 2025 Mark's AI - Advanced Gold Scalping EA
+            </p>
+            <p className="text-gray-600 text-[10px] sm:text-xs mt-1 sm:mt-2">
+              Trading involves risk. Past performance does not guarantee future results.
+            </p>
+          </div>
         </div>
       </footer>
     </main>

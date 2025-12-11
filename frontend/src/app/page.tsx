@@ -1023,7 +1023,7 @@ export default function Home() {
                 Refer friends and earn 10% commission on all their purchases
               </p>
               <Link 
-                href="/login"
+                href="/dashboard/referral"
                 className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-6 py-3 rounded-lg font-bold transition-all transform hover:scale-105"
                 style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
