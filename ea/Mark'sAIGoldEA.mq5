@@ -15,14 +15,14 @@ input string    LicenseKey      = "";
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       4001.0
 #define BuyRangeEnd         4401.0
-#define BuyGapPips          4.0
+#define BuyGapPips          3.0
 #define MaxBuyOrders        4
 #define BuyTakeProfitPips   50.0
 #define BuyStopLossPips     0.0
 
 #define SellRangeStart      4402.0
 #define SellRangeEnd        4002.0
-#define SellGapPips         4.0
+#define SellGapPips         3.0
 #define MaxSellOrders       4
 #define SellTakeProfitPips  50.0
 #define SellStopLossPips    0.0
@@ -30,8 +30,8 @@ input string    LicenseKey      = "";
 #define BuyTrailingStartPips    3.0
 #define BuyInitialSLPips        2.0
 #define BuyTrailingRatio        0.5
-#define SellTrailingStartPips   4.0
-#define SellInitialSLPips       3.0
+#define SellTrailingStartPips   3.0
+#define SellInitialSLPips       2.0
 #define SellTrailingRatio       0.5
 
 #define EnableRecovery          true
