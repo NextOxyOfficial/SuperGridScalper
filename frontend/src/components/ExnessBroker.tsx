@@ -18,35 +18,55 @@ export default function ExnessBroker({ variant = 'full' }: ExnessBrokerProps) {
     return (
       <div 
         onClick={handleClick}
-        className="bg-gradient-to-r from-[#12121a] to-[#1a1a2e] border border-yellow-500/30 rounded-xl p-4 cursor-pointer hover:border-yellow-400/50 hover:shadow-lg hover:shadow-yellow-500/10 transition-all group"
+        className="relative overflow-hidden bg-gradient-to-r from-[#0d1117] via-[#161b22] to-[#0d1117] border-2 border-yellow-500/40 rounded-2xl cursor-pointer hover:border-yellow-400/70 hover:shadow-xl hover:shadow-yellow-500/20 transition-all duration-300 group"
       >
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-xl p-2 flex-shrink-0 shadow-lg">
-            <Image 
-              src="/exness.png" 
-              alt="Exness" 
-              width={80} 
-              height={80} 
-              className="w-full h-full object-contain"
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
-              <span className="text-[10px] sm:text-xs font-bold text-yellow-400 bg-yellow-500/20 px-2 py-0.5 rounded-full border border-yellow-500/30">
-                ⭐ MUST USE BROKER
-              </span>
-              <span className="text-[10px] sm:text-xs font-bold text-red-400 bg-red-500/20 px-2 py-0.5 rounded-full border border-red-500/30 animate-pulse">
-                🔴 CENT ACCOUNT ONLY
-              </span>
+        {/* Glow Effect */}
+        <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 via-orange-500/10 to-yellow-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        
+        {/* Top Accent Line */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-yellow-500 via-orange-400 to-yellow-500" />
+        
+        <div className="relative p-4 sm:p-5">
+          <div className="flex items-center gap-3 sm:gap-4">
+            {/* Logo */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-yellow-400/30 rounded-xl blur-md" />
+              <div className="relative w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-[#1a1a2e] to-[#0d0d15] rounded-xl p-2 border border-yellow-500/30 shadow-lg">
+                <Image 
+                  src="/exness.png" 
+                  alt="Exness" 
+                  width={64} 
+                  height={64} 
+                  className="w-full h-full object-contain"
+                />
+              </div>
             </div>
-            <h4 className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-              Exness Standard Cent Account
-            </h4>
-            <p className="text-gray-400 text-[10px] sm:text-xs">EA must run on Cent Account • Low spreads • Instant execution</p>
-          </div>
-          <div className="flex items-center gap-1 text-yellow-400 group-hover:translate-x-1 transition-transform">
-            <span className="text-xs font-semibold hidden sm:inline">Open Account</span>
-            <ExternalLink className="w-4 h-4" />
+            
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                <span className="text-[9px] sm:text-[10px] font-bold text-yellow-300 bg-gradient-to-r from-yellow-500/30 to-orange-500/20 px-2 py-0.5 rounded-full border border-yellow-400/40 shadow-sm">
+                  ⭐ MUST USE BROKER
+                </span>
+                <span className="text-[9px] sm:text-[10px] font-bold text-red-300 bg-red-500/20 px-2 py-0.5 rounded-full border border-red-400/40 animate-pulse">
+                  CENT ACCOUNT
+                </span>
+              </div>
+              <h4 className="text-white font-bold text-sm sm:text-base leading-tight" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                Exness Standard Cent
+              </h4>
+              <p className="text-gray-400 text-[10px] sm:text-xs mt-0.5">Low spreads • Instant deposit & withdrawal</p>
+            </div>
+            
+            {/* CTA Button */}
+            <div className="flex-shrink-0">
+              <div className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg shadow-lg shadow-yellow-500/30 group-hover:shadow-yellow-500/50 group-hover:scale-105 transition-all duration-300">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] sm:text-xs font-bold text-black whitespace-nowrap">Open Account</span>
+                  <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-black" />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -71,7 +91,7 @@ export default function ExnessBroker({ variant = 'full' }: ExnessBrokerProps) {
             <div>
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
                 <span className="text-[10px] sm:text-xs font-bold text-yellow-400 bg-yellow-500/20 px-2 py-0.5 rounded-full border border-yellow-500/30">
-                  ⭐ MUST USE BROKER
+                  ⭐ RECOMMENDED BROKER
                 </span>
                 <span className="text-[10px] sm:text-xs font-bold text-red-400 bg-red-500/20 px-2 py-0.5 rounded-full border border-red-500/30 animate-pulse">
                   🔴 CENT ACCOUNT ONLY

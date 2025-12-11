@@ -1061,6 +1061,10 @@ export default function Home() {
               EA Store
             </Link>
             <span className="text-gray-700">•</span>
+            <Link href="/contact" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
+              Contact Support
+            </Link>
+            <span className="text-gray-700">•</span>
             <Link href="/terms" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
               Terms & Conditions
             </Link>
