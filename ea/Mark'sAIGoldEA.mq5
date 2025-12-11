@@ -27,18 +27,38 @@ input string    LicenseKey      = "";
 #define SellTakeProfitPips  50.0
 #define SellStopLossPips    0.0
 
-#define BuyTrailingStartPips    3.0
-#define BuyInitialSLPips        2.0
-#define BuyTrailingRatio        0.5
-#define SellTrailingStartPips   3.0
-#define SellInitialSLPips       2.0
-#define SellTrailingRatio       0.5
+// ===== TRAILING STOP SETTINGS (Normal Mode) =====
+// Formula: newSL = openPrice + InitialSL + ((profit - TrailingStart) × TrailingRatio)
+// 
+// Example (BUY @ 2650, Current = 2656, Profit = 6 pips):
+//   priceMovement = 6 - 3 = 3 pips
+//   slMovement = 3 × 0.5 = 1.5 pips  
+//   newSL = 2650 + 2 + 1.5 = 2653.50 (3.5 pips profit locked)
+//
+// | Profit | SL Position | Calculation |
+// |--------|-------------|-------------|
+// | 3 pip  | +2.0 pip    | Initial SL set |
+// | 5 pip  | +3.0 pip    | 2 + (2 × 0.5) |
+// | 10 pip | +5.5 pip    | 2 + (7 × 0.5) |
+// | 20 pip | +10.5 pip   | 2 + (17 × 0.5) |
 
-#define EnableRecovery          true
-#define RecoveryTakeProfitPips  100.0
-#define RecoveryTrailingStartPips 3.0
-#define RecoveryInitialSLPips   2.0
-#define RecoveryTrailingRatio   0.5
+#define BuyTrailingStartPips    3.0   // কত pip profit হলে trailing শুরু হবে (Trailing activation threshold)
+#define BuyInitialSLPips        2.0   // প্রথমে SL কত pip profit এ set হবে (Initial SL when trailing starts)
+#define BuyTrailingRatio        0.5   // প্রতি 1 pip trail এ SL কত pip move করবে (0.5 = 50% of price movement)
+
+#define SellTrailingStartPips   3.0   // SELL এর জন্য trailing শুরু threshold
+#define SellInitialSLPips       2.0   // SELL এর জন্য initial SL
+#define SellTrailingRatio       0.5   // SELL এর জন্য trailing ratio
+
+// ===== RECOVERY MODE SETTINGS =====
+// Recovery mode এ average price থেকে calculate হয়, individual position থেকে না
+// Recovery mode activates when positions >= MaxOrders
+
+#define EnableRecovery          true   // Recovery mode enable/disable
+#define RecoveryTakeProfitPips  100.0  // Recovery mode এ TP (average price থেকে)
+#define RecoveryTrailingStartPips 3.0  // Recovery mode এ trailing শুরু threshold
+#define RecoveryInitialSLPips   2.0    // Recovery mode এ initial SL
+#define RecoveryTrailingRatio   0.5    // Recovery mode এ trailing ratio
 #define RecoveryLotIncrease     10.0
 #define MaxRecoveryOrders       30
 
@@ -1526,10 +1546,17 @@ void ManageRecoveryGrid(bool isBuy)
 
 //+------------------------------------------------------------------+
 //| Apply Trailing Stop                                               |
+//| ট্রেইলিং স্টপ লজিক:                                                  |
+//| 1. Normal Mode: প্রতিটি position এর open price থেকে calculate      |
+//| 2. Recovery Mode: সব positions এর average price থেকে calculate    |
+//|                                                                    |
+//| Formula: newSL = basePrice + InitialSL + (priceMovement × Ratio)  |
+//| যেখানে priceMovement = currentProfit - TrailingStart              |
 //+------------------------------------------------------------------+
 void ApplyTrailing()
 {
-    // Calculate average prices for recovery mode
+    // Recovery mode এ average price calculate করি
+    // কারণ recovery mode এ সব positions একসাথে close হবে
     double buyAvgPrice = 0, sellAvgPrice = 0;
     double buyTotalLots = 0, sellTotalLots = 0;
     
@@ -1575,10 +1602,12 @@ void ApplyTrailing()
         double currentSL = PositionGetDouble(POSITION_SL);
         double currentTP = PositionGetDouble(POSITION_TP);
         
-        // Determine mode and settings
+        // ===== Mode এবং Settings নির্ধারণ =====
+        // Recovery mode হলে average price ব্যবহার হবে, না হলে individual open price
         bool inRecovery = (type == POSITION_TYPE_BUY && buyInRecovery) || (type == POSITION_TYPE_SELL && sellInRecovery);
         double basePrice = inRecovery ? (type == POSITION_TYPE_BUY ? buyAvgPrice : sellAvgPrice) : openPrice;
         
+        // Mode অনুযায়ী settings select করি
         double trailingStart = inRecovery ? RecoveryTrailingStartPips : 
             (type == POSITION_TYPE_BUY ? BuyTrailingStartPips : SellTrailingStartPips);
         double initialSL = inRecovery ? RecoveryInitialSLPips :
@@ -1586,22 +1615,33 @@ void ApplyTrailing()
         double trailingRatio = inRecovery ? RecoveryTrailingRatio :
             (type == POSITION_TYPE_BUY ? BuyTrailingRatio : SellTrailingRatio);
         
-        // Calculate profit from base price
+        // ===== Profit Calculate =====
+        // BUY: currentPrice - basePrice (price বাড়লে profit)
+        // SELL: basePrice - currentPrice (price কমলে profit)
         double profitPips = type == POSITION_TYPE_BUY ?
             (currentPrice - basePrice) / pip :
             (basePrice - currentPrice) / pip;
         
-        // Apply trailing if profit reached threshold
+        // ===== Trailing Apply =====
+        // শুধুমাত্র profit >= trailingStart হলে trailing শুরু হবে
         if(profitPips >= trailingStart)
         {
+            // priceMovement = threshold এর পরে কত pip move করেছে
             double priceMovement = profitPips - trailingStart;
+            
+            // slMovement = priceMovement এর ratio অংশ SL move করবে
+            // যেমন: ratio=0.5 মানে price 2 pip move করলে SL 1 pip move করবে
             double slMovement = priceMovement * trailingRatio;
             
+            // ===== New SL Calculate =====
+            // BUY: basePrice + initialSL + slMovement (উপরে move)
+            // SELL: basePrice - initialSL - slMovement (নিচে move)
             double newSL = type == POSITION_TYPE_BUY ?
                 NormalizeDouble(basePrice + (initialSL * pip) + (slMovement * pip), _Digits) :
                 NormalizeDouble(basePrice - (initialSL * pip) - (slMovement * pip), _Digits);
             
-            // Update SL if improved
+            // ===== SL Update Check =====
+            // শুধুমাত্র SL improve হলে update করবে (0.5 pip minimum change)
             bool needsUpdate = (currentSL == 0) || 
                 (type == POSITION_TYPE_BUY && newSL > currentSL + (0.5 * pip)) ||
                 (type == POSITION_TYPE_SELL && newSL < currentSL - (0.5 * pip));
