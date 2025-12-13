@@ -11,20 +11,21 @@ CTrade trade;
 
 //--- License Input (Only visible to user)
 input string    LicenseKey      = "";
+input string    TesterLicenseKey = "TEST-LOCAL";
 
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       4001.0
 #define BuyRangeEnd         4401.0
-#define BuyGapPips          3.0
-#define MaxBuyOrders        4
-#define BuyTakeProfitPips   50.0
+#define BuyGapPips          4.0
+#define MaxBuyOrders        3
+#define BuyTakeProfitPips   25.0
 #define BuyStopLossPips     0.0
 
 #define SellRangeStart      4402.0
 #define SellRangeEnd        4002.0
-#define SellGapPips         3.0
-#define MaxSellOrders       4
-#define SellTakeProfitPips  50.0
+#define SellGapPips         4.0
+#define MaxSellOrders       3
+#define SellTakeProfitPips  25.0
 #define SellStopLossPips    0.0
 
 // ===== TRAILING STOP SETTINGS (Normal Mode) =====
@@ -55,14 +56,32 @@ input string    LicenseKey      = "";
 // Recovery mode activates when positions >= MaxOrders
 
 #define EnableRecovery          true   // Recovery mode enable/disable
-#define RecoveryTakeProfitPips  100.0  // Recovery mode এ TP (average price থেকে)
+#define RecoveryTakeProfitPips  25.0  // Recovery mode এ TP (average price থেকে)
 #define RecoveryTrailingStartPips 3.0  // Recovery mode এ trailing শুরু threshold
 #define RecoveryInitialSLPips   2.0    // Recovery mode এ initial SL
 #define RecoveryTrailingRatio   0.5    // Recovery mode এ trailing ratio
 #define RecoveryLotIncrease     10.0
-#define MaxRecoveryOrders       30
+#define MaxRecoveryOrders       3
 
-#define LotSize         0.25
+// ===== SUPER MARK RECOVERY MODE SETTINGS =====
+// Super Mark Recovery Mode activates when Recovery Mode hits MaxRecoveryOrders
+// This is the final safety net - focuses on closing highest loss trades first
+// Logic: Opens grid positions at current price to help recover the worst positions
+
+#define EnableSuperMarkRecovery     true    // Enable/Disable Super Mark Recovery Mode
+#define SuperMarkMinLot             1.0    // Minimum lot size for Super Mark grid orders
+#define SuperMarkMaxLot             2.0    // Maximum lot size for Super Mark grid orders
+#define SuperMarkGridGap            5.0     // Gap between Super Mark grid orders (pips)
+#define SuperMarkMaxOrders          3      // Maximum Super Mark grid orders to place
+#define SuperMarkBreakevenPips      2.0     // Extra profit pips on each recovery (breakeven + this amount)
+#define SuperMarkLevelGap           15.0    // Gap between levels (pips) - distance from Level N last order to Level N+1 first order
+#define SuperMarkActivationGap      5.0    // Gap (pips) from Recovery max hit price to Super Mark Level 1 activation
+#define SuperMarkTrailingStartPips  3.0     // Super Mark trailing starts after this profit (pips)
+#define SuperMarkTrailingSLPips     2.0     // Super Mark trailing stop loss distance (pips)
+#define SuperMarkTrailingRatio      0.5     // Super Mark trailing ratio (0.5 = 0.5 pip SL move per 1 pip price move)
+#define SuperMarkMaxTPPips          25.0    // Super Mark maximum take profit (pips)
+
+#define LotSize         0.15
 #define MagicNumber     999888
 #define OrderComment    "CleanGrid"
 #define ManageAllTrades false
@@ -78,6 +97,22 @@ int totalBuyOrders = 0;           // Positions + Pending (for grid limit)
 int totalSellOrders = 0;          // Positions + Pending (for grid limit)
 bool buyInRecovery = false;
 bool sellInRecovery = false;
+bool buyInSuperMarkRecovery = false;
+bool sellInSuperMarkRecovery = false;
+double superMarkBuyInitialBalance = 0;    // Balance when Super Mark Recovery activated for BUY
+double superMarkSellInitialBalance = 0;   // Balance when Super Mark Recovery activated for SELL
+
+// Dynamic Super Mark Levels - can go to infinity (1, 2, 3, 4...)
+int superMarkBuyLevel = 0;                // Current Super Mark level for BUY (0 = not active)
+int superMarkSellLevel = 0;               // Current Super Mark level for SELL (0 = not active)
+double superMarkBuyLevelPrices[];         // Price when each level was activated (for downgrade detection)
+double superMarkSellLevelPrices[];        // Price when each level was activated (for downgrade detection)
+double recoveryMaxHitBuyPrice = 0;        // Price when Recovery Mode hit max orders (for BUY)
+double recoveryMaxHitSellPrice = 0;       // Price when Recovery Mode hit max orders (for SELL)
+bool recoveryMaxHitBuy = false;           // Flag: Recovery max hit, waiting for activation gap
+bool recoveryMaxHitSell = false;          // Flag: Recovery max hit, waiting for activation gap
+bool superMarkBuyGridPlaced = false;      // Flag: Super Mark BUY grid orders already placed for current level
+bool superMarkSellGridPlaced = false;     // Flag: Super Mark SELL grid orders already placed for current level
 
 // Trading Log
 struct LogEntry
@@ -113,8 +148,21 @@ int OnInit()
     g_LicenseMessage = "CHECKING...";
     g_PlanName = "";
     g_DaysRemaining = 0;
+
+    // Strategy Tester auto-bypass - no license needed in tester
+    bool isTester = (bool)MQLInfoInteger(MQL_TESTER);
+    if(isTester)
+    {
+        g_LicenseValid = true;
+        g_LicenseMessage = "TEST MODE";
+        g_PlanName = "Tester";
+        g_DaysRemaining = 9999;
+        g_LastVerification = TimeCurrent();
+        UpdateLicensePanel();
+        return(INIT_SUCCEEDED);
+    }
     
-    // MANDATORY license verification on startup
+    // MANDATORY license verification on startup (Live only)
     if(StringLen(LicenseKey) == 0)
     {
         g_LicenseMessage = "NO LICENSE KEY";
@@ -195,17 +243,25 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
 {
-    // Re-verify license every 2 minutes (to catch suspensions/deletions)
+    // Strategy Tester auto-bypass - no license needed in tester
+    bool isTester = (bool)MQLInfoInteger(MQL_TESTER);
+    if(isTester)
+    {
+        g_LicenseValid = true;
+        g_LicenseMessage = "TEST MODE";
+    }
+
+    // Re-verify license every 2 minutes (to catch suspensions/deletions) - Live only
     static datetime lastLicenseCheck = 0;
-    if(TimeCurrent() - lastLicenseCheck > 120) // 2 minutes
+    if(!isTester && TimeCurrent() - lastLicenseCheck > 120) // 2 minutes
     {
         lastLicenseCheck = TimeCurrent();
         VerifyLicense();
         UpdateLicensePanel(); // Update panel only after verification
     }
     
-    // STRICT LICENSE CHECK - If license invalid, expired, suspended or deleted
-    if(!g_LicenseValid)
+    // STRICT LICENSE CHECK - If license invalid, expired, suspended or deleted (Live only)
+    if(!isTester && !g_LicenseValid)
     {
         // Close all pending orders immediately when license is invalid
         static datetime lastCleanup = 0;
@@ -247,32 +303,317 @@ void OnTick()
     // Track previous mode for logging mode changes
     static bool prevBuyInRecovery = false;
     static bool prevSellInRecovery = false;
+    static bool prevBuyInSuperMarkRecovery = false;
+    static bool prevSellInSuperMarkRecovery = false;
+    
+    // Count total positions for Super Mark Recovery detection (excluding Super Mark positions)
+    int totalBuyPositionsCount = 0;
+    int totalSellPositionsCount = 0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        string comment = PositionGetString(POSITION_COMMENT);
+        // Skip Super Mark positions - they should not trigger Super Mark activation
+        if(StringFind(comment, "SuperMark") >= 0) continue;
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if(type == POSITION_TYPE_BUY) totalBuyPositionsCount++;
+        else totalSellPositionsCount++;
+    }
     
     // Determine mode
     buyInRecovery = (currentBuyPositions >= MaxBuyOrders);
     sellInRecovery = (currentSellPositions >= MaxSellOrders);
     
+    // Super Mark Recovery Mode activation - Dynamic Levels (1, 2, 3, 4... infinity)
+    // Level upgrades when max orders hit, downgrades when price moves back
+    if(EnableSuperMarkRecovery)
+    {
+        double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+        double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+        
+        // ===== BUY SUPER MARK LOGIC =====
+        // Count Super Mark positions and orders for current level
+        int buySmPositions = 0, buySmPending = 0;
+        for(int i = 0; i < PositionsTotal(); i++)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            if(PositionGetInteger(POSITION_TYPE) != POSITION_TYPE_BUY) continue;
+            string comment = PositionGetString(POSITION_COMMENT);
+            if(StringFind(comment, "SuperMark") >= 0) buySmPositions++;
+        }
+        for(int i = 0; i < OrdersTotal(); i++)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            if(OrderGetInteger(ORDER_TYPE) != ORDER_TYPE_BUY_LIMIT) continue;
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "SuperMark") >= 0) buySmPending++;
+        }
+        int totalBuySuperMark = buySmPositions + buySmPending;
+        
+        // Initial activation: Total positions (Normal + Recovery) >= MaxBuyOrders + MaxRecoveryOrders
+        // Step 1: Record the price when max positions hit (3 normal + 6 recovery = 9 total)
+        int totalRequiredForSuperMark = MaxBuyOrders + MaxRecoveryOrders;
+        if(buyInRecovery && totalBuyPositionsCount >= totalRequiredForSuperMark && !buyInSuperMarkRecovery && !recoveryMaxHitBuy)
+        {
+            recoveryMaxHitBuy = true;
+            recoveryMaxHitBuyPrice = currentBid;
+            AddToLog(StringFormat("BUY RECOVERY MAX HIT | Positions: %d/%d | Price: %.2f | Waiting for %.0f pips gap to activate Super Mark", 
+                totalBuyPositionsCount, totalRequiredForSuperMark, currentBid, SuperMarkActivationGap), "SUPERMARK");
+        }
+        
+        // Step 2: Activate Super Mark when price moves down by activation gap
+        if(recoveryMaxHitBuy && !buyInSuperMarkRecovery)
+        {
+            double activationPrice = recoveryMaxHitBuyPrice - (SuperMarkActivationGap * pip);
+            if(currentBid <= activationPrice)
+            {
+                buyInSuperMarkRecovery = true;
+                superMarkBuyLevel = 1;
+                superMarkBuyGridPlaced = false;  // Reset grid placed flag for new level
+                superMarkBuyInitialBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+                ArrayResize(superMarkBuyLevelPrices, 1);
+                superMarkBuyLevelPrices[0] = currentBid;
+                AddToLog(StringFormat("BUY SUPER MARK LEVEL 1 ACTIVATED | Price: %.2f | Gap: %.0f pips from %.2f | Balance: %.2f", 
+                    currentBid, SuperMarkActivationGap, recoveryMaxHitBuyPrice, superMarkBuyInitialBalance), "SUPERMARK");
+            }
+        }
+        
+        // Reset recovery max hit flag when Super Mark deactivates
+        if(!buyInSuperMarkRecovery && !buyInRecovery)
+        {
+            recoveryMaxHitBuy = false;
+            recoveryMaxHitBuyPrice = 0;
+        }
+        
+        // Level UPGRADE: Current level max orders hit, market going further down
+        if(buyInSuperMarkRecovery && totalBuySuperMark >= SuperMarkMaxOrders)
+        {
+            // Check if we need to upgrade to next level
+            double lastLevelPrice = superMarkBuyLevelPrices[superMarkBuyLevel - 1];
+            // Level range = grid orders range + level gap between levels
+            double levelGridRange = SuperMarkGridGap * SuperMarkMaxOrders * pip;
+            double levelGapDistance = SuperMarkLevelGap * pip;
+            double totalLevelDistance = levelGridRange + levelGapDistance;
+            
+            // If price moved down by total distance (grid range + level gap), upgrade
+            if(currentBid <= lastLevelPrice - totalLevelDistance)
+            {
+                superMarkBuyLevel++;
+                superMarkBuyGridPlaced = false;  // Reset grid placed flag for new level
+                ArrayResize(superMarkBuyLevelPrices, superMarkBuyLevel);
+                superMarkBuyLevelPrices[superMarkBuyLevel - 1] = currentBid;
+                AddToLog(StringFormat("BUY SUPER MARK LEVEL %d ACTIVATED | Price: %.2f | Gap from L%d: %.0f pips", 
+                    superMarkBuyLevel, currentBid, superMarkBuyLevel - 1, SuperMarkLevelGap), "SUPERMARK");
+            }
+        }
+        
+        // Level DOWNGRADE: Price moved back up to previous level range
+        if(buyInSuperMarkRecovery && superMarkBuyLevel > 1)
+        {
+            double prevLevelPrice = superMarkBuyLevelPrices[superMarkBuyLevel - 2];
+            // If price moved back up to previous level price, downgrade
+            if(currentBid >= prevLevelPrice)
+            {
+                superMarkBuyLevel--;
+                superMarkBuyGridPlaced = false;  // Reset flag for downgraded level
+                ArrayResize(superMarkBuyLevelPrices, superMarkBuyLevel);
+                AddToLog(StringFormat("BUY SUPER MARK DOWNGRADED TO LEVEL %d | Price: %.2f", 
+                    superMarkBuyLevel, currentBid), "SUPERMARK");
+            }
+        }
+        
+        // Deactivate Super Mark and return to Recovery Mode when:
+        // 1. Level becomes 0 (Level 1 completed breakeven)
+        // 2. Total positions dropped below Super Mark activation threshold
+        if(buyInSuperMarkRecovery && (superMarkBuyLevel == 0 || totalBuyPositionsCount < totalRequiredForSuperMark))
+        {
+            buyInSuperMarkRecovery = false;
+            superMarkBuyLevel = 0;
+            superMarkBuyInitialBalance = 0;
+            ArrayResize(superMarkBuyLevelPrices, 0);
+            AddToLog(StringFormat("BUY SUPER MARK DEACTIVATED - Returning to Recovery Mode | Positions: %d/%d", 
+                totalBuyPositionsCount, totalRequiredForSuperMark), "SUPERMARK");
+        }
+        
+        // Full deactivation when ALL positions closed
+        if(buyInSuperMarkRecovery && totalBuyPositionsCount == 0)
+        {
+            buyInSuperMarkRecovery = false;
+            buyInRecovery = false;
+            superMarkBuyLevel = 0;
+            superMarkBuyInitialBalance = 0;
+            ArrayResize(superMarkBuyLevelPrices, 0);
+            AddToLog("BUY SUPER MARK RECOVERY COMPLETED - All positions closed", "SUPERMARK");
+        }
+        
+        // ===== SELL SUPER MARK LOGIC =====
+        int sellSmPositions = 0, sellSmPending = 0;
+        for(int i = 0; i < PositionsTotal(); i++)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            if(PositionGetInteger(POSITION_TYPE) != POSITION_TYPE_SELL) continue;
+            string comment = PositionGetString(POSITION_COMMENT);
+            if(StringFind(comment, "SuperMark") >= 0) sellSmPositions++;
+        }
+        for(int i = 0; i < OrdersTotal(); i++)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            if(OrderGetInteger(ORDER_TYPE) != ORDER_TYPE_SELL_LIMIT) continue;
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "SuperMark") >= 0) sellSmPending++;
+        }
+        int totalSellSuperMark = sellSmPositions + sellSmPending;
+        
+        // Initial activation: Total positions (Normal + Recovery) >= MaxSellOrders + MaxRecoveryOrders
+        // Step 1: Record the price when max positions hit (3 normal + 6 recovery = 9 total)
+        int totalRequiredForSuperMarkSell = MaxSellOrders + MaxRecoveryOrders;
+        if(sellInRecovery && totalSellPositionsCount >= totalRequiredForSuperMarkSell && !sellInSuperMarkRecovery && !recoveryMaxHitSell)
+        {
+            recoveryMaxHitSell = true;
+            recoveryMaxHitSellPrice = currentAsk;
+            AddToLog(StringFormat("SELL RECOVERY MAX HIT | Positions: %d/%d | Price: %.2f | Waiting for %.0f pips gap to activate Super Mark", 
+                totalSellPositionsCount, totalRequiredForSuperMarkSell, currentAsk, SuperMarkActivationGap), "SUPERMARK");
+        }
+        
+        // Step 2: Activate Super Mark when price moves up by activation gap
+        if(recoveryMaxHitSell && !sellInSuperMarkRecovery)
+        {
+            double activationPrice = recoveryMaxHitSellPrice + (SuperMarkActivationGap * pip);
+            if(currentAsk >= activationPrice)
+            {
+                sellInSuperMarkRecovery = true;
+                superMarkSellLevel = 1;
+                superMarkSellGridPlaced = false;  // Reset grid placed flag for new level
+                superMarkSellInitialBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+                ArrayResize(superMarkSellLevelPrices, 1);
+                superMarkSellLevelPrices[0] = currentAsk;
+                AddToLog(StringFormat("SELL SUPER MARK LEVEL 1 ACTIVATED | Price: %.2f | Gap: %.0f pips from %.2f | Balance: %.2f", 
+                    currentAsk, SuperMarkActivationGap, recoveryMaxHitSellPrice, superMarkSellInitialBalance), "SUPERMARK");
+            }
+        }
+        
+        // Reset recovery max hit flag when Super Mark deactivates
+        if(!sellInSuperMarkRecovery && !sellInRecovery)
+        {
+            recoveryMaxHitSell = false;
+            recoveryMaxHitSellPrice = 0;
+        }
+        
+        // Level UPGRADE for SELL
+        if(sellInSuperMarkRecovery && totalSellSuperMark >= SuperMarkMaxOrders)
+        {
+            double lastLevelPrice = superMarkSellLevelPrices[superMarkSellLevel - 1];
+            // Level range = grid orders range + level gap between levels
+            double levelGridRange = SuperMarkGridGap * SuperMarkMaxOrders * pip;
+            double levelGapDistance = SuperMarkLevelGap * pip;
+            double totalLevelDistance = levelGridRange + levelGapDistance;
+            
+            if(currentAsk >= lastLevelPrice + totalLevelDistance)
+            {
+                superMarkSellLevel++;
+                superMarkSellGridPlaced = false;  // Reset grid placed flag for new level
+                ArrayResize(superMarkSellLevelPrices, superMarkSellLevel);
+                superMarkSellLevelPrices[superMarkSellLevel - 1] = currentAsk;
+                AddToLog(StringFormat("SELL SUPER MARK LEVEL %d ACTIVATED | Price: %.2f | Gap from L%d: %.0f pips", 
+                    superMarkSellLevel, currentAsk, superMarkSellLevel - 1, SuperMarkLevelGap), "SUPERMARK");
+            }
+        }
+        
+        // Level DOWNGRADE for SELL
+        if(sellInSuperMarkRecovery && superMarkSellLevel > 1)
+        {
+            double prevLevelPrice = superMarkSellLevelPrices[superMarkSellLevel - 2];
+            if(currentAsk <= prevLevelPrice)
+            {
+                superMarkSellLevel--;
+                superMarkSellGridPlaced = false;  // Reset flag for downgraded level
+                ArrayResize(superMarkSellLevelPrices, superMarkSellLevel);
+                AddToLog(StringFormat("SELL SUPER MARK DOWNGRADED TO LEVEL %d | Price: %.2f", 
+                    superMarkSellLevel, currentAsk), "SUPERMARK");
+            }
+        }
+        
+        // Deactivate Super Mark and return to Recovery Mode when:
+        // 1. Level becomes 0 (Level 1 completed breakeven)
+        // 2. Total positions dropped below Super Mark activation threshold
+        if(sellInSuperMarkRecovery && (superMarkSellLevel == 0 || totalSellPositionsCount < totalRequiredForSuperMarkSell))
+        {
+            sellInSuperMarkRecovery = false;
+            superMarkSellLevel = 0;
+            superMarkSellInitialBalance = 0;
+            ArrayResize(superMarkSellLevelPrices, 0);
+            AddToLog(StringFormat("SELL SUPER MARK DEACTIVATED - Returning to Recovery Mode | Positions: %d/%d", 
+                totalSellPositionsCount, totalRequiredForSuperMarkSell), "SUPERMARK");
+        }
+        
+        // Full deactivation when ALL positions closed
+        if(sellInSuperMarkRecovery && totalSellPositionsCount == 0)
+        {
+            sellInSuperMarkRecovery = false;
+            sellInRecovery = false;
+            superMarkSellLevel = 0;
+            superMarkSellInitialBalance = 0;
+            ArrayResize(superMarkSellLevelPrices, 0);
+            AddToLog("SELL SUPER MARK RECOVERY COMPLETED - All positions closed", "SUPERMARK");
+        }
+    }
+    
     // Log mode changes
-    if(buyInRecovery && !prevBuyInRecovery)
+    if(buyInSuperMarkRecovery && !prevBuyInSuperMarkRecovery)
+    {
+        AddToLog(">>> BUY SUPER MARK RECOVERY MODE ACTIVATED <<<", "MODE");
+    }
+    else if(!buyInSuperMarkRecovery && prevBuyInSuperMarkRecovery)
+    {
+        AddToLog("BUY SUPER MARK RECOVERY MODE DEACTIVATED", "MODE");
+    }
+    else if(buyInRecovery && !prevBuyInRecovery && !buyInSuperMarkRecovery)
     {
         AddToLog("BUY RECOVERY MODE ACTIVATED", "MODE");
     }
-    else if(!buyInRecovery && prevBuyInRecovery)
+    else if(!buyInRecovery && prevBuyInRecovery && !buyInSuperMarkRecovery)
     {
         AddToLog("BUY NORMAL MODE RESTORED", "MODE");
     }
     
-    if(sellInRecovery && !prevSellInRecovery)
+    if(sellInSuperMarkRecovery && !prevSellInSuperMarkRecovery)
+    {
+        AddToLog(">>> SELL SUPER MARK RECOVERY MODE ACTIVATED <<<", "MODE");
+    }
+    else if(!sellInSuperMarkRecovery && prevSellInSuperMarkRecovery)
+    {
+        AddToLog("SELL SUPER MARK RECOVERY MODE DEACTIVATED", "MODE");
+    }
+    else if(sellInRecovery && !prevSellInRecovery && !sellInSuperMarkRecovery)
     {
         AddToLog("SELL RECOVERY MODE ACTIVATED", "MODE");
     }
-    else if(!sellInRecovery && prevSellInRecovery)
+    else if(!sellInRecovery && prevSellInRecovery && !sellInSuperMarkRecovery)
     {
         AddToLog("SELL NORMAL MODE RESTORED", "MODE");
     }
     
     prevBuyInRecovery = buyInRecovery;
     prevSellInRecovery = sellInRecovery;
+    prevBuyInSuperMarkRecovery = buyInSuperMarkRecovery;
+    prevSellInSuperMarkRecovery = sellInSuperMarkRecovery;
     
     // Clean up invalid/out-of-range orders FIRST (before grid management)
     CleanupInvalidOrders();
@@ -281,7 +622,15 @@ void OnTick()
     AutoCorrectGridOrders();
     
     // Manage grids based on mode
-    if(!buyInRecovery)
+    // Priority: Super Mark Recovery > Recovery > Normal
+    if(buyInSuperMarkRecovery)
+    {
+        // Super Mark Recovery Mode - disable all other modes
+        DeleteNormalPendingOrders(true);
+        DeleteRecoveryPendingOrders(true);
+        ManageSuperMarkRecovery(true);
+    }
+    else if(!buyInRecovery)
     {
         ManageNormalGrid(true);  // BUY Normal Mode
     }
@@ -292,7 +641,14 @@ void OnTick()
         ManageRecoveryGrid(true); // BUY Recovery
     }
         
-    if(!sellInRecovery)
+    if(sellInSuperMarkRecovery)
+    {
+        // Super Mark Recovery Mode - disable all other modes
+        DeleteNormalPendingOrders(false);
+        DeleteRecoveryPendingOrders(false);
+        ManageSuperMarkRecovery(false);
+    }
+    else if(!sellInRecovery)
     {
         ManageNormalGrid(false); // SELL Normal Mode
     }
@@ -338,7 +694,7 @@ void CountPositions()
     int recoveryBuyCount = 0;
     int recoverySellCount = 0;
     
-    // Count ALL filled positions
+    // Count ALL filled positions (excluding Super Mark)
     for(int i = 0; i < PositionsTotal(); i++)
     {
         ulong ticket = PositionGetTicket(i);
@@ -348,6 +704,9 @@ void CountPositions()
         
         string comment = PositionGetString(POSITION_COMMENT);
         ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        
+        // Skip Super Mark positions - they are managed separately
+        if(StringFind(comment, "SuperMark") >= 0) continue;
         
         bool isRecovery = (StringFind(comment, "Recovery") >= 0);
         
@@ -412,6 +771,7 @@ void CountPositions()
         
         string comment = OrderGetString(ORDER_COMMENT);
         if(StringFind(comment, "Recovery") >= 0) continue; // Skip recovery orders
+        if(StringFind(comment, "SuperMark") >= 0) continue; // Skip SuperMark orders
         
         ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
         if(type == ORDER_TYPE_BUY_LIMIT)
@@ -435,10 +795,36 @@ void DeleteNormalPendingOrders(bool isBuy)
         
         string comment = OrderGetString(ORDER_COMMENT);
         if(StringFind(comment, "Recovery") >= 0) continue; // Keep recovery orders
+        if(StringFind(comment, "SuperMark") >= 0) continue; // Keep Super Mark orders
         
         ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
         if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
             trade.OrderDelete(ticket);
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Delete Recovery Pending Orders (when entering Super Mark mode)    |
+//+------------------------------------------------------------------+
+void DeleteRecoveryPendingOrders(bool isBuy)
+{
+    for(int i = OrdersTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") < 0) continue; // Only delete recovery orders
+        if(StringFind(comment, "SuperMark") >= 0) continue; // Keep Super Mark orders
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
+        {
+            trade.OrderDelete(ticket);
+            AddToLog(StringFormat("Deleted Recovery %s order for Super Mark mode", isBuy ? "BUY" : "SELL"), "SUPERMARK");
+        }
     }
 }
 
@@ -469,6 +855,7 @@ void CleanupInvalidOrders()
         
         string comment = OrderGetString(ORDER_COMMENT);
         bool isRecovery = (StringFind(comment, "Recovery") >= 0);
+        bool isSuperMark = (StringFind(comment, "SuperMark") >= 0);
         ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
         
         bool shouldDelete = false;
@@ -477,6 +864,8 @@ void CleanupInvalidOrders()
         // Check BUY orders - delete ONLY if mode mismatch
         if(type == ORDER_TYPE_BUY_LIMIT)
         {
+            // SuperMark orders have their own lifecycle/range rules
+            if(isSuperMark) continue;
             // In NORMAL mode: Delete recovery orders (they're from old recovery mode)
             if(!buyInRecovery && isRecovery)
             {
@@ -490,6 +879,8 @@ void CleanupInvalidOrders()
         // Check SELL orders - delete ONLY if mode mismatch
         else if(type == ORDER_TYPE_SELL_LIMIT)
         {
+            // SuperMark orders have their own lifecycle/range rules
+            if(isSuperMark) continue;
             // In NORMAL mode: Delete recovery orders (they're from old recovery mode)
             if(!sellInRecovery && isRecovery)
             {
@@ -524,8 +915,13 @@ void CleanupInvalidOrders()
         double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
         string comment = OrderGetString(ORDER_COMMENT);
         bool isRecovery = (StringFind(comment, "Recovery") >= 0);
+        bool isSuperMark = (StringFind(comment, "SuperMark") >= 0);
         bool shouldDelete = false;
         string reason = "";
+
+        // SuperMark pending orders are allowed to exist outside normal buy/sell ranges
+        // and are validated/managed by ManageSuperMarkRecovery().
+        if(isSuperMark) continue;
         
         // Check BUY LIMIT orders
         if(type == ORDER_TYPE_BUY_LIMIT)
@@ -591,13 +987,16 @@ void CleanupInvalidOrders()
         }
     }
     
-    // Check for duplicate orders (same price, same type)
+    // Check for duplicate orders (same price, same type) - Skip Super Mark orders
     for(int i = 0; i < OrdersTotal() - 1; i++)
     {
         ulong ticket1 = OrderGetTicket(i);
         if(ticket1 <= 0) continue;
         if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
         if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        string comment1 = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment1, "SuperMark") >= 0) continue;  // Skip Super Mark orders
         
         ENUM_ORDER_TYPE type1 = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
         double price1 = OrderGetDouble(ORDER_PRICE_OPEN);
@@ -609,6 +1008,9 @@ void CleanupInvalidOrders()
             if(ticket2 <= 0) continue;
             if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
             if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            string comment2 = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment2, "SuperMark") >= 0) continue;  // Skip Super Mark orders
             
             ENUM_ORDER_TYPE type2 = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
             double price2 = OrderGetDouble(ORDER_PRICE_OPEN);
@@ -640,6 +1042,7 @@ void CleanupInvalidOrders()
         
         string comment = OrderGetString(ORDER_COMMENT);
         if(StringFind(comment, "Recovery") >= 0) continue; // Skip recovery orders
+        if(StringFind(comment, "SuperMark") >= 0) continue; // Skip Super Mark orders
         
         ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
         if(type == ORDER_TYPE_BUY_LIMIT) normalBuyOrderCount++;
@@ -659,6 +1062,7 @@ void CleanupInvalidOrders()
         
         string comment = PositionGetString(POSITION_COMMENT);
         if(StringFind(comment, "Recovery") >= 0) continue; // Skip recovery positions
+        if(StringFind(comment, "SuperMark") >= 0) continue; // Skip SuperMark positions
         
         ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
         if(type == POSITION_TYPE_BUY) normalBuyPosCount++;
@@ -679,6 +1083,7 @@ void CleanupInvalidOrders()
             
             string comment = OrderGetString(ORDER_COMMENT);
             if(StringFind(comment, "Recovery") >= 0) continue;
+            if(StringFind(comment, "SuperMark") >= 0) continue;  // Skip Super Mark orders
             
             ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
             if(type == ORDER_TYPE_BUY_LIMIT)
@@ -708,6 +1113,7 @@ void CleanupInvalidOrders()
             
             string comment = OrderGetString(ORDER_COMMENT);
             if(StringFind(comment, "Recovery") >= 0) continue;
+            if(StringFind(comment, "SuperMark") >= 0) continue;  // Skip Super Mark orders
             
             ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
             if(type == ORDER_TYPE_SELL_LIMIT)
@@ -744,8 +1150,8 @@ void AutoCorrectGridOrders()
     double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
     double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     
-    // Check BUY side
-    if(!buyInRecovery)
+    // Check BUY side (skip if in Super Mark mode)
+    if(!buyInRecovery && !buyInSuperMarkRecovery)
     {
         // Normal mode: Should have (MaxBuyOrders - positions) pending orders
         int normalBuyPos = 0;
@@ -808,8 +1214,8 @@ void AutoCorrectGridOrders()
         }
     }
     
-    // Check SELL side
-    if(!sellInRecovery)
+    // Check SELL side (skip if in Super Mark mode)
+    if(!sellInRecovery && !sellInSuperMarkRecovery)
     {
         // Normal mode: Should have (MaxSellOrders - positions) pending orders
         int normalSellPos = 0;
@@ -872,8 +1278,8 @@ void AutoCorrectGridOrders()
         }
     }
     
-    // Check recovery mode orders
-    if(buyInRecovery)
+    // Check recovery mode orders (skip if in Super Mark mode)
+    if(buyInRecovery && !buyInSuperMarkRecovery)
     {
         int recoveryBuyOrders = 0;
         for(int i = 0; i < OrdersTotal(); i++)
@@ -901,7 +1307,7 @@ void AutoCorrectGridOrders()
         }
     }
     
-    if(sellInRecovery)
+    if(sellInRecovery && !sellInSuperMarkRecovery)
     {
         int recoverySellOrders = 0;
         for(int i = 0; i < OrdersTotal(); i++)
@@ -926,6 +1332,99 @@ void AutoCorrectGridOrders()
                 AddToLog("SELL Recovery Mode: No recovery orders found - will create", "WORKER");
             }
             lastSellRecoveryCheck = TimeCurrent();
+        }
+    }
+    
+    // Check Super Mark mode orders
+    if(buyInSuperMarkRecovery)
+    {
+        int superMarkBuyOrders = 0;
+        int superMarkBuyPositions = 0;
+        string levelTag = StringFormat("_L%d", superMarkBuyLevel);
+        
+        for(int i = 0; i < PositionsTotal(); i++)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            string comment = PositionGetString(POSITION_COMMENT);
+            if(StringFind(comment, "SuperMark") >= 0 && StringFind(comment, levelTag) >= 0)
+            {
+                ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+                if(type == POSITION_TYPE_BUY) superMarkBuyPositions++;
+            }
+        }
+        
+        for(int i = 0; i < OrdersTotal(); i++)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "SuperMark") >= 0 && StringFind(comment, levelTag) >= 0)
+            {
+                ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+                if(type == ORDER_TYPE_BUY_LIMIT) superMarkBuyOrders++;
+            }
+        }
+        
+        static datetime lastBuySMCheck = 0;
+        if(TimeCurrent() - lastBuySMCheck > 30)
+        {
+            AddToLog(StringFormat("BUY SuperMark L%d Worker: Positions=%d Orders=%d Total=%d/%d", 
+                superMarkBuyLevel, superMarkBuyPositions, superMarkBuyOrders, 
+                superMarkBuyPositions + superMarkBuyOrders, SuperMarkMaxOrders), "WORKER");
+            lastBuySMCheck = TimeCurrent();
+        }
+    }
+    
+    if(sellInSuperMarkRecovery)
+    {
+        int superMarkSellOrders = 0;
+        int superMarkSellPositions = 0;
+        string levelTag = StringFormat("_L%d", superMarkSellLevel);
+        
+        for(int i = 0; i < PositionsTotal(); i++)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            string comment = PositionGetString(POSITION_COMMENT);
+            if(StringFind(comment, "SuperMark") >= 0 && StringFind(comment, levelTag) >= 0)
+            {
+                ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+                if(type == POSITION_TYPE_SELL) superMarkSellPositions++;
+            }
+        }
+        
+        for(int i = 0; i < OrdersTotal(); i++)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "SuperMark") >= 0 && StringFind(comment, levelTag) >= 0)
+            {
+                ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+                if(type == ORDER_TYPE_SELL_LIMIT) superMarkSellOrders++;
+            }
+        }
+        
+        static datetime lastSellSMCheck = 0;
+        if(TimeCurrent() - lastSellSMCheck > 30)
+        {
+            AddToLog(StringFormat("SELL SuperMark L%d Worker: Positions=%d Orders=%d Total=%d/%d", 
+                superMarkSellLevel, superMarkSellPositions, superMarkSellOrders, 
+                superMarkSellPositions + superMarkSellOrders, SuperMarkMaxOrders), "WORKER");
+            lastSellSMCheck = TimeCurrent();
         }
     }
 }
@@ -998,6 +1497,7 @@ void ManageNormalGrid(bool isBuy)
             if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
             string comment = OrderGetString(ORDER_COMMENT);
             if(StringFind(comment, "Recovery") >= 0) continue;
+            if(StringFind(comment, "SuperMark") >= 0) continue;  // Skip Super Mark orders
             
             ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
             if((isBuy && orderType == ORDER_TYPE_BUY_LIMIT) || (!isBuy && orderType == ORDER_TYPE_SELL_LIMIT))
@@ -1021,6 +1521,7 @@ void ManageNormalGrid(bool isBuy)
         if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
         string comment = OrderGetString(ORDER_COMMENT);
         if(StringFind(comment, "Recovery") >= 0) continue;
+        if(StringFind(comment, "SuperMark") >= 0) continue;  // Skip Super Mark orders
         
         ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
         if((isBuy && orderType != ORDER_TYPE_BUY_LIMIT) || (!isBuy && orderType != ORDER_TYPE_SELL_LIMIT)) continue;
@@ -1368,14 +1869,15 @@ void ManageRecoveryGrid(bool isBuy)
     static datetime lastStatusLog = 0;
     if(TimeCurrent() - lastStatusLog > 10)
     {
-        AddToLog(StringFormat("%s Recovery Status | Positions: %d/%d | Pending: %d | Enabled: %s", 
-            isBuy ? "BUY" : "SELL", totalPositionsThisSide, MaxRecoveryOrders, 
+        AddToLog(StringFormat("%s Recovery Status | Total Positions: %d | Recovery Orders: %d/%d | Pending: %d | Enabled: %s", 
+            isBuy ? "BUY" : "SELL", totalPositionsThisSide, totalRecoveryCount, MaxRecoveryOrders, 
             recoveryPendingCount, EnableRecovery ? "YES" : "NO"), "RECOVERY");
         lastStatusLog = TimeCurrent();
     }
     
-    // Place recovery order if needed (only 1 pending at a time, max total positions = MaxRecoveryOrders)
-    if(totalPositionsThisSide < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery)
+    // Place recovery order if needed (only 1 pending at a time, max RECOVERY orders = MaxRecoveryOrders)
+    // This allows 3 normal + 6 recovery = 9 total positions
+    if(totalRecoveryCount < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery)
     {
         // Find extreme position (lowest BUY or highest SELL)
         double extremePrice = isBuy ? 999999 : 0;
@@ -1545,6 +2047,437 @@ void ManageRecoveryGrid(bool isBuy)
 }
 
 //+------------------------------------------------------------------+
+//| Manage Super Mark Recovery Mode                                    |
+//| সবচেয়ে বেশি loss এর trade টার্গেট করে breakeven এ close করে        |
+//| Super Mark positions এর profit = top loss হলে সব একসাথে close    |
+//+------------------------------------------------------------------+
+void ManageSuperMarkRecovery(bool isBuy)
+{
+    // Cooldown to prevent too frequent order placement (minimum 5 seconds between orders)
+    static datetime lastBuyOrderTime = 0;
+    static datetime lastSellOrderTime = 0;
+    datetime lastOrderTime = isBuy ? lastBuyOrderTime : lastSellOrderTime;
+    
+    double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    
+    // ===== STEP 1: Find the highest loss position (furthest from current price) =====
+    ulong highestLossTicket = 0;
+    double highestLossAmount = 0;
+    double highestLossOpenPrice = 0;
+    double highestLossLots = 0;
+    
+    // Collect all positions for this side (excluding Super Mark positions)
+    int totalPositionsThisSide = 0;
+    double totalLots = 0;
+    double weightedPrice = 0;
+    
+    // Get current level for filtering Super Mark positions
+    int currentLevel = isBuy ? superMarkBuyLevel : superMarkSellLevel;
+    string currentLevelTag = StringFormat("_L%d", currentLevel);
+    
+    // Collect Super Mark positions for CURRENT LEVEL ONLY
+    int superMarkPositionCount = 0;
+    double superMarkTotalProfit = 0;
+    double superMarkTotalLots = 0;
+    ulong superMarkTickets[];
+    ArrayResize(superMarkTickets, 0);
+    
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+        
+        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+        double lots = PositionGetDouble(POSITION_VOLUME);
+        double profit = PositionGetDouble(POSITION_PROFIT);
+        string comment = PositionGetString(POSITION_COMMENT);
+        
+        // Check if this is a Super Mark position for CURRENT LEVEL
+        if(StringFind(comment, "SuperMark") >= 0 && StringFind(comment, currentLevelTag) >= 0)
+        {
+            // Only count positions for current level
+            superMarkPositionCount++;
+            superMarkTotalProfit += profit;
+            superMarkTotalLots += lots;
+            int size = ArraySize(superMarkTickets);
+            ArrayResize(superMarkTickets, size + 1);
+            superMarkTickets[size] = ticket;
+        }
+        else if(StringFind(comment, "SuperMark") < 0)
+        {
+            // Non-SuperMark positions (Normal + Recovery)
+            totalPositionsThisSide++;
+            totalLots += lots;
+            weightedPrice += openPrice * lots;
+            
+            // Find highest loss (most negative profit) among non-SuperMark positions
+            if(profit < highestLossAmount)
+            {
+                highestLossAmount = profit;
+                highestLossTicket = ticket;
+                highestLossOpenPrice = openPrice;
+                highestLossLots = lots;
+            }
+        }
+        // Note: Super Mark positions from OTHER levels are ignored in this calculation
+    }
+    
+    if(totalPositionsThisSide == 0 && superMarkPositionCount == 0) return;
+    
+    double avgPrice = totalLots > 0 ? weightedPrice / totalLots : 0;
+    
+    // ===== STEP 2: Check if Super Mark positions profit >= top loss + breakeven pips =====
+    // যখন Super Mark positions এর total profit >= |top loss| + extra pips
+    // তখন top loss trade + সব Super Mark trades একসাথে close করব
+    if(superMarkPositionCount > 0 && highestLossTicket > 0)
+    {
+        double pointValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE) / SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+        double extraProfitNeeded = SuperMarkBreakevenPips * pip * superMarkTotalLots * pointValue;
+        double targetProfit = MathAbs(highestLossAmount) + extraProfitNeeded;
+        
+        // Log status periodically
+        static datetime lastStatusLog = 0;
+        int currentLvl = isBuy ? superMarkBuyLevel : superMarkSellLevel;
+        if(TimeCurrent() - lastStatusLog > 10)
+        {
+            AddToLog(StringFormat("SuperMark L%d %s | TopLoss: %.2f | SM Profit: %.2f | Target: %.2f | SM Positions: %d",
+                currentLvl, isBuy ? "BUY" : "SELL", highestLossAmount, superMarkTotalProfit, targetProfit, superMarkPositionCount), "SUPERMARK");
+            lastStatusLog = TimeCurrent();
+        }
+        
+        // Check if Super Mark profit covers the top loss + extra pips
+        if(superMarkTotalProfit >= targetProfit)
+        {
+            AddToLog(StringFormat("SuperMark %s Level %d: BREAKEVEN REACHED! SM Profit: %.2f >= Target: %.2f",
+                isBuy ? "BUY" : "SELL", currentLevel, superMarkTotalProfit, targetProfit), "SUPERMARK");
+            
+            // Close the highest loss trade first
+            if(trade.PositionClose(highestLossTicket))
+            {
+                AddToLog(StringFormat("✅ Closed TOP LOSS %s #%I64u @ %.2f | Loss: %.2f",
+                    isBuy ? "BUY" : "SELL", highestLossTicket, highestLossOpenPrice, highestLossAmount), "SUPERMARK");
+            }
+            
+            // Close all Super Mark positions
+            for(int i = 0; i < ArraySize(superMarkTickets); i++)
+            {
+                if(trade.PositionClose(superMarkTickets[i]))
+                {
+                    AddToLog(StringFormat("✅ Closed SuperMark %s #%I64u", 
+                        isBuy ? "BUY" : "SELL", superMarkTickets[i]), "SUPERMARK");
+                }
+            }
+            
+            // Delete CURRENT LEVEL's Super Mark pending orders only
+            for(int i = OrdersTotal() - 1; i >= 0; i--)
+            {
+                ulong ticket = OrderGetTicket(i);
+                if(ticket <= 0) continue;
+                if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+                if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+                
+                string comment = OrderGetString(ORDER_COMMENT);
+                // Only delete orders for current level
+                if(StringFind(comment, "SuperMark") >= 0 && StringFind(comment, currentLevelTag) >= 0)
+                {
+                    trade.OrderDelete(ticket);
+                    AddToLog(StringFormat("Deleted SuperMark L%d pending order #%I64u", currentLevel, ticket), "SUPERMARK");
+                }
+            }
+            
+            // Decrement level after successful recovery
+            // If level becomes 0, Super Mark mode will deactivate and return to Recovery Mode
+            if(isBuy)
+            {
+                superMarkBuyLevel--;
+                superMarkBuyGridPlaced = false;  // Reset flag for downgraded level
+                if(superMarkBuyLevel > 0)
+                {
+                    ArrayResize(superMarkBuyLevelPrices, superMarkBuyLevel);
+                    AddToLog(StringFormat("✅ SuperMark BUY Level %d Complete! Downgrading to Level %d", 
+                        currentLevel, superMarkBuyLevel), "SUPERMARK");
+                }
+                else
+                {
+                    // Level 0 means return to Recovery Mode
+                    AddToLog("✅ SuperMark BUY Level 1 Complete! Returning to RECOVERY MODE", "SUPERMARK");
+                }
+            }
+            else
+            {
+                superMarkSellLevel--;
+                superMarkSellGridPlaced = false;  // Reset flag for downgraded level
+                if(superMarkSellLevel > 0)
+                {
+                    ArrayResize(superMarkSellLevelPrices, superMarkSellLevel);
+                    AddToLog(StringFormat("✅ SuperMark SELL Level %d Complete! Downgrading to Level %d", 
+                        currentLevel, superMarkSellLevel), "SUPERMARK");
+                }
+                else
+                {
+                    AddToLog("✅ SuperMark SELL Level 1 Complete! Returning to RECOVERY MODE", "SUPERMARK");
+                }
+            }
+            return;
+        }
+    }
+    
+    // ===== STEP 3: Count existing Super Mark orders FOR CURRENT LEVEL ONLY =====
+    // Each level has its own grid range - only count orders within current level's range
+    // Note: currentLevel and currentLevelTag already defined above
+    double levelStartPrice = 0;
+    double levelEndPrice = 0;
+    double gapPrice = SuperMarkGridGap * pip;
+    double levelRange = SuperMarkGridGap * SuperMarkMaxOrders * pip;
+    
+    // Get current level's price range
+    if(isBuy)
+    {
+        if(currentLevel > 0 && ArraySize(superMarkBuyLevelPrices) >= currentLevel)
+        {
+            levelStartPrice = superMarkBuyLevelPrices[currentLevel - 1];
+            levelEndPrice = levelStartPrice - levelRange;
+        }
+    }
+    else
+    {
+        if(currentLevel > 0 && ArraySize(superMarkSellLevelPrices) >= currentLevel)
+        {
+            levelStartPrice = superMarkSellLevelPrices[currentLevel - 1];
+            levelEndPrice = levelStartPrice + levelRange;
+        }
+    }
+    
+    // Count positions and pending orders ONLY for current level's price range
+    int currentLevelPositions = 0;
+    int currentLevelPending = 0;
+    string levelTag = StringFormat("_L%d", currentLevel);
+    
+    // Count current level positions
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "SuperMark") < 0) continue;
+        if(StringFind(comment, levelTag) < 0) continue; // Only count current level
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
+            currentLevelPositions++;
+    }
+    
+    // Count current level pending orders
+    for(int i = 0; i < OrdersTotal(); i++)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "SuperMark") < 0) continue;
+        if(StringFind(comment, levelTag) < 0) continue; // Only count current level
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
+            currentLevelPending++;
+    }
+    
+    int totalCurrentLevelOrders = currentLevelPositions + currentLevelPending;
+    
+    // ===== STEP 4: Place Super Mark grid orders for CURRENT LEVEL =====
+    if(totalCurrentLevelOrders >= SuperMarkMaxOrders)
+    {
+        AddToLog(StringFormat("SuperMark L%d: Max orders reached (%d/%d)", 
+            currentLevel, totalCurrentLevelOrders, SuperMarkMaxOrders), "SUPERMARK");
+        return; // Already have max orders for this level
+    }
+    
+    if(highestLossTicket == 0)
+    {
+        AddToLog("SuperMark: No highest loss ticket found, skipping order placement", "SUPERMARK");
+        return;
+    }
+    
+    if(currentLevel == 0)
+    {
+        AddToLog("SuperMark: Current level is 0, skipping order placement", "SUPERMARK");
+        return;
+    }
+    
+    // Check if grid orders already placed for this level - don't re-place
+    bool gridAlreadyPlaced = isBuy ? superMarkBuyGridPlaced : superMarkSellGridPlaced;
+    if(gridAlreadyPlaced && currentLevelPending > 0)
+    {
+        AddToLog(StringFormat("SuperMark L%d: Grid already placed, waiting for fills (%d pending)", 
+            currentLevel, currentLevelPending), "SUPERMARK");
+        return; // Grid already placed, wait for orders to fill
+    }
+    
+    AddToLog(StringFormat("SuperMark L%d: Starting order placement | Current: %d/%d | GridPlaced: %s", 
+        currentLevel, totalCurrentLevelOrders, SuperMarkMaxOrders, gridAlreadyPlaced ? "YES" : "NO"), "SUPERMARK");
+    
+    // ===== Calculate NEXT GRID LEVEL based on existing orders/positions =====
+    // Grid is FIXED from levelStartPrice with SuperMarkGridGap spacing
+    // We find the NEXT empty grid slot, not nearest to current price
+    
+    // First, collect all occupied grid levels (positions + pending orders)
+    double occupiedPrices[];
+    ArrayResize(occupiedPrices, 0);
+    
+    // Collect Super Mark position prices for current level
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "SuperMark") < 0) continue;
+        if(StringFind(comment, levelTag) < 0) continue;
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
+        {
+            int size = ArraySize(occupiedPrices);
+            ArrayResize(occupiedPrices, size + 1);
+            occupiedPrices[size] = PositionGetDouble(POSITION_PRICE_OPEN);
+        }
+    }
+    
+    // Collect Super Mark pending order prices for current level
+    for(int i = 0; i < OrdersTotal(); i++)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "SuperMark") < 0) continue;
+        if(StringFind(comment, levelTag) < 0) continue;
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
+        {
+            int size = ArraySize(occupiedPrices);
+            ArrayResize(occupiedPrices, size + 1);
+            occupiedPrices[size] = OrderGetDouble(ORDER_PRICE_OPEN);
+        }
+    }
+    
+    // Debug log for grid calculation
+    static datetime lastGridDebug = 0;
+    if(TimeCurrent() - lastGridDebug > 30)
+    {
+        AddToLog(StringFormat("SuperMark Grid Debug: Level=%d | StartPrice=%.2f | EndPrice=%.2f | Gap=%.2f | CurrentPrice=%.2f | Occupied=%d",
+            currentLevel, levelStartPrice, levelEndPrice, gapPrice, currentPrice, ArraySize(occupiedPrices)), "DEBUG");
+        lastGridDebug = TimeCurrent();
+    }
+    
+    // ===== PLACE ALL MISSING GRID ORDERS AT ONCE =====
+    // Iterate through ALL grid levels and place orders for empty slots
+    int ordersPlaced = 0;
+    
+    for(int step = 1; step <= SuperMarkMaxOrders; step++)
+    {
+        double gridPrice = 0;
+        if(isBuy)
+            gridPrice = NormalizeDouble(levelStartPrice - (step * gapPrice), _Digits);
+        else
+            gridPrice = NormalizeDouble(levelStartPrice + (step * gapPrice), _Digits);
+        
+        // Validate grid price is within level range
+        if(isBuy && gridPrice < levelEndPrice)
+            continue;
+        if(!isBuy && gridPrice > levelEndPrice)
+            continue;
+        
+        // Check if this grid level is already occupied
+        bool isOccupied = false;
+        for(int j = 0; j < ArraySize(occupiedPrices); j++)
+        {
+            if(MathAbs(occupiedPrices[j] - gridPrice) < gapPrice * 0.3)
+            {
+                isOccupied = true;
+                break;
+            }
+        }
+        
+        if(isOccupied)
+            continue;
+        
+        // Calculate lot size - scale between min and max based on step number
+        double lotRatio = (double)(step - 1) / (double)SuperMarkMaxOrders;
+        double lotSize = SuperMarkMinLot + (SuperMarkMaxLot - SuperMarkMinLot) * lotRatio;
+        
+        // Normalize lot size
+        double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+        double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+        double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+        if(minLot <= 0) minLot = 0.01;
+        if(maxLot <= 0) maxLot = 100.0;
+        if(lotStep <= 0) lotStep = 0.01;
+        lotSize = MathFloor(lotSize / lotStep) * lotStep;
+        lotSize = MathMax(minLot, MathMin(maxLot, lotSize));
+        
+        // Place the Super Mark order with LEVEL TAG in comment
+        string comment = isBuy ? 
+            StringFormat("SuperMark_BUY_L%d", currentLevel) : 
+            StringFormat("SuperMark_SELL_L%d", currentLevel);
+        
+        bool orderSuccess = false;
+        if(isBuy)
+            orderSuccess = trade.BuyLimit(lotSize, gridPrice, _Symbol, 0, 0, ORDER_TIME_GTC, 0, comment);
+        else
+            orderSuccess = trade.SellLimit(lotSize, gridPrice, _Symbol, 0, 0, ORDER_TIME_GTC, 0, comment);
+        
+        if(orderSuccess)
+        {
+            ordersPlaced++;
+            AddToLog(StringFormat("✅ SuperMark L%d %s placed @ %.2f | Lot: %.2f | Step: %d", 
+                currentLevel, isBuy ? "BUY" : "SELL", gridPrice, lotSize, step), "SUPERMARK");
+            
+            // Add to occupied prices to prevent duplicate in same tick
+            int size = ArraySize(occupiedPrices);
+            ArrayResize(occupiedPrices, size + 1);
+            occupiedPrices[size] = gridPrice;
+        }
+        else
+        {
+            AddToLog(StringFormat("❌ SuperMark %s failed @ %.2f | Error: %d | RetCode: %d",
+                isBuy ? "BUY" : "SELL", gridPrice, GetLastError(), trade.ResultRetcode()), "SUPERMARK");
+        }
+        
+        // Small delay between orders to avoid broker rejection
+        Sleep(100);
+    }
+    
+    if(ordersPlaced > 0)
+    {
+        // Set grid placed flag - orders won't be re-placed until level changes
+        if(isBuy)
+            superMarkBuyGridPlaced = true;
+        else
+            superMarkSellGridPlaced = true;
+            
+        AddToLog(StringFormat("SuperMark L%d: Placed %d %s grid orders (Grid Locked)", 
+            currentLevel, ordersPlaced, isBuy ? "BUY" : "SELL"), "SUPERMARK");
+    }
+    
+}
+
+//+------------------------------------------------------------------+
 //| Apply Trailing Stop                                               |
 //| ট্রেইলিং স্টপ লজিক:                                                  |
 //| 1. Normal Mode: প্রতিটি position এর open price থেকে calculate      |
@@ -1603,17 +2536,39 @@ void ApplyTrailing()
         double currentTP = PositionGetDouble(POSITION_TP);
         
         // ===== Mode এবং Settings নির্ধারণ =====
+        // Check if position is Super Mark
+        string posComment = PositionGetString(POSITION_COMMENT);
+        bool isSuperMark = (StringFind(posComment, "SuperMark") >= 0);
+        
         // Recovery mode হলে average price ব্যবহার হবে, না হলে individual open price
         bool inRecovery = (type == POSITION_TYPE_BUY && buyInRecovery) || (type == POSITION_TYPE_SELL && sellInRecovery);
+        bool inSuperMark = (type == POSITION_TYPE_BUY && buyInSuperMarkRecovery) || (type == POSITION_TYPE_SELL && sellInSuperMarkRecovery);
+        
+        // Super Mark positions use their own average price
         double basePrice = inRecovery ? (type == POSITION_TYPE_BUY ? buyAvgPrice : sellAvgPrice) : openPrice;
         
         // Mode অনুযায়ী settings select করি
-        double trailingStart = inRecovery ? RecoveryTrailingStartPips : 
-            (type == POSITION_TYPE_BUY ? BuyTrailingStartPips : SellTrailingStartPips);
-        double initialSL = inRecovery ? RecoveryInitialSLPips :
-            (type == POSITION_TYPE_BUY ? BuyInitialSLPips : SellInitialSLPips);
-        double trailingRatio = inRecovery ? RecoveryTrailingRatio :
-            (type == POSITION_TYPE_BUY ? BuyTrailingRatio : SellTrailingRatio);
+        double trailingStart, initialSL, trailingRatio;
+        
+        if(isSuperMark && inSuperMark)
+        {
+            // Super Mark trailing settings
+            trailingStart = SuperMarkTrailingStartPips;  // 3 pips
+            initialSL = SuperMarkTrailingSLPips;          // 2 pips SL distance
+            trailingRatio = SuperMarkTrailingRatio;       // 0.5 = 0.5 pip SL move per 1 pip price move
+        }
+        else if(inRecovery)
+        {
+            trailingStart = RecoveryTrailingStartPips;
+            initialSL = RecoveryInitialSLPips;
+            trailingRatio = RecoveryTrailingRatio;
+        }
+        else
+        {
+            trailingStart = (type == POSITION_TYPE_BUY ? BuyTrailingStartPips : SellTrailingStartPips);
+            initialSL = (type == POSITION_TYPE_BUY ? BuyInitialSLPips : SellInitialSLPips);
+            trailingRatio = (type == POSITION_TYPE_BUY ? BuyTrailingRatio : SellTrailingRatio);
+        }
         
         // ===== Profit Calculate =====
         // BUY: currentPrice - basePrice (price বাড়লে profit)
@@ -1621,6 +2576,18 @@ void ApplyTrailing()
         double profitPips = type == POSITION_TYPE_BUY ?
             (currentPrice - basePrice) / pip :
             (basePrice - currentPrice) / pip;
+        
+        // ===== Super Mark Max TP Check =====
+        // Super Mark positions close at max TP (25 pips)
+        if(isSuperMark && inSuperMark && profitPips >= SuperMarkMaxTPPips)
+        {
+            if(trade.PositionClose(ticket))
+            {
+                AddToLog(StringFormat("✅ SuperMark MAX TP: %s closed @ %.1f pips profit", 
+                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", profitPips), "SUPERMARK");
+            }
+            continue;  // Skip to next position
+        }
         
         // ===== Trailing Apply =====
         // শুধুমাত্র profit >= trailingStart হলে trailing শুরু হবে
@@ -1649,8 +2616,9 @@ void ApplyTrailing()
             if(needsUpdate)
             {
                 trade.PositionModify(ticket, newSL, currentTP);
-                AddToLog(StringFormat("Trailing SL: %s | Profit: %.1f pips", 
-                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", profitPips), "TRAILING");
+                string modeStr = isSuperMark ? "SuperMark" : (inRecovery ? "Recovery" : "Normal");
+                AddToLog(StringFormat("Trailing SL: %s %s | Profit: %.1f pips | SL: %.2f", 
+                    modeStr, type == POSITION_TYPE_BUY ? "BUY" : "SELL", profitPips, newSL), "TRAILING");
             }
         }
     }
@@ -1789,7 +2757,18 @@ void UpdateInfoPanel()
     string modeText = "";
     color modeColor = clrLime;
     
-    if(buyInRecovery || sellInRecovery)
+    // Priority: Super Mark > Recovery > Normal
+    if(buyInSuperMarkRecovery || sellInSuperMarkRecovery)
+    {
+        if(buyInSuperMarkRecovery && sellInSuperMarkRecovery)
+            modeText = StringFormat(">>> BUY (L%d) & SELL (L%d) SUPER MARK MODE <<<", superMarkBuyLevel, superMarkSellLevel);
+        else if(buyInSuperMarkRecovery)
+            modeText = StringFormat(">>> BUY SUPER MARK LEVEL %d <<<", superMarkBuyLevel);
+        else
+            modeText = StringFormat(">>> SELL SUPER MARK LEVEL %d <<<", superMarkSellLevel);
+        modeColor = clrMagenta;
+    }
+    else if(buyInRecovery || sellInRecovery)
     {
         if(buyInRecovery && sellInRecovery)
             modeText = ">>> BUY & SELL BOTH RECOVERY MODE ACTIVATED <<<";
@@ -1830,13 +2809,24 @@ void UpdateInfoPanel()
     sellYPos += 16;
     
     // SELL Mode
-    string sellModeText = sellInRecovery ? ">> RECOVERY MODE <<" : "Normal Grid Mode";
+    string sellModeText = "Normal Grid Mode";
+    color sellModeColor = clrLime;
+    if(sellInSuperMarkRecovery)
+    {
+        sellModeText = StringFormat(">> SUPER MARK L%d <<", superMarkSellLevel);
+        sellModeColor = clrMagenta;
+    }
+    else if(sellInRecovery)
+    {
+        sellModeText = ">> RECOVERY MODE <<";
+        sellModeColor = clrOrangeRed;
+    }
     ObjectCreate(0, "EA_SellMode", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_SellMode", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_SellMode", OBJPROP_XDISTANCE, 10);
     ObjectSetInteger(0, "EA_SellMode", OBJPROP_YDISTANCE, sellYPos);
     ObjectSetString(0, "EA_SellMode", OBJPROP_TEXT, sellModeText);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_COLOR, sellInRecovery ? clrOrangeRed : clrLime);
+    ObjectSetInteger(0, "EA_SellMode", OBJPROP_COLOR, sellModeColor);
     ObjectSetInteger(0, "EA_SellMode", OBJPROP_FONTSIZE, 9);
     ObjectSetString(0, "EA_SellMode", OBJPROP_FONT, "Arial Bold");
     sellYPos += 16;
@@ -1906,13 +2896,24 @@ void UpdateInfoPanel()
     buyYPos += 16;
     
     // BUY Mode
-    string buyModeText = buyInRecovery ? ">> RECOVERY MODE <<" : "Normal Grid Mode";
+    string buyModeText = "Normal Grid Mode";
+    color buyModeColor = clrLime;
+    if(buyInSuperMarkRecovery)
+    {
+        buyModeText = StringFormat(">> SUPER MARK L%d <<", superMarkBuyLevel);
+        buyModeColor = clrMagenta;
+    }
+    else if(buyInRecovery)
+    {
+        buyModeText = ">> RECOVERY MODE <<";
+        buyModeColor = clrOrangeRed;
+    }
     ObjectCreate(0, "EA_BuyMode", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_BuyMode", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_BuyMode", OBJPROP_XDISTANCE, rightX);
     ObjectSetInteger(0, "EA_BuyMode", OBJPROP_YDISTANCE, buyYPos);
     ObjectSetString(0, "EA_BuyMode", OBJPROP_TEXT, buyModeText);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_COLOR, buyInRecovery ? clrOrangeRed : clrLime);
+    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_COLOR, buyModeColor);
     ObjectSetInteger(0, "EA_BuyMode", OBJPROP_FONTSIZE, 9);
     ObjectSetString(0, "EA_BuyMode", OBJPROP_FONT, "Arial Bold");
     buyYPos += 16;
@@ -2110,11 +3111,24 @@ void SendTradeDataToServer()
     }
     pendingJson += "]";
     
-    // Determine trading mode
+    // Determine trading mode with Super Mark level info
     string tradingMode = "Normal Mode Running";
-    if(buyInRecovery && sellInRecovery) tradingMode = "Buy & Sell Recovery Mode Activated!";
-    else if(buyInRecovery) tradingMode = "Buy Recovery Mode Activated!";
-    else if(sellInRecovery) tradingMode = "Sell Recovery Mode Activated!";
+    if(buyInSuperMarkRecovery && sellInSuperMarkRecovery) 
+        tradingMode = StringFormat("Buy (L%d) & Sell (L%d) Super Mark Recovery!", superMarkBuyLevel, superMarkSellLevel);
+    else if(buyInSuperMarkRecovery) 
+        tradingMode = StringFormat("Buy Super Mark Recovery Level %d!", superMarkBuyLevel);
+    else if(sellInSuperMarkRecovery) 
+        tradingMode = StringFormat("Sell Super Mark Recovery Level %d!", superMarkSellLevel);
+    else if(recoveryMaxHitBuy && !buyInSuperMarkRecovery)
+        tradingMode = "Buy Recovery Max Hit - Waiting for Super Mark Activation!";
+    else if(recoveryMaxHitSell && !sellInSuperMarkRecovery)
+        tradingMode = "Sell Recovery Max Hit - Waiting for Super Mark Activation!";
+    else if(buyInRecovery && sellInRecovery) 
+        tradingMode = "Buy & Sell Recovery Mode Activated!";
+    else if(buyInRecovery) 
+        tradingMode = "Buy Recovery Mode Activated!";
+    else if(sellInRecovery) 
+        tradingMode = "Sell Recovery Mode Activated!";
     
     // Build closed positions array (last 24 hours)
     string closedJson = "[";
