@@ -85,15 +85,38 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
+def _database_from_env():
+    database_url = os.environ.get('DATABASE_URL', '').strip()
+    if database_url:
+        # Supports: postgres://user:pass@host:port/dbname
+        # (no external dependency)
+        from urllib.parse import urlparse
+
+        parsed = urlparse(database_url)
+        if parsed.scheme not in ('postgres', 'postgresql'):
+            raise ValueError('Unsupported DATABASE_URL scheme')
+
+        return {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': (parsed.path or '').lstrip('/'),
+            'USER': parsed.username or '',
+            'PASSWORD': parsed.password or '',
+            'HOST': parsed.hostname or '',
+            'PORT': str(parsed.port or '5432'),
+        }
+
+    return {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'super_grid',
-        'USER': 'postgres',
-        'PASSWORD': 'postgres',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.environ.get('DB_NAME', 'markstrades_db'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
     }
+
+
+DATABASES = {
+    'default': _database_from_env()
 }
 
 # CORS settings
