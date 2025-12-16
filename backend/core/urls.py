@@ -24,4 +24,12 @@ urlpatterns = [
     path('referral/stats/', views.get_referral_stats, name='get_referral_stats'),
     path('referral/track-click/', views.track_referral_click, name='track_referral_click'),
     path('referral/request-payout/', views.request_payout, name='request_payout'),
+    
+    # Trade Command System
+    path('trade-commands/close-position/', views.close_position, name='close_position'),
+    path('trade-commands/close-bulk/', views.close_bulk_positions, name='close_bulk_positions'),
+    path('trade-commands/close-top-loss/', views.close_top_loss_positions, name='close_top_loss_positions'),
+    path('trade-commands/close-all/', views.close_all_positions, name='close_all_positions'),
+    path('trade-commands/pending/', views.get_pending_commands, name='get_pending_commands'),
+    path('trade-commands/update-status/', views.update_command_status, name='update_command_status'),
 ]

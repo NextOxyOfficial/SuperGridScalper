@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog
 
 
 # Unregister default User admin and register with search
@@ -426,3 +426,85 @@ class ReferralPayoutAdmin(admin.ModelAdmin):
             color, icon, obj.status.upper()
         )
     status_display.short_description = 'Status'
+
+
+# ==================== TRADE COMMAND SYSTEM ADMIN ====================
+
+@admin.register(TradeCommand)
+class TradeCommandAdmin(admin.ModelAdmin):
+    list_display = ['get_mt5_account', 'command_type', 'status_display', 'created_at', 'executed_at', 'expires_at']
+    list_filter = ['command_type', 'status', 'created_at']
+    search_fields = ['license__license_key', 'license__mt5_account']
+    readonly_fields = ['license', 'command_type', 'parameters', 'status', 'created_at', 'executed_at', 'expires_at', 'result_message', 'result_data']
+    
+    fieldsets = (
+        ('🔑 License', {
+            'fields': ('license',)
+        }),
+        ('📋 Command', {
+            'fields': (('command_type', 'status'), 'parameters')
+        }),
+        ('⏰ Timing', {
+            'fields': (('created_at', 'executed_at', 'expires_at'),)
+        }),
+        ('📊 Result', {
+            'fields': ('result_message', 'result_data'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_mt5_account(self, obj):
+        return obj.license.mt5_account or '-'
+    get_mt5_account.short_description = 'MT5 Account'
+    
+    def status_display(self, obj):
+        colors = {
+            'pending': ('orange', '⏳'),
+            'executed': ('green', '✅'),
+            'failed': ('red', '❌'),
+            'expired': ('gray', '⌛'),
+        }
+        color, icon = colors.get(obj.status, ('gray', ''))
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{} {}</span>',
+            color, icon, obj.status.upper()
+        )
+    status_display.short_description = 'Status'
+    
+    def has_add_permission(self, request):
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EAActionLog)
+class EAActionLogAdmin(admin.ModelAdmin):
+    list_display = ['get_mt5_account', 'log_type', 'message_preview', 'created_at']
+    list_filter = ['log_type', 'created_at']
+    search_fields = ['license__license_key', 'license__mt5_account', 'message']
+    readonly_fields = ['license', 'log_type', 'message', 'details', 'created_at']
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('🔑 License', {
+            'fields': ('license',)
+        }),
+        ('📝 Log Entry', {
+            'fields': (('log_type', 'created_at'), 'message', 'details')
+        }),
+    )
+    
+    def get_mt5_account(self, obj):
+        return obj.license.mt5_account or '-'
+    get_mt5_account.short_description = 'MT5 Account'
+    
+    def message_preview(self, obj):
+        return obj.message[:80] + '...' if len(obj.message) > 80 else obj.message
+    message_preview.short_description = 'Message'
+    
+    def has_add_permission(self, request):
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        return False

@@ -5,7 +5,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand
 from decimal import Decimal
 import json
 
@@ -1094,3 +1094,291 @@ def request_payout(request):
     
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+# ==================== TRADE COMMAND SYSTEM ====================
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def close_position(request):
+    """Close a single position by ticket number"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    license_key = data.get('license_key', '').strip().upper()
+    ticket = data.get('ticket')
+    
+    if not license_key or not ticket:
+        return JsonResponse({'success': False, 'message': 'License key and ticket required'})
+    
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    command = TradeCommand.objects.create(
+        license=license,
+        command_type='CLOSE_POSITION',
+        parameters={'ticket': ticket}
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Close command created',
+        'command_id': command.id
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def close_bulk_positions(request):
+    """Close multiple positions by ticket numbers"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    license_key = data.get('license_key', '').strip().upper()
+    tickets = data.get('tickets', [])
+    
+    if not license_key or not tickets:
+        return JsonResponse({'success': False, 'message': 'License key and tickets required'})
+    
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    command = TradeCommand.objects.create(
+        license=license,
+        command_type='CLOSE_BULK',
+        parameters={'tickets': tickets}
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Bulk close command created for {len(tickets)} positions',
+        'command_id': command.id
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def close_top_loss_positions(request):
+    """Close top N positions with highest loss (distance from entry)"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    license_key = data.get('license_key', '').strip().upper()
+    count = data.get('count', 5)
+    position_type = data.get('type', 'all')
+    
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key required'})
+    
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    try:
+        trade_data = TradeData.objects.get(license=license)
+    except TradeData.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'No trade data available'})
+    
+    open_positions = trade_data.open_positions or []
+    
+    if not open_positions:
+        return JsonResponse({'success': False, 'message': 'No open positions'})
+    
+    if position_type == 'buy':
+        positions = [p for p in open_positions if p.get('type', '').upper() == 'BUY']
+    elif position_type == 'sell':
+        positions = [p for p in open_positions if p.get('type', '').upper() == 'SELL']
+    else:
+        positions = open_positions
+    
+    if not positions:
+        return JsonResponse({'success': False, 'message': f'No {position_type} positions found'})
+    
+    current_price = float(trade_data.current_price)
+    
+    for pos in positions:
+        entry_price = float(pos.get('price', 0))
+        pos_type = pos.get('type', '').upper()
+        
+        if pos_type == 'BUY':
+            distance = entry_price - current_price
+        else:
+            distance = current_price - entry_price
+        
+        pos['distance'] = distance
+        pos['profit'] = float(pos.get('profit', 0))
+    
+    sorted_positions = sorted(positions, key=lambda x: x['distance'], reverse=True)
+    top_loss_positions = sorted_positions[:count]
+    tickets = [p.get('ticket') for p in top_loss_positions if p.get('ticket')]
+    
+    if not tickets:
+        return JsonResponse({'success': False, 'message': 'No valid tickets found'})
+    
+    command = TradeCommand.objects.create(
+        license=license,
+        command_type='CLOSE_BULK',
+        parameters={
+            'tickets': tickets,
+            'reason': f'Top {count} loss positions',
+            'type': position_type
+        }
+    )
+    
+    position_details = []
+    for pos in top_loss_positions:
+        position_details.append({
+            'ticket': pos.get('ticket'),
+            'type': pos.get('type'),
+            'lots': pos.get('lots'),
+            'price': pos.get('price'),
+            'profit': pos.get('profit'),
+            'distance': round(pos.get('distance', 0), 2)
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Command created to close top {len(tickets)} loss positions',
+        'command_id': command.id,
+        'positions': position_details
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def close_all_positions(request):
+    """Close all positions (or all buy/sell)"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    license_key = data.get('license_key', '').strip().upper()
+    position_type = data.get('type', 'all')
+    
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key required'})
+    
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    if position_type == 'buy':
+        command_type = 'CLOSE_ALL_BUY'
+    elif position_type == 'sell':
+        command_type = 'CLOSE_ALL_SELL'
+    else:
+        command_type = 'CLOSE_ALL'
+    
+    command = TradeCommand.objects.create(
+        license=license,
+        command_type=command_type,
+        parameters={}
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Close all {position_type} command created',
+        'command_id': command.id
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST", "GET"])
+def get_pending_commands(request):
+    """Get pending commands for EA to execute"""
+    if request.method == "GET":
+        license_key = request.GET.get('license_key', '').strip().upper()
+    else:
+        try:
+            data = json.loads(request.body)
+            license_key = data.get('license_key', '').strip().upper()
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key required'})
+    
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    commands = TradeCommand.objects.filter(
+        license=license,
+        status='pending'
+    ).order_by('created_at')
+    
+    for cmd in commands:
+        cmd.is_expired()
+    
+    commands = TradeCommand.objects.filter(
+        license=license,
+        status='pending'
+    ).order_by('created_at')
+    
+    command_list = []
+    for cmd in commands:
+        command_list.append({
+            'id': cmd.id,
+            'command_type': cmd.command_type,
+            'parameters': cmd.parameters,
+            'created_at': cmd.created_at.isoformat()
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'commands': command_list
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def update_command_status(request):
+    """Update command execution status from EA"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+    
+    license_key = data.get('license_key', '').strip().upper()
+    command_id = data.get('command_id')
+    status = data.get('status', 'executed')
+    result_message = data.get('result_message', '')
+    result_data = data.get('result_data', {})
+    
+    if not license_key or not command_id:
+        return JsonResponse({'success': False, 'message': 'License key and command_id required'})
+    
+    try:
+        license = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    try:
+        command = TradeCommand.objects.get(id=command_id, license=license)
+    except TradeCommand.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Command not found'})
+    
+    command.status = status
+    command.result_message = result_message
+    command.result_data = result_data
+    command.executed_at = timezone.now()
+    command.save()
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Command status updated'
+    })

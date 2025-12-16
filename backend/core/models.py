@@ -503,3 +503,64 @@ class EAActionLog(models.Model):
         verbose_name = "EA Action Log"
         verbose_name_plural = "EA Action Logs"
         ordering = ['-created_at']
+
+
+class TradeCommand(models.Model):
+    """Commands from backend to EA for trade actions"""
+    COMMAND_TYPES = [
+        ('CLOSE_POSITION', 'Close Position'),
+        ('CLOSE_ALL_BUY', 'Close All Buy'),
+        ('CLOSE_ALL_SELL', 'Close All Sell'),
+        ('CLOSE_ALL', 'Close All Positions'),
+        ('CLOSE_BULK', 'Close Bulk Positions'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('executed', 'Executed'),
+        ('failed', 'Failed'),
+        ('expired', 'Expired'),
+    ]
+    
+    license = models.ForeignKey(License, on_delete=models.CASCADE, related_name='trade_commands')
+    command_type = models.CharField(max_length=20, choices=COMMAND_TYPES)
+    
+    # Command parameters (JSON)
+    # For CLOSE_POSITION: {"ticket": 12345}
+    # For CLOSE_BULK: {"tickets": [12345, 67890, ...]}
+    # For CLOSE_ALL_BUY/SELL/ALL: {}
+    parameters = models.JSONField(default=dict, blank=True)
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    # Execution tracking
+    created_at = models.DateTimeField(auto_now_add=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField()  # Commands expire after 5 minutes
+    
+    # Result
+    result_message = models.TextField(blank=True)
+    result_data = models.JSONField(default=dict, blank=True)  # Closed tickets, errors, etc.
+    
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(minutes=5)
+        super().save(*args, **kwargs)
+    
+    def is_expired(self):
+        """Check if command has expired"""
+        if self.status != 'pending':
+            return False
+        if timezone.now() > self.expires_at:
+            self.status = 'expired'
+            self.save()
+            return True
+        return False
+    
+    def __str__(self):
+        return f"{self.command_type} - {self.license.license_key[:12]}... ({self.status})"
+    
+    class Meta:
+        verbose_name = "Trade Command"
+        verbose_name_plural = "Trade Commands"
+        ordering = ['-created_at']

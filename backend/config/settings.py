@@ -28,6 +28,14 @@ DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'markstrades.com', 'www.markstrades.com']
 
+# CSRF Settings
+CSRF_TRUSTED_ORIGINS = [
+    'https://markstrades.com',
+    'https://www.markstrades.com',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]
+
 
 # Application definition
 
