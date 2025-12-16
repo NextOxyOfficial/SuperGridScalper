@@ -14,13 +14,13 @@ input string    LicenseKey      = "";
 
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       4001.0
-#define BuyRangeEnd         4401.0
+#define BuyRangeEnd         4801.0
 #define BuyGapPips          2.0
 #define MaxBuyOrders        3
 #define BuyTakeProfitPips   3.5
 #define BuyStopLossPips     0.0
 
-#define SellRangeStart      4402.0
+#define SellRangeStart      4802.0
 #define SellRangeEnd        4002.0
 #define SellGapPips         6.0
 #define MaxSellOrders       4
