@@ -109,7 +109,7 @@ def _database_from_env():
 
     config = {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'markstrades_db'),
+        'NAME': os.environ.get('DB_NAME', 'markstrades_db' if IS_PRODUCTION else 'super_grid'),
         'USER': os.environ.get('DB_USER', 'postgres'),
         'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres' if not IS_PRODUCTION else ''),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
