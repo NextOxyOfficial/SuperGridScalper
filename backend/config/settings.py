@@ -105,14 +105,19 @@ def _database_from_env():
             'PORT': str(parsed.port or '5432'),
         }
 
-    return {
+    config = {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'super_grid'),
+        'NAME': os.environ.get('DB_NAME', 'markstrades_db'),
         'USER': os.environ.get('DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres' if DEBUG else ''),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),
     }
+
+    if not DEBUG and not config.get('PASSWORD'):
+        raise RuntimeError('DB_PASSWORD (or DATABASE_URL) must be set when DEBUG=False')
+
+    return config
 
 
 DATABASES = {
