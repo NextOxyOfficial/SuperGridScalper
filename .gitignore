@@ -30,8 +30,6 @@ staticfiles/
 *.dump
 *.sqlite3
 *.db
-migrations/
-!migrations/__init__.py
 
 # Environment
 .env
