@@ -24,7 +24,9 @@ SECRET_KEY = 'django-insecure-nr^&vz0xv*je%4x!1vvdvi7y%pn)0)(d)=u0&2wuo=))o8(cod
 
 # SECURITY WARNING: don't run with debug turned on in production!
 import os
-DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development').strip().lower()
+IS_PRODUCTION = ENVIRONMENT == 'production'
+DEBUG = os.environ.get('DEBUG', 'False' if IS_PRODUCTION else 'True') == 'True'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'markstrades.com', 'www.markstrades.com']
 
@@ -109,12 +111,12 @@ def _database_from_env():
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('DB_NAME', 'markstrades_db'),
         'USER': os.environ.get('DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres' if DEBUG else ''),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres' if not IS_PRODUCTION else ''),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),
     }
 
-    if not DEBUG and not config.get('PASSWORD'):
+    if IS_PRODUCTION and not config.get('PASSWORD'):
         raise RuntimeError('DB_PASSWORD (or DATABASE_URL) must be set when DEBUG=False')
 
     return config
