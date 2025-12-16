@@ -98,3 +98,46 @@ def download_ea(request):
     except Exception as e:
         messages.error(request, f'Error downloading EA: {str(e)}')
         return redirect('dashboard')
+
+
+def download_ea_file(request, filename):
+    """Download EA file by filename (for EA Store)"""
+    try:
+        # Check if it's a request for a specific EA product file
+        ea_product = EAProduct.objects.filter(file_name=filename, is_active=True).first()
+        
+        if ea_product and ea_product.ea_file:
+            # Serve the uploaded EA file
+            response = FileResponse(ea_product.ea_file.open('rb'), as_attachment=True)
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        
+        # Fallback to hardcoded EA files in the ea/ directory
+        ea_files = {
+            'HedgeGridTrailingEA.ex5': 'HedgeGridTrailingEA.ex5',
+            'HedgeGridTrailingEA.mq5': 'HedgeGridTrailingEA.mq5',
+            'SuperGridScalper_EA.ex5': 'HedgeGridTrailingEA.ex5',
+            'SuperGridScalper_EA.mq5': 'HedgeGridTrailingEA.mq5',
+            'GoldScalperLite.ex5': 'Mark\'sAIGoldEA.ex5',
+            'GoldScalperLite.mq5': 'Mark\'sAIGoldEA.mq5',
+        }
+        
+        # Map requested filename to actual file
+        actual_filename = ea_files.get(filename, filename)
+        
+        # Path to EA file in the ea/ directory
+        ea_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
+                              'ea', actual_filename)
+        
+        if os.path.exists(ea_path):
+            response = FileResponse(open(ea_path, 'rb'), as_attachment=True)
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        else:
+            # Return 404 if file not found
+            from django.http import Http404
+            raise Http404(f"EA file '{filename}' not found")
+            
+    except Exception as e:
+        from django.http import Http404
+        raise Http404(f"Error downloading EA file: {str(e)}")
