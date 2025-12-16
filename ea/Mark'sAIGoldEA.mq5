@@ -15,16 +15,16 @@ input string    LicenseKey      = "";
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       4001.0
 #define BuyRangeEnd         4401.0
-#define BuyGapPips          3.0
-#define MaxBuyOrders        4
-#define BuyTakeProfitPips   50.0
+#define BuyGapPips          2.0
+#define MaxBuyOrders        3
+#define BuyTakeProfitPips   3.5
 #define BuyStopLossPips     0.0
 
 #define SellRangeStart      4402.0
 #define SellRangeEnd        4002.0
-#define SellGapPips         3.0
+#define SellGapPips         6.0
 #define MaxSellOrders       4
-#define SellTakeProfitPips  50.0
+#define SellTakeProfitPips  5.0
 #define SellStopLossPips    0.0
 
 // ===== TRAILING STOP SETTINGS (Normal Mode) =====
@@ -42,12 +42,12 @@ input string    LicenseKey      = "";
 // | 10 pip | +5.5 pip    | 2 + (7 × 0.5) |
 // | 20 pip | +10.5 pip   | 2 + (17 × 0.5) |
 
-#define BuyTrailingStartPips    3.0   // কত pip profit হলে trailing শুরু হবে (Trailing activation threshold)
-#define BuyInitialSLPips        2.0   // প্রথমে SL কত pip profit এ set হবে (Initial SL when trailing starts)
+#define BuyTrailingStartPips    2.0   // কত pip profit হলে trailing শুরু হবে (Trailing activation threshold)
+#define BuyInitialSLPips        1.25   // প্রথমে SL কত pip profit এ set হবে (Initial SL when trailing starts)
 #define BuyTrailingRatio        0.5   // প্রতি 1 pip trail এ SL কত pip move করবে (0.5 = 50% of price movement)
 
-#define SellTrailingStartPips   3.0   // SELL এর জন্য trailing শুরু threshold
-#define SellInitialSLPips       2.0   // SELL এর জন্য initial SL
+#define SellTrailingStartPips   2.0   // SELL এর জন্য trailing শুরু threshold
+#define SellInitialSLPips       1.25   // SELL এর জন্য initial SL
 #define SellTrailingRatio       0.5   // SELL এর জন্য trailing ratio
 
 // ===== RECOVERY MODE SETTINGS =====
@@ -55,14 +55,14 @@ input string    LicenseKey      = "";
 // Recovery mode activates when positions >= MaxOrders
 
 #define EnableRecovery          true   // Recovery mode enable/disable
-#define RecoveryTakeProfitPips  100.0  // Recovery mode এ TP (average price থেকে)
-#define RecoveryTrailingStartPips 3.0  // Recovery mode এ trailing শুরু threshold
-#define RecoveryInitialSLPips   2.0    // Recovery mode এ initial SL
+#define RecoveryTakeProfitPips  5.0  // Recovery mode এ TP (average price থেকে)
+#define RecoveryTrailingStartPips 2.0  // Recovery mode এ trailing শুরু threshold
+#define RecoveryInitialSLPips   1.25    // Recovery mode এ initial SL
 #define RecoveryTrailingRatio   0.5    // Recovery mode এ trailing ratio
-#define RecoveryLotIncrease     10.0
-#define MaxRecoveryOrders       30
+#define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
+#define MaxRecoveryOrders       18
 
-#define LotSize         0.25
+#define LotSize         0.08
 #define MagicNumber     999888
 #define OrderComment    "CleanGrid"
 #define ManageAllTrades false
@@ -303,6 +303,9 @@ void OnTick()
         ManageRecoveryGrid(false); // SELL Recovery
     }
     
+    // CRITICAL: Recovery Mode TP Worker - runs every tick to ensure TP is at breakeven
+    EnsureRecoveryModeTP();
+    
     // Apply trailing stops
     ApplyTrailing();
     
@@ -538,19 +541,11 @@ void CleanupInvalidOrders()
                     shouldDelete = true;
                     reason = "Outside buy range";
                 }
-                // Must be below current price
-                else if(orderPrice >= currentBid)
-                {
-                    shouldDelete = true;
-                    reason = "Above current price";
-                }
+                // BUY LIMIT should be BELOW current price - if it's AT or ABOVE (within 0.5 pip), it will execute immediately
+                // So we DON'T delete orders that are slightly above - they're valid pending orders
+                // Only delete if order is somehow way above current price (shouldn't happen normally)
             }
-            // Recovery orders: just check if above current price
-            else if(orderPrice >= currentBid)
-            {
-                shouldDelete = true;
-                reason = "Recovery order above price";
-            }
+            // Recovery orders: allow them to stay as long as they're reasonable
         }
         // Check SELL LIMIT orders
         else if(type == ORDER_TYPE_SELL_LIMIT)
@@ -563,19 +558,11 @@ void CleanupInvalidOrders()
                     shouldDelete = true;
                     reason = "Outside sell range";
                 }
-                // Must be above current price
-                else if(orderPrice <= currentAsk)
-                {
-                    shouldDelete = true;
-                    reason = "Below current price";
-                }
+                // SELL LIMIT should be ABOVE current price - if it's AT or BELOW (within 0.5 pip), it will execute immediately
+                // So we DON'T delete orders that are slightly below - they're valid pending orders
+                // Only delete if order is somehow way below current price (shouldn't happen normally)
             }
-            // Recovery orders: just check if below current price
-            else if(orderPrice <= currentAsk)
-            {
-                shouldDelete = true;
-                reason = "Recovery order below price";
-            }
+            // Recovery orders: allow them to stay as long as they're reasonable
         }
         
         // Delete invalid order
@@ -1066,22 +1053,26 @@ void ManageNormalGrid(bool isBuy)
     
     if(isBuy)
     {
-        double startLevel = baseLevel;
-        if(startLevel >= currentPrice) startLevel -= gapPrice;
+        // BUY orders should be BELOW current price with proper gap
+        double startLevel = currentPrice - (gapPrice * 2); // Start 2 gaps below current price
         
         for(int i = 0; i < maxOrders; i++)
         {
             targetLevels[i] = NormalizeDouble(startLevel - (i * gapPrice), _Digits);
+            // Ensure within range
+            if(targetLevels[i] < rangeLow) targetLevels[i] = rangeLow + (i * gapPrice * 0.5);
         }
     }
     else
     {
-        double startLevel = baseLevel + gapPrice;
-        if(startLevel <= currentPrice) startLevel += gapPrice;
+        // SELL orders should be ABOVE current price with proper gap
+        double startLevel = currentPrice + (gapPrice * 2); // Start 2 gaps above current price
         
         for(int i = 0; i < maxOrders; i++)
         {
             targetLevels[i] = NormalizeDouble(startLevel + (i * gapPrice), _Digits);
+            // Ensure within range
+            if(targetLevels[i] > rangeHigh) targetLevels[i] = rangeHigh - (i * gapPrice * 0.5);
         }
     }
     
@@ -1487,7 +1478,8 @@ void ManageRecoveryGrid(bool isBuy)
         // Skip if duplicate found
         if(duplicateExists) return;
         
-        double recoveryLot = extremeLot * (1.0 + RecoveryLotIncrease / 100.0);
+        // Fixed increment logic: add 0.01 to previous lot size
+        double recoveryLot = extremeLot + RecoveryLotIncrement;
         
         // Ensure lot is within broker limits and properly normalized
         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
@@ -1541,6 +1533,116 @@ void ManageRecoveryGrid(bool isBuy)
             reason = "Unknown";
             
         AddToLog(StringFormat("%s Recovery NOT placed | %s", isBuy ? "BUY" : "SELL", reason), "RECOVERY");
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Ensure Recovery Mode TP - Worker Function                         |
+//| প্রতি tick এ ensure করে যে Recovery Mode এ সব positions এর TP      |
+//| breakeven এ আছে (average price + RecoveryTakeProfitPips)         |
+//+------------------------------------------------------------------+
+void EnsureRecoveryModeTP()
+{
+    // BUY Recovery Mode TP Management
+    if(buyInRecovery)
+    {
+        double buyAvgPrice = 0, buyTotalLots = 0;
+        
+        // Calculate average price for BUY positions
+        for(int i = 0; i < PositionsTotal(); i++)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if(type != POSITION_TYPE_BUY) continue;
+            
+            double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            double lots = PositionGetDouble(POSITION_VOLUME);
+            
+            buyAvgPrice += openPrice * lots;
+            buyTotalLots += lots;
+        }
+        
+        if(buyTotalLots > 0)
+        {
+            buyAvgPrice = buyAvgPrice / buyTotalLots;
+            double buyBreakevenTP = NormalizeDouble(buyAvgPrice + (RecoveryTakeProfitPips * pip), _Digits);
+            
+            // Update TP for all BUY positions
+            for(int i = 0; i < PositionsTotal(); i++)
+            {
+                ulong ticket = PositionGetTicket(i);
+                if(ticket <= 0) continue;
+                if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+                if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+                
+                ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+                if(type != POSITION_TYPE_BUY) continue;
+                
+                double currentTP = PositionGetDouble(POSITION_TP);
+                double currentSL = PositionGetDouble(POSITION_SL);
+                
+                // Force update TP to breakeven if different
+                if(MathAbs(currentTP - buyBreakevenTP) > pip * 0.1)
+                {
+                    trade.PositionModify(ticket, currentSL, buyBreakevenTP);
+                }
+            }
+        }
+    }
+    
+    // SELL Recovery Mode TP Management
+    if(sellInRecovery)
+    {
+        double sellAvgPrice = 0, sellTotalLots = 0;
+        
+        // Calculate average price for SELL positions
+        for(int i = 0; i < PositionsTotal(); i++)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if(type != POSITION_TYPE_SELL) continue;
+            
+            double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            double lots = PositionGetDouble(POSITION_VOLUME);
+            
+            sellAvgPrice += openPrice * lots;
+            sellTotalLots += lots;
+        }
+        
+        if(sellTotalLots > 0)
+        {
+            sellAvgPrice = sellAvgPrice / sellTotalLots;
+            double sellBreakevenTP = NormalizeDouble(sellAvgPrice - (RecoveryTakeProfitPips * pip), _Digits);
+            
+            // Update TP for all SELL positions
+            for(int i = 0; i < PositionsTotal(); i++)
+            {
+                ulong ticket = PositionGetTicket(i);
+                if(ticket <= 0) continue;
+                if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+                if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+                
+                ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+                if(type != POSITION_TYPE_SELL) continue;
+                
+                double currentTP = PositionGetDouble(POSITION_TP);
+                double currentSL = PositionGetDouble(POSITION_SL);
+                
+                // Force update TP to breakeven if different
+                if(MathAbs(currentTP - sellBreakevenTP) > pip * 0.1)
+                {
+                    trade.PositionModify(ticket, currentSL, sellBreakevenTP);
+                }
+            }
+        }
     }
 }
 
@@ -1686,11 +1788,10 @@ void AddToLog(string message, string type)
 //+------------------------------------------------------------------+
 //| Send Log to Backend Server                                        |
 //+------------------------------------------------------------------+
-// Batch logging system to reduce server load
+// Batch logging to reduce server load
 struct PendingLog {
     string message;
     string type;
-    datetime timestamp;
 };
 PendingLog pendingLogs[];
 int pendingLogCount = 0;
@@ -1700,24 +1801,23 @@ void SendLogToServer(string message, string type)
     // Skip if no license key
     if(StringLen(LicenseKey) == 0) return;
     
-    // Add to pending logs batch
+    // Add to pending batch
     ArrayResize(pendingLogs, pendingLogCount + 1);
     pendingLogs[pendingLogCount].message = message;
     pendingLogs[pendingLogCount].type = type;
-    pendingLogs[pendingLogCount].timestamp = TimeCurrent();
     pendingLogCount++;
     
-    // Send batch every 10 seconds (instead of every log)
+    // Send batch every 10 seconds
     static datetime lastBatchSend = 0;
     if(TimeCurrent() - lastBatchSend < 10) return;
     
     lastBatchSend = TimeCurrent();
     
-    // Send only the most recent 5 logs to avoid spam
-    int logsToSend = MathMin(pendingLogCount, 5);
+    // Send only last 3 logs to minimize data
+    int logsToSend = MathMin(pendingLogCount, 3);
     if(logsToSend == 0) return;
     
-    // Build batch JSON request
+    // Build batch JSON
     string jsonRequest = "{";
     jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
     jsonRequest += "\"logs\":[";
@@ -1733,11 +1833,11 @@ void SendLogToServer(string message, string type)
     
     jsonRequest += "]}";
     
-    // Clear pending logs
+    // Clear batch
     ArrayResize(pendingLogs, 0);
     pendingLogCount = 0;
     
-    // Prepare request
+    // Send request
     string url = LicenseServer + "/api/action-log/";
     string headers = "Content-Type: application/json\r\n";
     char postData[];
