@@ -7,6 +7,7 @@ import axios from 'axios';
 import ExnessBroker from '@/components/ExnessBroker';
 
 const POLLING_INTERVAL = 2000; // Faster polling for real-time updates
+const EA_CONNECTED_TIMEOUT_SECONDS = 30; // Allow up to 30s between heartbeats before marking disconnected
 
 export default function DashboardHome() {
   const { user, licenses, selectedLicense, selectLicense, settings, API_URL, refreshLicenses } = useDashboard();
@@ -115,9 +116,9 @@ export default function DashboardHome() {
             lastUpdated: lastUpdated.toISOString(), 
             now: now.toISOString(), 
             diffSeconds, 
-            connected: diffSeconds < 15 
+            connected: diffSeconds < EA_CONNECTED_TIMEOUT_SECONDS 
           });
-          setEaConnected(diffSeconds < 15); // 15 seconds timeout
+          setEaConnected(diffSeconds < EA_CONNECTED_TIMEOUT_SECONDS);
         } else {
           // If we have recent data with symbol, assume connected
           const hasRecentData = data.data.symbol && (data.data.account_balance > 0 || data.data.total_buy_positions > 0 || data.data.total_sell_positions > 0);

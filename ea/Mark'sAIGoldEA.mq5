@@ -1053,26 +1053,22 @@ void ManageNormalGrid(bool isBuy)
     
     if(isBuy)
     {
-        // BUY orders should be BELOW current price with proper gap
-        double startLevel = currentPrice - (gapPrice * 2); // Start 2 gaps below current price
+        double startLevel = baseLevel;
+        if(startLevel >= currentPrice) startLevel -= gapPrice;
         
         for(int i = 0; i < maxOrders; i++)
         {
             targetLevels[i] = NormalizeDouble(startLevel - (i * gapPrice), _Digits);
-            // Ensure within range
-            if(targetLevels[i] < rangeLow) targetLevels[i] = rangeLow + (i * gapPrice * 0.5);
         }
     }
     else
     {
-        // SELL orders should be ABOVE current price with proper gap
-        double startLevel = currentPrice + (gapPrice * 2); // Start 2 gaps above current price
+        double startLevel = baseLevel + gapPrice;
+        if(startLevel <= currentPrice) startLevel += gapPrice;
         
         for(int i = 0; i < maxOrders; i++)
         {
             targetLevels[i] = NormalizeDouble(startLevel + (i * gapPrice), _Digits);
-            // Ensure within range
-            if(targetLevels[i] > rangeHigh) targetLevels[i] = rangeHigh - (i * gapPrice * 0.5);
         }
     }
     
