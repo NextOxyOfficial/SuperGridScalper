@@ -788,32 +788,52 @@ def update_investment(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def add_action_log(request):
-    """Add action log from EA"""
+    """Add action log from EA (supports both single and batch logs)"""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
     
     license_key = data.get('license_key', '').strip().upper()
-    log_type = data.get('log_type', 'INFO')
-    message = data.get('message', '')
-    details = data.get('details', {})
     
-    if not license_key or not message:
-        return JsonResponse({'success': False, 'message': 'License key and message required'})
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key required'})
     
     try:
         license = License.objects.get(license_key=license_key)
     except License.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Invalid license'})
     
-    # Create log entry
-    EAActionLog.objects.create(
-        license=license,
-        log_type=log_type,
-        message=message,
-        details=details
-    )
+    # Support batch logs (new format from EA)
+    logs = data.get('logs', [])
+    if logs:
+        # Batch insert for better performance
+        log_objects = []
+        for log_data in logs:
+            log_objects.append(EAActionLog(
+                license=license,
+                log_type=log_data.get('log_type', 'INFO'),
+                message=log_data.get('message', ''),
+                details=log_data.get('details', {})
+            ))
+        
+        if log_objects:
+            EAActionLog.objects.bulk_create(log_objects)
+    else:
+        # Backward compatibility: single log format
+        log_type = data.get('log_type', 'INFO')
+        message = data.get('message', '')
+        details = data.get('details', {})
+        
+        if not message:
+            return JsonResponse({'success': False, 'message': 'Message required'})
+        
+        EAActionLog.objects.create(
+            license=license,
+            log_type=log_type,
+            message=message,
+            details=details
+        )
     
     # Keep only last 200 logs per license
     old_logs = EAActionLog.objects.filter(license=license).order_by('-created_at')[200:]

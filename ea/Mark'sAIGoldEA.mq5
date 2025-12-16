@@ -1686,17 +1686,56 @@ void AddToLog(string message, string type)
 //+------------------------------------------------------------------+
 //| Send Log to Backend Server                                        |
 //+------------------------------------------------------------------+
+// Batch logging system to reduce server load
+struct PendingLog {
+    string message;
+    string type;
+    datetime timestamp;
+};
+PendingLog pendingLogs[];
+int pendingLogCount = 0;
+
 void SendLogToServer(string message, string type)
 {
     // Skip if no license key
     if(StringLen(LicenseKey) == 0) return;
     
-    // Build JSON request
+    // Add to pending logs batch
+    ArrayResize(pendingLogs, pendingLogCount + 1);
+    pendingLogs[pendingLogCount].message = message;
+    pendingLogs[pendingLogCount].type = type;
+    pendingLogs[pendingLogCount].timestamp = TimeCurrent();
+    pendingLogCount++;
+    
+    // Send batch every 10 seconds (instead of every log)
+    static datetime lastBatchSend = 0;
+    if(TimeCurrent() - lastBatchSend < 10) return;
+    
+    lastBatchSend = TimeCurrent();
+    
+    // Send only the most recent 5 logs to avoid spam
+    int logsToSend = MathMin(pendingLogCount, 5);
+    if(logsToSend == 0) return;
+    
+    // Build batch JSON request
     string jsonRequest = "{";
     jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
-    jsonRequest += "\"log_type\":\"" + type + "\",";
-    jsonRequest += "\"message\":\"" + message + "\"";
-    jsonRequest += "}";
+    jsonRequest += "\"logs\":[";
+    
+    for(int i = pendingLogCount - logsToSend; i < pendingLogCount; i++)
+    {
+        if(i > pendingLogCount - logsToSend) jsonRequest += ",";
+        jsonRequest += "{";
+        jsonRequest += "\"log_type\":\"" + pendingLogs[i].type + "\",";
+        jsonRequest += "\"message\":\"" + pendingLogs[i].message + "\"";
+        jsonRequest += "}";
+    }
+    
+    jsonRequest += "]}";
+    
+    // Clear pending logs
+    ArrayResize(pendingLogs, 0);
+    pendingLogCount = 0;
     
     // Prepare request
     string url = LicenseServer + "/api/action-log/";
@@ -1707,10 +1746,8 @@ void SendLogToServer(string message, string type)
     
     StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
     
-    int timeout = 1000; // Short timeout for logs
+    int timeout = 2000;
     int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
-    
-    // Don't print errors for logs to avoid spam
 }
 
 //+------------------------------------------------------------------+
