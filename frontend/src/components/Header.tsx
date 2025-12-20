@@ -302,7 +302,7 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                           setMobileMenuOpen(false);
                           onLoginClick();
                         }}
-                        className="px-3 py-2 rounded-lg text-xs font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20"
+                        className="col-span-2 px-3 py-2 rounded-lg text-xs font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20"
                         style={{ fontFamily: 'Orbitron, sans-serif' }}
                       >
                         Login
@@ -311,32 +311,10 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                       <Link
                         href={loginHref}
                         onClick={() => setMobileMenuOpen(false)}
-                        className="px-3 py-2 rounded-lg text-xs font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20 text-center"
+                        className="col-span-2 px-3 py-2 rounded-lg text-xs font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20 text-center"
                         style={{ fontFamily: 'Orbitron, sans-serif' }}
                       >
                         Login
-                      </Link>
-                    )}
-                    {onRegisterClick ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMobileMenuOpen(false);
-                          onRegisterClick();
-                        }}
-                        className="px-3 py-2 rounded-lg text-xs font-medium transition bg-cyan-500 hover:bg-cyan-400 text-black"
-                        style={{ fontFamily: 'Orbitron, sans-serif' }}
-                      >
-                        Get Started
-                      </button>
-                    ) : (
-                      <Link
-                        href={registerHref}
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="px-3 py-2 rounded-lg text-xs font-medium transition bg-cyan-500 hover:bg-cyan-400 text-black text-center"
-                        style={{ fontFamily: 'Orbitron, sans-serif' }}
-                      >
-                        Get Started
                       </Link>
                     )}
                   </>
