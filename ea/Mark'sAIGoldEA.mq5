@@ -15,17 +15,20 @@ input string    LicenseKey      = "";
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       4001.0
 #define BuyRangeEnd         4801.0
-#define BuyGapPips          2.0
-#define MaxBuyOrders        3
-#define BuyTakeProfitPips   3.5
+#define BuyGapPips          2.5
+#define MaxBuyOrders        5
+#define BuyTakeProfitPips   4.5
 #define BuyStopLossPips     0.0
 
 #define SellRangeStart      4802.0
 #define SellRangeEnd        4002.0
 #define SellGapPips         6.0
 #define MaxSellOrders       4
-#define SellTakeProfitPips  5.0
+#define SellTakeProfitPips  8
 #define SellStopLossPips    0.0
+
+#define BuyRecoveryGapPips   4
+#define SellRecoveryGapPips  6.0
 
 // ===== TRAILING STOP SETTINGS (Normal Mode) =====
 // Formula: newSL = openPrice + InitialSL + ((profit - TrailingStart) × TrailingRatio)
@@ -42,12 +45,12 @@ input string    LicenseKey      = "";
 // | 10 pip | +5.5 pip    | 2 + (7 × 0.5) |
 // | 20 pip | +10.5 pip   | 2 + (17 × 0.5) |
 
-#define BuyTrailingStartPips    2.0   // কত pip profit হলে trailing শুরু হবে (Trailing activation threshold)
-#define BuyInitialSLPips        1.25   // প্রথমে SL কত pip profit এ set হবে (Initial SL when trailing starts)
+#define BuyTrailingStartPips    2.5   // কত pip profit হলে trailing শুরু হবে (Trailing activation threshold)
+#define BuyInitialSLPips        1.75   // প্রথমে SL কত pip profit এ set হবে (Initial SL when trailing starts)
 #define BuyTrailingRatio        0.5   // প্রতি 1 pip trail এ SL কত pip move করবে (0.5 = 50% of price movement)
 
-#define SellTrailingStartPips   2.0   // SELL এর জন্য trailing শুরু threshold
-#define SellInitialSLPips       1.25   // SELL এর জন্য initial SL
+#define SellTrailingStartPips   3.5   // SELL এর জন্য trailing শুরু threshold
+#define SellInitialSLPips       2.5   // SELL এর জন্য initial SL
 #define SellTrailingRatio       0.5   // SELL এর জন্য trailing ratio
 
 // ===== RECOVERY MODE SETTINGS =====
@@ -56,11 +59,11 @@ input string    LicenseKey      = "";
 
 #define EnableRecovery          true   // Recovery mode enable/disable
 #define RecoveryTakeProfitPips  5.0  // Recovery mode এ TP (average price থেকে)
-#define RecoveryTrailingStartPips 2.0  // Recovery mode এ trailing শুরু threshold
-#define RecoveryInitialSLPips   1.25    // Recovery mode এ initial SL
+#define RecoveryTrailingStartPips 2.5  // Recovery mode এ trailing শুরু threshold
+#define RecoveryInitialSLPips   1.5    // Recovery mode এ initial SL
 #define RecoveryTrailingRatio   0.5    // Recovery mode এ trailing ratio
 #define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
-#define MaxRecoveryOrders       18
+#define MaxRecoveryOrders       20
 
 #define LotSize         0.08
 #define MagicNumber     999888
@@ -1392,7 +1395,7 @@ void ManageRecoveryGrid(bool isBuy)
         if((isBuy && extremePrice >= 999999) || (!isBuy && extremePrice <= 0)) return;
         
         // Calculate recovery order price and lot
-        double gapPips = isBuy ? BuyGapPips : SellGapPips;
+        double gapPips = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
         double recoveryPrice = isBuy ?
             NormalizeDouble(extremePrice - (gapPips * pip), _Digits) :
             NormalizeDouble(extremePrice + (gapPips * pip), _Digits);
@@ -1474,8 +1477,8 @@ void ManageRecoveryGrid(bool isBuy)
         // Skip if duplicate found
         if(duplicateExists) return;
         
-        // Fixed increment logic: add 0.01 to previous lot size
-        double recoveryLot = extremeLot + RecoveryLotIncrement;
+        // Fixed increment logic: base lot + (number of existing recovery positions + 1) * increment
+        double recoveryLot = LotSize + RecoveryLotIncrement * (recoveryFilledCount + 1);
         
         // Ensure lot is within broker limits and properly normalized
         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
