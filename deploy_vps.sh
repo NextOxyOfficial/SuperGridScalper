@@ -190,11 +190,18 @@ echo -e "${GREEN}✓ Purchase requests updated${NC}"
 # Step 6: Verify services
 echo -e "\n${YELLOW}Step 6: Verifying services...${NC}"
 
-# Check Gunicorn
-if systemctl is-active --quiet gunicorn; then
-    echo -e "${GREEN}✓ Gunicorn is running${NC}"
+# Check Backend
+if systemctl is-active --quiet markstrades-backend; then
+    echo -e "${GREEN}✓ Backend is running${NC}"
 else
-    echo -e "${RED}✗ Gunicorn is not running${NC}"
+    echo -e "${RED}✗ Backend is not running${NC}"
+fi
+
+# Check Frontend
+if systemctl is-active --quiet markstrades-frontend; then
+    echo -e "${GREEN}✓ Frontend is running${NC}"
+else
+    echo -e "${RED}✗ Frontend is not running${NC}"
 fi
 
 # Check Nginx
@@ -202,13 +209,6 @@ if systemctl is-active --quiet nginx; then
     echo -e "${GREEN}✓ Nginx is running${NC}"
 else
     echo -e "${RED}✗ Nginx is not running${NC}"
-fi
-
-# Check PM2
-if pm2 list | grep -q "frontend.*online"; then
-    echo -e "${GREEN}✓ Frontend is running${NC}"
-else
-    echo -e "${RED}✗ Frontend is not running${NC}"
 fi
 
 # Final summary
@@ -228,7 +228,7 @@ echo "🌐 Site: https://markstrades.com"
 echo "🔧 Admin: https://markstrades.com/admin"
 echo ""
 echo "📊 Check logs:"
-echo "  Backend:  sudo journalctl -u gunicorn -f"
-echo "  Frontend: pm2 logs frontend"
+echo "  Backend:  sudo journalctl -u markstrades-backend -f"
+echo "  Frontend: sudo journalctl -u markstrades-frontend -f"
 echo "  Nginx:    sudo tail -f /var/log/nginx/error.log"
 echo ""
