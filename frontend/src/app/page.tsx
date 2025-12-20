@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift } from 'lucide-react'
 import axios from 'axios'
 import ExnessBroker from '@/components/ExnessBroker'
-import SiteLogo from '@/components/SiteLogo'
+import Header from '@/components/Header'
 import { useSiteSettings } from '@/context/SiteSettingsContext'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api'
@@ -30,24 +30,18 @@ interface LicenseResult {
 export default function Home() {
   const router = useRouter()
   const settings = useSiteSettings()
-  const [plans, setPlans] = useState<Plan[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showRegisterModal, setShowRegisterModal] = useState(false)
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [firstName, setFirstName] = useState('')
-  const [mt5Account, setMt5Account] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const [licenseResult, setLicenseResult] = useState<LicenseResult | null>(null)
-  const [copied, setCopied] = useState(false)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [userName, setUserName] = useState('')
   const [referralCode, setReferralCode] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedPlanTab, setSelectedPlanTab] = useState(0)
   
   // Typing effect states
   const [typedText, setTypedText] = useState('')
@@ -61,23 +55,16 @@ export default function Home() {
     'Fully automated gold trading with AI precision.',
   ]
 
-  const handleLogout = () => {
-    localStorage.removeItem('user')
-    localStorage.removeItem('licenses')
-    localStorage.removeItem('selectedLicense')
-    setIsLoggedIn(false)
-    setUserName('')
+  const scrollToPricing = () => {
+    const pricingEl = document.getElementById('pricing')
+    if (pricingEl) {
+      const offset = 120
+      const elementPosition = pricingEl.getBoundingClientRect().top + window.pageYOffset
+      window.scrollTo({ top: elementPosition - offset, behavior: 'smooth' })
+    }
   }
 
   useEffect(() => {
-    // Check if user is logged in
-    const userData = localStorage.getItem('user')
-    const licensesData = localStorage.getItem('licenses')
-    if (userData && licensesData) {
-      setIsLoggedIn(true)
-      const user = JSON.parse(userData)
-      setUserName(user.email || 'User')
-    }
 
     // Capture referral code from URL
     const urlParams = new URLSearchParams(window.location.search)
@@ -150,15 +137,12 @@ export default function Home() {
   }, [typedText, isDeleting, currentPhraseIndex])
 
   const handleSubscribe = (plan: Plan) => {
-    if (!isLoggedIn) {
-      // Show login modal if not logged in
-      setSelectedPlan(plan)
+    const userData = localStorage.getItem('user')
+    if (!userData) {
       setShowLoginModal(true)
-      setError('')
       return
     }
-    // If logged in, redirect to dashboard to purchase
-    router.push('/dashboard?tab=purchase&plan=' + plan.id)
+    router.push(`/dashboard?plan=${plan.id}`)
   }
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -181,25 +165,18 @@ export default function Home() {
       const response = await axios.post(`${API_URL}/register/`, {
         email,
         password,
-        first_name: firstName,
+        name: firstName,
         referral_code: referralCode
       })
 
       if (response.data.success) {
-        // Auto login after registration
         localStorage.setItem('user', JSON.stringify(response.data.user))
         localStorage.setItem('licenses', JSON.stringify(response.data.licenses || []))
-        setIsLoggedIn(true)
-        setUserName(response.data.user.name || response.data.user.email)
         setShowRegisterModal(false)
-        // Clear form
         setEmail('')
         setPassword('')
         setConfirmPassword('')
         setFirstName('')
-        // Preserve referral code after successful registration
-        localStorage.setItem('referral_code', referralCode)
-        // Redirect to dashboard
         router.push('/dashboard')
       } else {
         setError(response.data.message || 'Registration failed')
@@ -209,24 +186,6 @@ export default function Home() {
     } finally {
       setSubmitting(false)
     }
-  }
-
-  const copyLicenseKey = () => {
-    if (licenseResult) {
-      navigator.clipboard.writeText(licenseResult.license_key)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  const closeModal = () => {
-    setShowModal(false)
-    setEmail('')
-    setPassword('')
-    setMt5Account('')
-    setError('')
-    setLicenseResult(null)
-    setSelectedPlan(null)
   }
 
   return (
@@ -369,6 +328,7 @@ export default function Home() {
                 if (response.data.success) {
                   localStorage.setItem('user', JSON.stringify(response.data.user))
                   localStorage.setItem('licenses', JSON.stringify(response.data.licenses))
+                  setShowLoginModal(false)
                   router.push('/dashboard')
                 } else {
                   setError(response.data.message || 'Login failed')
@@ -424,6 +384,20 @@ export default function Home() {
               </button>
             </form>
 
+            <div className="mt-3 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLoginModal(false)
+                  setError('')
+                  router.push('/forgot-password')
+                }}
+                className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm font-medium"
+              >
+                Forgot password?
+              </button>
+            </div>
+
             <p className="text-gray-500 text-xs sm:text-sm mt-4 text-center">
               Don't have an account?{' '}
               <button 
@@ -437,100 +411,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* Navigation - Mobile Optimized with 2 Rows */}
-      <nav className="relative z-10 container mx-auto px-3 sm:px-4 py-3 sm:py-6">
-        <div className="flex flex-col gap-3 md:gap-0">
-          
-          {/* Row 1: Logo + Login/Dashboard */}
-          <div className="flex items-center justify-between">
-            <SiteLogo size="md" />
-            
-            {/* Center Menu - Desktop Only */}
-            <div className="hidden md:flex items-center gap-6">
-              <button 
-                onClick={() => router.push('/demo')}
-                className="text-gray-300 hover:text-cyan-400 text-sm font-medium transition-all"
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                Demo
-              </button>
-              <button 
-                onClick={() => router.push('/guideline')}
-                className="text-gray-300 hover:text-cyan-400 text-sm font-medium transition-all"
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                Guidelines
-              </button>
-              <button 
-                onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
-                className="text-gray-300 hover:text-cyan-400 text-sm font-medium transition-all"
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                Pricing
-              </button>
-            </div>
-            
-            {/* Right side buttons */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              {isLoggedIn ? (
-                <>
-                  <button onClick={() => router.push('/dashboard')} className="px-3 sm:px-5 py-1.5 sm:py-2 text-xs sm:text-sm bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                    Dashboard
-                  </button>
-                  <button 
-                    onClick={handleLogout} 
-                    className="p-1.5 sm:p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all border border-red-500/30"
-                    title="Logout"
-                  >
-                    <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button onClick={() => setShowLoginModal(true)} className="px-2 sm:px-4 py-1.5 sm:py-2 text-cyan-400 hover:text-cyan-300 font-medium transition-all text-xs sm:text-sm border border-cyan-500/30 rounded-lg hover:bg-cyan-500/10">
-                    Login
-                  </button>
-                  <button onClick={() => setShowRegisterModal(true)} className="px-3 sm:px-6 py-1.5 sm:py-2 text-xs sm:text-base bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all">
-                    Get Started
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-          
-          {/* Row 2: Menu Items - Mobile Only */}
-          <div className="flex md:hidden items-center justify-between gap-2">
-            <button 
-              onClick={() => router.push('/demo')}
-              className="flex-1 text-center py-2 text-gray-300 hover:text-cyan-400 text-[10px] font-medium transition-all border border-cyan-500/30 rounded-lg hover:bg-cyan-500/10"
-              style={{ fontFamily: 'Orbitron, sans-serif' }}
-            >
-              Demo
-            </button>
-            <button 
-              onClick={() => router.push('/guideline')}
-              className="flex-1 text-center py-2 text-gray-300 hover:text-cyan-400 text-[10px] font-medium transition-all border border-cyan-500/30 rounded-lg hover:bg-cyan-500/10"
-              style={{ fontFamily: 'Orbitron, sans-serif' }}
-            >
-              Guidelines
-            </button>
-            <button 
-              onClick={() => {
-                const pricingEl = document.getElementById('pricing');
-                if (pricingEl) {
-                  const offset = 120;
-                  const elementPosition = pricingEl.getBoundingClientRect().top + window.pageYOffset;
-                  window.scrollTo({ top: elementPosition - offset, behavior: 'smooth' });
-                }
-              }}
-              className="flex-1 text-center py-2 text-gray-300 hover:text-cyan-400 text-[10px] font-medium transition-all border border-cyan-500/30 rounded-lg hover:bg-cyan-500/10"
-              style={{ fontFamily: 'Orbitron, sans-serif' }}
-            >
-              Pricing
-            </button>
-          </div>
-        </div>
-      </nav>
+      <Header 
+        onLoginClick={() => setShowLoginModal(true)}
+        onRegisterClick={() => setShowRegisterModal(true)}
+        scrollToPricing={scrollToPricing}
+      />
 
       {/* Hero Section */}
       <div className="relative z-10 min-h-screen flex items-center">
@@ -773,8 +658,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* EA Store Preview Section / Pricing */}
-        <div id="pricing" className="mb-12 sm:mb-24">
+        {/* EA Store Preview Section */}
+        <div className="mb-12 sm:mb-24">
           <div className="text-center mb-6 sm:mb-12">
             <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-3 sm:mb-4">
               <Store className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
@@ -848,7 +733,83 @@ export default function Home() {
             <p className="text-gray-400 text-sm sm:text-base">Unlock the full potential of Mark's AI trading system</p>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-8 max-w-5xl mx-auto">
+          {/* Mobile Tab Navigation */}
+          <div className="flex md:hidden justify-center gap-2 mb-6 overflow-x-auto pb-2">
+            {plans.map((plan, index) => (
+              <button
+                key={plan.id}
+                onClick={() => setSelectedPlanTab(index)}
+                className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-medium transition ${
+                  selectedPlanTab === index
+                    ? 'bg-cyan-500 text-black'
+                    : 'bg-white/5 text-cyan-300 border border-cyan-500/30'
+                }`}
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                {plan.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Mobile Single Card View */}
+          <div className="md:hidden">
+            {loading ? (
+              <div className="text-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-purple-500 mx-auto mb-4" />
+                <p className="text-gray-400">Loading plans...</p>
+              </div>
+            ) : plans.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-gray-400">No plans available. Please try again later.</p>
+              </div>
+            ) : (
+              <div className="max-w-md mx-auto">
+                {plans[selectedPlanTab] && (
+                  <div className="relative bg-gradient-to-br from-white/5 to-transparent backdrop-blur-lg rounded-2xl p-6 border border-cyan-400 ring-2 ring-cyan-400/30 shadow-lg shadow-cyan-500/10">
+                    {selectedPlanTab === 1 && (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                        <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-xs font-bold px-4 py-1 rounded-full" style={{ fontFamily: 'Orbitron, sans-serif' }}>MOST POPULAR</span>
+                      </div>
+                    )}
+                    <h3 className="text-2xl font-bold text-white mb-2 text-center" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plans[selectedPlanTab].name}</h3>
+                    <p className="text-gray-400 text-sm mb-4 text-center">{plans[selectedPlanTab].description}</p>
+                    <div className="mb-6 text-center">
+                      <span className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plans[selectedPlanTab].price}</span>
+                      <span className="text-gray-500 text-sm">/{plans[selectedPlanTab].duration_days} days</span>
+                    </div>
+                    <ul className="space-y-3 mb-8">
+                      <li className="flex items-center justify-center gap-2 text-gray-300 text-sm">
+                        <CheckCircle className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+                        {plans[selectedPlanTab].max_accounts} MT5 Account{plans[selectedPlanTab].max_accounts > 1 ? 's' : ''}
+                      </li>
+                      <li className="flex items-center justify-center gap-2 text-gray-300 text-sm">
+                        <CheckCircle className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+                        Full AI Trading
+                      </li>
+                      <li className="flex items-center justify-center gap-2 text-gray-300 text-sm">
+                        <CheckCircle className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+                        Gold Analysis
+                      </li>
+                      <li className="flex items-center justify-center gap-2 text-gray-300 text-sm">
+                        <CheckCircle className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+                        24/5 Support
+                      </li>
+                    </ul>
+                    <button 
+                      onClick={() => handleSubscribe(plans[selectedPlanTab])}
+                      className="w-full py-3 rounded-xl font-bold transition-all bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black shadow-lg shadow-cyan-500/25"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      GET STARTED
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Grid View */}
+          <div className="hidden md:grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-8 max-w-5xl mx-auto">
             {loading ? (
               <div className="col-span-3 text-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-purple-500 mx-auto mb-4" />
@@ -904,7 +865,7 @@ export default function Home() {
                   }`}
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  {isLoggedIn ? 'ACTIVATE NOW' : 'GET STARTED'}
+                  GET STARTED
                 </button>
               </div>
             ))}

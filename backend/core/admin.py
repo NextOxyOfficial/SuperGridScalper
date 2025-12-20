@@ -274,7 +274,8 @@ class TradeDataAdmin(admin.ModelAdmin):
 
     def profit_display(self, obj):
         color = 'green' if obj.account_profit >= 0 else 'red'
-        return format_html('<span style="color: {}; font-weight: bold;">${:,.2f}</span>', color, obj.account_profit)
+        profit_str = f"{obj.account_profit:,.2f}"
+        return format_html('<span style="color: {}; font-weight: bold;">${}</span>', color, profit_str)
     profit_display.short_description = 'Profit'
 
     def positions_summary(self, obj):
@@ -352,9 +353,11 @@ class ReferralAdmin(admin.ModelAdmin):
     )
     
     def earnings_display(self, obj):
+        total_str = f"{obj.total_earnings:,.2f}"
+        pending_str = f"{obj.pending_earnings:,.2f}"
         return format_html(
-            '<span style="color: green;">${:,.2f}</span> <small>(Pending: ${:,.2f})</small>',
-            obj.total_earnings, obj.pending_earnings
+            '<span style="color: green;">${}</span> <small>(Pending: ${})</small>',
+            total_str, pending_str
         )
     earnings_display.short_description = 'Earnings'
 
@@ -383,9 +386,10 @@ class ReferralTransactionAdmin(admin.ModelAdmin):
     referrer_display.short_description = 'Referrer'
     
     def commission_display(self, obj):
+        commission_str = f"{obj.commission_amount:,.2f}"
         return format_html(
-            '<span style="color: green; font-weight: bold;">${:,.2f}</span> <small>({}%)</small>',
-            obj.commission_amount, obj.commission_percent
+            '<span style="color: green; font-weight: bold;">${}</span> <small>({}%)</small>',
+            commission_str, obj.referral.commission_percent
         )
     commission_display.short_description = 'Commission'
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Mail, MessageCircle, Send, CheckCircle, AlertCircle, ArrowLeft, ArrowRight, Store, LogIn, Zap, Clock, Bot } from 'lucide-react';
+import { Mail, MessageCircle, Send, CheckCircle, AlertCircle, ArrowLeft, ArrowRight, Store, LogIn, Zap, Clock } from 'lucide-react';
 import SiteLogo from '@/components/SiteLogo';
 import { useSiteSettings } from '@/context/SiteSettingsContext';
 

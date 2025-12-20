@@ -3,8 +3,13 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
+from django.conf import settings as django_settings
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings
 from decimal import Decimal
 import json
@@ -288,6 +293,92 @@ def login(request):
             'name': user.first_name
         },
         'licenses': license_list
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def password_reset_request(request):
+    """Request a password reset email."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    email = (data.get('email') or '').strip().lower()
+    if not email:
+        return JsonResponse({'success': False, 'message': 'Email is required'}, status=400)
+
+    # Do not reveal whether user exists.
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        user = None
+
+    if user and user.is_active:
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
+        reset_url = f"{base}/reset-password?uid={uid}&token={token}"
+
+        subject = 'Password Reset Request'
+        message = (
+            'You requested a password reset.\n\n'
+            f"Reset your password using this link:\n{reset_url}\n\n"
+            'If you did not request this, you can safely ignore this email.'
+        )
+        try:
+            send_mail(
+                subject,
+                message,
+                getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
+                [email],
+                fail_silently=False,
+            )
+        except Exception:
+            # Don't leak SMTP errors to client.
+            pass
+
+    return JsonResponse({
+        'success': True,
+        'message': 'If an account exists for this email, a reset link has been sent.'
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def password_reset_confirm(request):
+    """Confirm password reset using uid + token."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    uid = (data.get('uid') or '').strip()
+    token = (data.get('token') or '').strip()
+    new_password = data.get('new_password') or ''
+
+    if not uid or not token or not new_password:
+        return JsonResponse({'success': False, 'message': 'Missing required fields'}, status=400)
+
+    if len(new_password) < 6:
+        return JsonResponse({'success': False, 'message': 'Password must be at least 6 characters'}, status=400)
+
+    try:
+        user_id = force_str(urlsafe_base64_decode(uid))
+        user = User.objects.get(pk=user_id)
+    except Exception:
+        return JsonResponse({'success': False, 'message': 'Invalid reset link'}, status=400)
+
+    if not default_token_generator.check_token(user, token):
+        return JsonResponse({'success': False, 'message': 'Invalid or expired reset link'}, status=400)
+
+    user.set_password(new_password)
+    user.save(update_fields=['password'])
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Password has been reset successfully'
     })
 
 

@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bot, Download, Shield, Zap, TrendingUp, DollarSign, Target, Star, CheckCircle, ArrowRight, LogIn, Store, Loader2 } from 'lucide-react';
+import { Bot, Download, Shield, Zap, TrendingUp, DollarSign, Target, Star, CheckCircle, ArrowRight, Store, Loader2 } from 'lucide-react';
 import ExnessBroker from '@/components/ExnessBroker';
-import SiteLogo from '@/components/SiteLogo';
+import Header from '@/components/Header';
 import { useSiteSettings } from '@/context/SiteSettingsContext';
 
 // Fallback EA Products Data (used if API fails)
@@ -50,8 +50,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api'
 
 export default function PublicEAStorePage() {
   const settings = useSiteSettings();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userName, setUserName] = useState('');
   const [eaProducts, setEaProducts] = useState<EAProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -78,14 +76,6 @@ export default function PublicEAStorePage() {
     fetchProducts();
   }, []);
 
-  useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      setIsLoggedIn(true);
-      const user = JSON.parse(userData);
-      setUserName(user.email || 'User');
-    }
-  }, []);
 
   const getColorClasses = (color: string) => {
     const colors: { [key: string]: { bg: string; border: string; text: string; glow: string } } = {
@@ -124,83 +114,7 @@ export default function PublicEAStorePage() {
       <div className="absolute top-20 left-10 w-72 h-72 bg-cyan-500/20 rounded-full blur-[100px] animate-pulse" />
       <div className="absolute bottom-20 right-10 w-96 h-96 bg-yellow-500/10 rounded-full blur-[120px] animate-pulse" />
 
-      {/* Navigation - Different for logged in vs non-logged in */}
-      <nav className="relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-6">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
-            {isLoggedIn ? (
-              <>
-                {/* Logged In: Dashboard Style Header */}
-                <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
-                  <div className="flex items-center gap-3 sm:gap-4">
-                    <SiteLogo size="sm" />
-                  </div>
-                </div>
-                
-                {/* Nav buttons row */}
-                <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
-                  <Link
-                    href="/dashboard"
-                    className="flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30"
-                    style={{ fontFamily: 'Orbitron, sans-serif' }}
-                  >
-                    Dashboard
-                  </Link>
-                  <Link
-                    href="/ea-store"
-                    className="flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center justify-center gap-1 sm:gap-2 bg-yellow-500 text-black"
-                    style={{ fontFamily: 'Orbitron, sans-serif' }}
-                  >
-                    <Store className="w-3.5 h-3.5 sm:w-5 sm:h-5" /> EA Store
-                  </Link>
-                  <Link
-                    href="/guideline"
-                    className="flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30"
-                    style={{ fontFamily: 'Orbitron, sans-serif' }}
-                  >
-                    Guidelines
-                  </Link>
-                  <div className="hidden sm:flex items-center gap-3">
-                    <div className="h-5 w-px bg-cyan-500/30"></div>
-                    <span className="text-cyan-300 text-xs sm:text-sm">{userName}</span>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Non-Logged In: Homepage Style Header */}
-                <div className="flex items-center gap-2 sm:gap-4">
-                  <SiteLogo size="sm" />
-                  <div className="h-5 sm:h-6 w-px bg-cyan-500/30"></div>
-                  <span className="flex items-center gap-1.5 sm:gap-2 text-yellow-400 text-xs sm:text-sm font-medium" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                    <Store className="w-4 h-4 sm:w-5 sm:h-5" /> EA STORE
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <Link 
-                    href="/" 
-                    className="px-3 sm:px-4 py-2 sm:py-2 text-cyan-300 hover:text-white hover:bg-cyan-500/20 rounded-lg text-xs sm:text-sm font-medium transition border border-cyan-500/30"
-                  >
-                    Home
-                  </Link>
-                  <Link 
-                    href="/guideline" 
-                    className="px-3 sm:px-4 py-2 sm:py-2 text-cyan-300 hover:text-white hover:bg-cyan-500/20 rounded-lg text-xs sm:text-sm font-medium transition border border-cyan-500/30"
-                  >
-                    Guidelines
-                  </Link>
-                  <Link 
-                    href="/" 
-                    className="px-3 sm:px-4 py-2 sm:py-2 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-1.5"
-                  >
-                    <LogIn className="w-4 h-4 sm:w-4 sm:h-4" /> Login
-                  </Link>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
+      <Header />
 
       {/* Main Content */}
       <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-10">
@@ -217,15 +131,6 @@ export default function PublicEAStorePage() {
             Select the EA that matches your investment size and trading style.
           </p>
           
-          {/* Call to action for non-logged in users */}
-          {!isLoggedIn && (
-            <div className="mt-4 sm:mt-6 inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-xl px-3 sm:px-5 py-2 sm:py-3">
-              <LogIn className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
-              <span className="text-gray-300 text-xs sm:text-sm">
-                <Link href="/" className="text-cyan-400 hover:text-cyan-300 font-medium">Create account</Link> to get license key
-              </span>
-            </div>
-          )}
         </div>
 
         {/* EA Products Grid */}
@@ -413,24 +318,6 @@ export default function PublicEAStorePage() {
           </ul>
         </div>
 
-        {/* CTA for non-logged in users */}
-        {!isLoggedIn && (
-          <div className="text-center bg-gradient-to-r from-cyan-500/10 to-yellow-500/10 border border-cyan-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-8">
-            <h3 className="text-lg sm:text-2xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-              Ready to Start?
-            </h3>
-            <p className="text-gray-400 text-sm sm:text-base mb-4 sm:mb-6 max-w-xl mx-auto">
-              Get your license key to activate the EA.
-            </p>
-            <Link 
-              href="/"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black px-5 sm:px-8 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/25"
-              style={{ fontFamily: 'Orbitron, sans-serif' }}
-            >
-              GET LICENSE <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-            </Link>
-          </div>
-        )}
 
         {/* Support */}
         <div className="mt-8 text-center">
