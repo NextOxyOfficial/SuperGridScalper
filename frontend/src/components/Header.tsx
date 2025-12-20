@@ -195,7 +195,27 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
               >
                 Dashboard
               </Link>
-            ) : null}
+            ) : (
+              <>
+                {onRegisterClick ? (
+                  <button
+                    onClick={onRegisterClick}
+                    className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-xs font-medium transition"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    Register
+                  </button>
+                ) : (
+                  <Link
+                    href={registerHref}
+                    className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-xs font-medium transition text-center"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    Register
+                  </Link>
+                )}
+              </>
+            )}
 
             <button
               type="button"
