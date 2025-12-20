@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft, FileText, Shield, AlertTriangle, CreditCard, Users, Scale, XCircle, RefreshCw, Mail, CheckCircle } from 'lucide-react';
 import SiteLogo from '@/components/SiteLogo';
+import Header from '@/components/Header';
 
 export default function TermsPage() {
   const currentYear = new Date().getFullYear();
@@ -14,8 +15,10 @@ export default function TermsPage() {
       <div className="absolute top-20 left-10 w-72 h-72 bg-cyan-500/10 rounded-full blur-[100px]" />
       <div className="absolute bottom-20 right-10 w-96 h-96 bg-yellow-500/5 rounded-full blur-[120px]" />
 
+      <Header />
+
       {/* Navigation */}
-      <nav className="relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
+      <nav className="hidden relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition">
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />

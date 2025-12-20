@@ -2,7 +2,8 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings
+from django.utils import timezone
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest
 
 
 # Unregister default User admin and register with search
@@ -77,6 +78,52 @@ class TradeDataInline(admin.StackedInline):
     
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(PaymentNetwork)
+class PaymentNetworkAdmin(admin.ModelAdmin):
+    list_display = ['name', 'code', 'token_symbol', 'wallet_address', 'is_active', 'sort_order', 'updated_at']
+    list_filter = ['is_active', 'token_symbol']
+    search_fields = ['name', 'code', 'wallet_address']
+    list_editable = ['is_active', 'sort_order']
+
+
+@admin.register(LicensePurchaseRequest)
+class LicensePurchaseRequestAdmin(admin.ModelAdmin):
+    list_display = ['created_at', 'user', 'plan', 'network', 'amount_usd', 'status', 'mt5_account', 'txid', 'reviewed_at']
+    list_filter = ['status', 'network', 'plan', 'created_at']
+    search_fields = ['user__email', 'txid', 'mt5_account']
+    readonly_fields = ['created_at', 'updated_at', 'issued_license', 'reviewed_at', 'reviewed_by']
+    actions = ['approve_requests', 'reject_requests']
+
+    def approve_requests(self, request, queryset):
+        for obj in queryset.select_related('user', 'plan'):
+            if obj.status != 'pending':
+                continue
+            if obj.issued_license_id:
+                obj.status = 'approved'
+                obj.reviewed_by = request.user
+                obj.reviewed_at = timezone.now()
+                obj.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+                continue
+
+            new_license = License.objects.create(
+                user=obj.user,
+                plan=obj.plan,
+                mt5_account=(obj.mt5_account or None)
+            )
+            obj.issued_license = new_license
+            obj.status = 'approved'
+            obj.reviewed_by = request.user
+            obj.reviewed_at = timezone.now()
+            obj.save(update_fields=['issued_license', 'status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+
+    approve_requests.short_description = 'Approve selected requests and issue license'
+
+    def reject_requests(self, request, queryset):
+        queryset.filter(status='pending').update(status='rejected', reviewed_by_id=request.user.id, reviewed_at=timezone.now())
+
+    reject_requests.short_description = 'Reject selected requests'
 
 
 @admin.register(License)

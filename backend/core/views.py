@@ -10,7 +10,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest
 from decimal import Decimal
 import json
 
@@ -173,6 +173,150 @@ def get_plans(request):
         'success': True,
         'plans': plans_list
     })
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_payment_networks(request):
+    networks = PaymentNetwork.objects.filter(is_active=True).order_by('sort_order', 'name')
+    return JsonResponse({
+        'success': True,
+        'networks': [
+            {
+                'id': n.id,
+                'name': n.name,
+                'code': n.code,
+                'token_symbol': n.token_symbol,
+                'wallet_address': n.wallet_address,
+            }
+            for n in networks
+        ]
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_license_purchase_request(request):
+    """Create a manual payment request with proof upload."""
+    email = (request.POST.get('email') or '').strip().lower()
+    plan_id = (request.POST.get('plan_id') or '').strip()
+    network_id = (request.POST.get('network_id') or '').strip()
+    mt5_account = (request.POST.get('mt5_account') or '').strip()
+    txid = (request.POST.get('txid') or '').strip()
+    user_note = (request.POST.get('user_note') or '').strip()
+    proof = request.FILES.get('proof')
+
+    if not email or not plan_id or not network_id:
+        return JsonResponse({'success': False, 'message': 'Email, plan, and network are required'}, status=400)
+
+    if not proof:
+        return JsonResponse({'success': False, 'message': 'Payment proof file is required'}, status=400)
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+
+    try:
+        plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+    except SubscriptionPlan.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid plan selected'}, status=400)
+
+    try:
+        network = PaymentNetwork.objects.get(id=network_id, is_active=True)
+    except PaymentNetwork.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid payment network selected'}, status=400)
+
+    purchase = LicensePurchaseRequest.objects.create(
+        user=user,
+        plan=plan,
+        mt5_account=mt5_account or None,
+        network=network,
+        amount_usd=plan.price,
+        txid=txid,
+        proof=proof,
+        user_note=user_note,
+        status='pending',
+    )
+
+    proof_url = None
+    if purchase.proof:
+        try:
+            proof_url = request.build_absolute_uri(purchase.proof.url)
+        except Exception:
+            proof_url = None
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Payment proof submitted. Your request is pending approval.',
+        'request': {
+            'id': purchase.id,
+            'status': purchase.status,
+            'created_at': purchase.created_at.isoformat(),
+            'plan': purchase.plan.name,
+            'amount_usd': float(purchase.amount_usd),
+            'network': purchase.network.name,
+            'wallet_address': purchase.network.wallet_address,
+            'token_symbol': purchase.network.token_symbol,
+            'mt5_account': purchase.mt5_account,
+            'txid': purchase.txid,
+            'proof_url': proof_url,
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def list_license_purchase_requests(request):
+    """List purchase requests for a user."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    email = (data.get('email') or '').strip().lower()
+    if not email:
+        return JsonResponse({'success': False, 'message': 'Email is required'}, status=400)
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+
+    qs = LicensePurchaseRequest.objects.filter(user=user).select_related('plan', 'network', 'issued_license')
+    items = []
+    for pr in qs:
+        proof_url = None
+        if pr.proof:
+            try:
+                proof_url = request.build_absolute_uri(pr.proof.url)
+            except Exception:
+                proof_url = None
+
+        items.append({
+            'id': pr.id,
+            'status': pr.status,
+            'created_at': pr.created_at.isoformat(),
+            'reviewed_at': pr.reviewed_at.isoformat() if pr.reviewed_at else None,
+            'plan': pr.plan.name,
+            'plan_id': pr.plan.id,
+            'amount_usd': float(pr.amount_usd),
+            'network': {
+                'id': pr.network.id,
+                'name': pr.network.name,
+                'code': pr.network.code,
+                'token_symbol': pr.network.token_symbol,
+                'wallet_address': pr.network.wallet_address,
+            },
+            'mt5_account': pr.mt5_account,
+            'txid': pr.txid,
+            'user_note': pr.user_note,
+            'admin_note': pr.admin_note,
+            'proof_url': proof_url,
+            'issued_license_key': pr.issued_license.license_key if pr.issued_license else None,
+        })
+
+    return JsonResponse({'success': True, 'requests': items})
 
 
 @csrf_exempt

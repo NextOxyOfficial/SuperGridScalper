@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift } from 'lucide-react'
 import axios from 'axios'
@@ -29,6 +29,7 @@ interface LicenseResult {
 
 export default function Home() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const settings = useSiteSettings()
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showRegisterModal, setShowRegisterModal] = useState(false)
@@ -54,6 +55,31 @@ export default function Home() {
     'The EA manages risk automatically and handles all trades for you.',
     'Fully automated gold trading with AI precision.',
   ]
+
+  const authParam = (searchParams.get('auth') || '').toLowerCase()
+
+  const clearAuthParam = () => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('auth')
+    const qs = params.toString()
+    router.replace(qs ? `/?${qs}` : '/')
+  }
+
+  useEffect(() => {
+    if (!authParam) return
+    setError('')
+
+    if (authParam === 'login') {
+      setShowRegisterModal(false)
+      setShowLoginModal(true)
+      return
+    }
+
+    if (authParam === 'register') {
+      setShowLoginModal(false)
+      setShowRegisterModal(true)
+    }
+  }, [authParam])
 
   const scrollToPricing = () => {
     const pricingEl = document.getElementById('pricing')
@@ -173,6 +199,7 @@ export default function Home() {
         localStorage.setItem('user', JSON.stringify(response.data.user))
         localStorage.setItem('licenses', JSON.stringify(response.data.licenses || []))
         setShowRegisterModal(false)
+        clearAuthParam()
         setEmail('')
         setPassword('')
         setConfirmPassword('')
@@ -201,7 +228,14 @@ export default function Home() {
       {showRegisterModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#12121a] border border-cyan-500/20 rounded-2xl max-w-md w-full p-4 sm:p-6 relative shadow-2xl shadow-cyan-500/10">
-            <button onClick={() => setShowRegisterModal(false)} className="absolute top-3 sm:top-4 right-3 sm:right-4 text-gray-500 hover:text-cyan-400 transition-colors">
+            <button
+              onClick={() => {
+                setShowRegisterModal(false)
+                setError('')
+                clearAuthParam()
+              }}
+              className="absolute top-3 sm:top-4 right-3 sm:right-4 text-gray-500 hover:text-cyan-400 transition-colors"
+            >
               <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
 
@@ -304,7 +338,14 @@ export default function Home() {
       {showLoginModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#12121a] border border-cyan-500/20 rounded-2xl max-w-md w-full p-4 sm:p-6 relative shadow-2xl shadow-cyan-500/10">
-            <button onClick={() => setShowLoginModal(false)} className="absolute top-3 sm:top-4 right-3 sm:right-4 text-gray-500 hover:text-cyan-400 transition-colors">
+            <button
+              onClick={() => {
+                setShowLoginModal(false)
+                setError('')
+                clearAuthParam()
+              }}
+              className="absolute top-3 sm:top-4 right-3 sm:right-4 text-gray-500 hover:text-cyan-400 transition-colors"
+            >
               <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
 
@@ -329,6 +370,7 @@ export default function Home() {
                   localStorage.setItem('user', JSON.stringify(response.data.user))
                   localStorage.setItem('licenses', JSON.stringify(response.data.licenses))
                   setShowLoginModal(false)
+                  clearAuthParam()
                   router.push('/dashboard')
                 } else {
                   setError(response.data.message || 'Login failed')
@@ -828,8 +870,8 @@ export default function Home() {
                 }`}
               >
                 {index === 1 && (
-                  <div className="absolute -top-3 sm:-top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-[10px] sm:text-sm font-bold px-3 sm:px-4 py-0.5 sm:py-1 rounded-full" style={{ fontFamily: 'Orbitron, sans-serif' }}>MOST POPULAR</span>
+                  <div className="absolute -top-3 sm:-top-4 transform -translate-x-1/2">
+                    <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 flex text-black text-[10px] sm:text-sm font-bold px-3 sm:px-4 py-0.5 sm:py-1 rounded-full" style={{ fontFamily: 'Orbitron, sans-serif' }}>MOST POPULAR</span>
                   </div>
                 )}
                 <h3 className="text-lg sm:text-2xl font-bold text-white mb-1 sm:mb-2 text-center sm:text-left" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h3>

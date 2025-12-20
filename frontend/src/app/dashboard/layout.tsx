@@ -21,7 +21,7 @@ function DashboardNav() {
   if (!selectedLicense && (pathname === '/dashboard' || pathname === '/dashboard/ea-store' || pathname === '/dashboard/referral')) {
     return (
       <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-6">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           {/* Mobile: Two rows layout */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
             
@@ -94,7 +94,7 @@ function DashboardNav() {
 
   return (
     <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
         {/* Mobile: Two rows layout */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
           

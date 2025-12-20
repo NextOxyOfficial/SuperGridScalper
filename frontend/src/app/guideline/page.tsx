@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Bot, Play, ChevronDown, ChevronUp, Shield, Settings, TrendingUp, AlertTriangle, Download, CheckCircle, DollarSign, Target, Zap, ArrowRight, Store, BookOpen, LogIn } from 'lucide-react';
 import ExnessBroker from '@/components/ExnessBroker';
 import SiteLogo from '@/components/SiteLogo';
+import Header from '@/components/Header';
 import { useSiteSettings } from '@/context/SiteSettingsContext';
 
 // Video tutorials data - Add your YouTube/video URLs here
@@ -230,9 +231,11 @@ export default function GuidelinePage() {
       <div className="absolute top-20 left-10 w-72 h-72 bg-cyan-500/20 rounded-full blur-[100px] animate-pulse" />
       <div className="absolute bottom-20 right-10 w-96 h-96 bg-yellow-500/10 rounded-full blur-[120px] animate-pulse" />
 
+      <Header />
+
       {/* Navigation - Different for logged in vs non-logged in */}
-      <nav className="relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-6">
+      <nav className="hidden relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
             {isLoggedIn ? (
               <>

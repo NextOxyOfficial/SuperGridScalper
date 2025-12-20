@@ -17,6 +17,8 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from core import dashboard_views
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -31,3 +33,6 @@ urlpatterns = [
     path('ea/<str:filename>', dashboard_views.download_ea_file, name='download_ea_file'),
     path('ea_files/<str:filename>', dashboard_views.download_ea_file, name='download_ea_file_legacy'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

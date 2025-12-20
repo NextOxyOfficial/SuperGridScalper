@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Mail, MessageCircle, Send, CheckCircle, AlertCircle, ArrowLeft, ArrowRight, Store, LogIn, Zap, Clock } from 'lucide-react';
 import SiteLogo from '@/components/SiteLogo';
+import Header from '@/components/Header';
 import { useSiteSettings } from '@/context/SiteSettingsContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
@@ -80,9 +81,11 @@ export default function ContactPage() {
       <div className="absolute top-20 left-10 w-72 h-72 bg-cyan-500/20 rounded-full blur-[100px] animate-pulse" />
       <div className="absolute bottom-20 right-10 w-96 h-96 bg-yellow-500/10 rounded-full blur-[120px] animate-pulse" />
 
+      <Header />
+
       {/* Navigation - Different for logged in vs non-logged in */}
-      <nav className="relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-6">
+      <nav className="hidden relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
             {isLoggedIn ? (
               <>

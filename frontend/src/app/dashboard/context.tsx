@@ -123,7 +123,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshLicenses = async () => {
-    // Re-fetch from localStorage (could also fetch from server)
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        if (parsed?.email) {
+          await fetchLicensesFromServer(parsed.email);
+          return;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
     const licensesData = localStorage.getItem('licenses');
     if (licensesData) {
       setLicenses(JSON.parse(licensesData));

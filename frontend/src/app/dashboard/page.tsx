@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check, X, Sparkles, CheckCircle, Loader2 } from 'lucide-react';
+import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet } from 'lucide-react';
 import { useDashboard } from './context';
 import axios from 'axios';
 import ExnessBroker from '@/components/ExnessBroker';
@@ -26,6 +26,13 @@ export default function DashboardHome() {
   const [plans, setPlans] = useState<any[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [mt5Account, setMt5Account] = useState('');
+  const [paymentNetworks, setPaymentNetworks] = useState<any[]>([]);
+  const [selectedNetworkId, setSelectedNetworkId] = useState<string>('');
+  const [txid, setTxid] = useState('');
+  const [userNote, setUserNote] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [purchaseRequests, setPurchaseRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState<any>(null);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -44,6 +51,8 @@ export default function DashboardHome() {
 
   useEffect(() => {
     fetchPlans();
+    fetchPaymentNetworks();
+    fetchPurchaseRequests();
     // Fetch trade data for all licenses initially
     fetchAllLicensesTradeData();
     
@@ -59,7 +68,44 @@ export default function DashboardHome() {
         clearInterval(allLicensesPollingRef.current);
       }
     };
-  }, [licenses, selectedLicense]);
+  }, [licenses, selectedLicense, user?.email]);
+
+  const selectedNetwork = paymentNetworks.find((n) => String(n.id) === String(selectedNetworkId));
+
+  const fetchPaymentNetworks = async () => {
+    try {
+      const res = await fetch(`${API_URL}/payment-networks/`);
+      const data = await res.json();
+      if (data.success) {
+        setPaymentNetworks(data.networks || []);
+        if (!selectedNetworkId && data.networks?.length) {
+          setSelectedNetworkId(String(data.networks[0].id));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch payment networks');
+    }
+  };
+
+  const fetchPurchaseRequests = async () => {
+    if (!user?.email) return;
+    setLoadingRequests(true);
+    try {
+      const res = await fetch(`${API_URL}/license-purchase-requests/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPurchaseRequests(data.requests || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch purchase requests');
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
   
   const fetchAllLicensesTradeData = async () => {
     if (!licenses || licenses.length === 0) return;
@@ -226,48 +272,53 @@ export default function DashboardHome() {
   };
 
   const handlePurchase = async () => {
-    if (!selectedPlan || !mt5Account.trim()) {
-      setMessage({ type: 'error', text: 'Please select a plan and enter MT5 account number' });
+    if (!selectedPlan) {
+      setMessage({ type: 'error', text: 'Please select a plan' });
       return;
     }
-    
+    if (!mt5Account.trim()) {
+      setMessage({ type: 'error', text: 'Please enter MT5 account number' });
+      return;
+    }
+    if (!selectedNetworkId) {
+      setMessage({ type: 'error', text: 'Please select a payment network' });
+      return;
+    }
+    if (!proofFile) {
+      setMessage({ type: 'error', text: 'Please upload payment proof' });
+      return;
+    }
+
     setPurchasing(true);
     setMessage({ type: '', text: '' });
-    
-    // Get referral code from localStorage if exists
-    const referralCode = localStorage.getItem('referral_code') || '';
-    
-    const requestBody = {
-      email: user?.email,
-      password: 'existing_user',
-      plan_id: selectedPlan.id,
-      mt5_account: mt5Account.trim(),
-      referral_code: referralCode
-    };
-    
-    console.log('Purchase request:', requestBody);
-    
+
     try {
-      const res = await fetch(`${API_URL}/subscribe/`, {
+      const form = new FormData();
+      form.append('email', user?.email || '');
+      form.append('plan_id', String(selectedPlan.id));
+      form.append('network_id', String(selectedNetworkId));
+      form.append('mt5_account', mt5Account.trim());
+      form.append('txid', txid.trim());
+      form.append('user_note', userNote.trim());
+      form.append('proof', proofFile);
+
+      const res = await fetch(`${API_URL}/license-purchase-requests/create/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+        body: form
       });
-      
       const data = await res.json();
-      console.log('Purchase response:', data);
-      
       if (data.success) {
-        setPurchaseSuccess(data.license);
-        localStorage.setItem('licenses', JSON.stringify(data.licenses));
-        // Refresh licenses from context instead of page reload
-        // This keeps the success message visible until user navigates away
-        refreshLicenses();
+        setPurchaseSuccess(data.request);
+        setMessage({ type: 'success', text: data.message || 'Submitted. Pending approval.' });
+        setTxid('');
+        setUserNote('');
+        setProofFile(null);
+        await fetchPurchaseRequests();
       } else {
-        setMessage({ type: 'error', text: data.message || 'Purchase failed' });
+        setMessage({ type: 'error', text: data.message || 'Submission failed' });
       }
     } catch (e) {
-      console.error('Purchase error:', e);
+      console.error('Purchase request error:', e);
       setMessage({ type: 'error', text: 'Connection error. Please try again.' });
     } finally {
       setPurchasing(false);
@@ -952,44 +1003,54 @@ export default function DashboardHome() {
         </summary>
         <div className="px-3 sm:px-4 pb-4 border-t border-cyan-500/10">
           {purchaseSuccess ? (
-            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4 text-center mt-4">
-              <div className="w-12 h-12 bg-cyan-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-2xl text-cyan-400">✓</span>
-              </div>
-              <h4 className="text-lg font-bold text-cyan-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>License Activated!</h4>
-              <p className="text-gray-400 text-sm mb-3">Your new AI license has been created</p>
-              <div className="bg-[#0a0a0f] rounded-lg p-4 mb-4 border border-cyan-500/20 relative group">
-                <p className="text-xs text-gray-500 mb-2">License Key</p>
-                <div className="flex items-center justify-center gap-2">
-                  <code className="font-mono text-sm sm:text-base text-cyan-400 bg-cyan-500/10 px-3 py-2 rounded-lg border border-cyan-500/30 select-all">
-                    {purchaseSuccess.license_key}
-                  </code>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigator.clipboard.writeText(purchaseSuccess.license_key);
-                      const btn = e.currentTarget;
-                      btn.classList.add('copied');
-                      setTimeout(() => btn.classList.remove('copied'), 2000);
-                    }}
-                    className="relative p-2.5 rounded-lg bg-gradient-to-r from-cyan-500/20 to-cyan-400/20 hover:from-cyan-500/40 hover:to-cyan-400/40 border border-cyan-500/30 hover:border-cyan-400/50 transition-all group/btn [&.copied]:from-green-500/30 [&.copied]:to-green-400/30 [&.copied]:border-green-500/50"
-                    title="Copy license key"
-                  >
-                    <Copy className="w-5 h-5 text-cyan-400 group-[.copied]/btn:hidden" />
-                    <Check className="w-5 h-5 text-green-400 hidden group-[.copied]/btn:block" />
-                    <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs px-2 py-1 rounded opacity-0 group-[.copied]/btn:opacity-100 transition-opacity whitespace-nowrap">
-                      Copied!
-                    </span>
-                  </button>
+            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4 mt-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <CheckCircle className="w-5 h-5 text-cyan-400" />
                 </div>
-                <p className="text-[10px] text-gray-600 mt-2">Click the button to copy your license key</p>
+                <div className="flex-1">
+                  <h4 className="text-base sm:text-lg font-bold text-cyan-300" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    Submitted Successfully
+                  </h4>
+                  <p className="text-gray-400 text-xs sm:text-sm mt-0.5">
+                    Your payment proof has been submitted. Status: <span className="text-yellow-300 font-semibold">PENDING</span>
+                  </p>
+
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3">
+                      <p className="text-[10px] text-gray-500">Request ID</p>
+                      <p className="text-sm text-white font-mono">#{purchaseSuccess.id}</p>
+                    </div>
+                    <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3">
+                      <p className="text-[10px] text-gray-500">Amount</p>
+                      <p className="text-sm text-yellow-300 font-bold">${purchaseSuccess.amount_usd} {purchaseSuccess.token_symbol}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={async () => {
+                        await fetchPurchaseRequests();
+                        await refreshLicenses();
+                      }}
+                      className="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg font-bold text-xs sm:text-sm"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      <RefreshCw className="w-4 h-4" /> Refresh Status
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPurchaseSuccess(null);
+                        setMessage({ type: '', text: '' });
+                      }}
+                      className="inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-cyan-300 border border-cyan-500/30 px-4 py-2 rounded-lg font-bold text-xs sm:text-sm"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      Submit Another
+                    </button>
+                  </div>
+                </div>
               </div>
-              <button
-                onClick={() => setPurchaseSuccess(null)}
-                className="bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-1.5 rounded text-sm font-bold"
-              >
-                Purchase Another
-              </button>
             </div>
           ) : (
             <div className="pt-4">
@@ -1036,21 +1097,185 @@ export default function DashboardHome() {
                     />
                     <p className="text-[10px] sm:text-xs text-gray-600 mt-1">License will be bound to this account only</p>
                   </div>
-                  
+
+                  <div className="mb-3">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Payment Network</label>
+                    <select
+                      value={selectedNetworkId}
+                      onChange={(e) => setSelectedNetworkId(e.target.value)}
+                      className="w-full px-3 py-2 sm:py-2.5 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white"
+                    >
+                      <option value="" disabled>Select network</option>
+                      {paymentNetworks.map((n) => (
+                        <option key={n.id} value={String(n.id)}>
+                          {n.name} ({n.token_symbol})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Wallet address is set from backend/admin</p>
+                  </div>
+
+                  {selectedPlan && selectedNetwork ? (
+                    <div className="mb-3 bg-[#0a0a0f] border border-cyan-500/20 rounded-xl p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Wallet className="w-4 h-4 text-yellow-400" />
+                            <p className="text-xs text-gray-400">Send exactly</p>
+                          </div>
+                          <p className="text-lg font-bold text-yellow-300" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                            ${selectedPlan.price} {selectedNetwork.token_symbol}
+                          </p>
+                          <p className="text-[10px] text-gray-500 mt-1">To wallet ({selectedNetwork.name})</p>
+                          <div className="mt-2 flex items-center gap-2">
+                            <code className="flex-1 font-mono text-[10px] sm:text-xs text-cyan-300 bg-black/40 px-2 py-2 rounded border border-cyan-500/20 break-all">
+                              {selectedNetwork.wallet_address}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(selectedNetwork.wallet_address)}
+                              className="p-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30"
+                              title="Copy wallet"
+                            >
+                              <Copy className="w-4 h-4 text-cyan-300" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="w-24 h-24 sm:w-28 sm:h-28 bg-white rounded-lg p-2 flex items-center justify-center flex-shrink-0">
+                          <img
+                            alt="Wallet QR"
+                            className="w-full h-full"
+                            src={`https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(selectedNetwork.wallet_address)}`}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-2">After sending funds, upload proof and submit for admin approval.</p>
+                    </div>
+                  ) : null}
+
+                  <div className="mb-3">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Transaction ID (optional)</label>
+                    <input
+                      type="text"
+                      value={txid}
+                      onChange={(e) => setTxid(e.target.value)}
+                      placeholder="Paste TXID / Hash"
+                      className="w-full px-3 py-2 sm:py-2.5 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white placeholder-gray-600"
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Payment Proof (required)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                        id="proofUpload"
+                      />
+                      <label
+                        htmlFor="proofUpload"
+                        className="flex-1 cursor-pointer inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-cyan-300 border border-cyan-500/30 px-4 py-2 rounded-lg font-bold text-xs sm:text-sm"
+                        style={{ fontFamily: 'Orbitron, sans-serif' }}
+                      >
+                        <Upload className="w-4 h-4" /> {proofFile ? 'Change Proof File' : 'Upload Proof'}
+                      </label>
+                      {proofFile ? (
+                        <span className="text-[10px] sm:text-xs text-gray-400 truncate max-w-[140px]">{proofFile.name}</span>
+                      ) : null}
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Screenshot / PDF of transfer confirmation</p>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Note (optional)</label>
+                    <textarea
+                      value={userNote}
+                      onChange={(e) => setUserNote(e.target.value)}
+                      placeholder="Any note for admin (optional)"
+                      rows={2}
+                      className="w-full px-3 py-2 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white placeholder-gray-600"
+                    />
+                  </div>
+
                   {message.type === 'error' && (
                     <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 rounded-lg text-xs sm:text-sm mb-3">
                       {message.text}
                     </div>
                   )}
-                  
+
+                  {message.type === 'success' && (
+                    <div className="bg-green-500/10 border border-green-500/30 text-green-300 px-3 py-2 rounded-lg text-xs sm:text-sm mb-3">
+                      {message.text}
+                    </div>
+                  )}
+
                   <button
                     onClick={handlePurchase}
-                    disabled={purchasing || !selectedPlan || !mt5Account.trim()}
+                    disabled={purchasing || !selectedPlan || !mt5Account.trim() || !selectedNetworkId || !proofFile}
                     className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
-                    {purchasing ? 'PROCESSING...' : `ACTIVATE ${selectedPlan?.name || 'LICENSE'}`}
+                    {purchasing ? 'SUBMITTING...' : 'SUBMIT PAYMENT PROOF'}
                   </button>
+
+                  <div className="mt-4 border-t border-cyan-500/10 pt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs sm:text-sm font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MY PAYMENT REQUESTS</p>
+                      <button
+                        onClick={async () => {
+                          await fetchPurchaseRequests();
+                          await refreshLicenses();
+                        }}
+                        className="inline-flex items-center gap-2 text-cyan-300 hover:text-cyan-200 text-xs font-medium"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                      </button>
+                    </div>
+
+                    {loadingRequests ? (
+                      <div className="text-gray-500 text-xs">Loading requests...</div>
+                    ) : purchaseRequests.length === 0 ? (
+                      <div className="text-gray-600 text-xs">No requests yet.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {purchaseRequests.slice(0, 5).map((r) => (
+                          <div key={r.id} className="bg-black/30 border border-cyan-500/10 rounded-lg p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-white text-xs font-semibold">#{r.id} • {r.plan} • ${r.amount_usd}</p>
+                                <p className="text-gray-500 text-[10px]">{r.network?.name} • {new Date(r.created_at).toLocaleString()}</p>
+                              </div>
+                              <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
+                                r.status === 'approved'
+                                  ? 'bg-green-500/10 text-green-300 border-green-500/30'
+                                  : r.status === 'rejected'
+                                    ? 'bg-red-500/10 text-red-300 border-red-500/30'
+                                    : 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30'
+                              }`}>{String(r.status || '').toUpperCase()}</span>
+                            </div>
+                            {r.issued_license_key ? (
+                              <div className="mt-2 flex items-center gap-2">
+                                <code className="flex-1 font-mono text-[10px] text-cyan-300 bg-black/40 px-2 py-1.5 rounded border border-cyan-500/20 truncate">
+                                  {r.issued_license_key}
+                                </code>
+                                <button
+                                  type="button"
+                                  onClick={() => navigator.clipboard.writeText(r.issued_license_key)}
+                                  className="p-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30"
+                                  title="Copy license key"
+                                >
+                                  <Copy className="w-4 h-4 text-cyan-300" />
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>

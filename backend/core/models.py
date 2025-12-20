@@ -602,3 +602,56 @@ class SiteSettings(models.Model):
     class Meta:
         verbose_name = "Site Settings"
         verbose_name_plural = "Site Settings"
+
+
+class PaymentNetwork(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    code = models.SlugField(max_length=50, unique=True)
+    wallet_address = models.CharField(max_length=255)
+    token_symbol = models.CharField(max_length=20, default='USDT')
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.token_symbol})"
+
+    class Meta:
+        ordering = ['sort_order', 'name']
+        verbose_name = "Payment Network"
+        verbose_name_plural = "Payment Networks"
+
+
+class LicensePurchaseRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='purchase_requests')
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT)
+    mt5_account = models.CharField(max_length=50, blank=True, null=True)
+    network = models.ForeignKey(PaymentNetwork, on_delete=models.PROTECT)
+    amount_usd = models.DecimalField(max_digits=10, decimal_places=2)
+    txid = models.CharField(max_length=255, blank=True)
+    proof = models.FileField(upload_to='payment_proofs/', blank=True, null=True)
+    user_note = models.TextField(blank=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    admin_note = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_purchase_requests')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    issued_license = models.OneToOneField(License, on_delete=models.SET_NULL, null=True, blank=True, related_name='purchase_request')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.email} - {self.plan.name} - {self.network.name} - {self.status}"
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "License Purchase Request"
+        verbose_name_plural = "License Purchase Requests"
