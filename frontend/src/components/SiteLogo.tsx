@@ -34,7 +34,7 @@ export default function SiteLogo({
 
   const boxClassName =
     size === 'sm'
-      ? 'w-8 h-8 rounded-lg'
+      ? 'w-10 h-10 rounded-lg'
       : size === 'lg'
         ? 'w-12 h-12 rounded-xl'
         : 'w-10 h-10 rounded-xl';

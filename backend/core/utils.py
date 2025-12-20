@@ -227,12 +227,21 @@ def render_email_template(subject, heading, message, cta_text=None, cta_url=None
                         <!-- Header -->
                         <tr>
                             <td style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(6, 182, 212, 0.05) 100%); padding: 32px 40px; border-bottom: 1px solid rgba(6, 182, 212, 0.2);">
-                                <h1 style="margin: 0; font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 24px; font-weight: 700; color: #06b6d4; letter-spacing: 1px;">
-                                    MARK'S AI 3.0
-                                </h1>
-                                <p style="margin: 8px 0 0 0; font-size: 13px; color: #6b7280; letter-spacing: 0.5px;">
-                                    PROFESSIONAL TRADING AUTOMATION
-                                </p>
+                                <table width="100%" cellpadding="0" cellspacing="0">
+                                    <tr>
+                                        <td style="vertical-align: middle;">
+                                            <img src="https://markstrades.com/media/site/letter-m.png" alt="Mark's AI Logo" style="width: 48px; height: 48px; display: block; margin-right: 16px; float: left;">
+                                            <div style="display: inline-block; vertical-align: middle;">
+                                                <h1 style="margin: 0; font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 24px; font-weight: 700; color: #06b6d4; letter-spacing: 1px;">
+                                                    MARK'S AI 3.0
+                                                </h1>
+                                                <p style="margin: 8px 0 0 0; font-size: 13px; color: #6b7280; letter-spacing: 0.5px;">
+                                                    PROFESSIONAL TRADING AUTOMATION
+                                                </p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
                             </td>
                         </tr>
                         
