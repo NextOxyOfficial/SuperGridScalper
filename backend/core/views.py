@@ -5,7 +5,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings
 from decimal import Decimal
 import json
 
@@ -1415,4 +1415,36 @@ def update_command_status(request):
     return JsonResponse({
         'success': True,
         'message': 'Command status updated'
+    })
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_site_settings(request):
+    """Get public site settings for frontend (favicon, logo, contact info)"""
+    settings = SiteSettings.get_settings()
+    
+    favicon_url = None
+    logo_url = None
+    
+    if settings.favicon:
+        favicon_url = request.build_absolute_uri(settings.favicon.url)
+    if settings.logo:
+        logo_url = request.build_absolute_uri(settings.logo.url)
+    
+    return JsonResponse({
+        'success': True,
+        'settings': {
+            'site_name': settings.site_name,
+            'site_tagline': settings.site_tagline,
+            'favicon_url': favicon_url,
+            'logo_url': logo_url,
+            'logo_text': settings.logo_text,
+            'logo_version': settings.logo_version,
+            'support_email': settings.support_email,
+            'telegram_en': settings.telegram_en,
+            'telegram_en_url': settings.telegram_en_url,
+            'telegram_cn': settings.telegram_cn,
+            'telegram_cn_url': settings.telegram_cn_url,
+        }
     })

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings
 
 
 # Unregister default User admin and register with search
@@ -507,4 +507,28 @@ class EAActionLogAdmin(admin.ModelAdmin):
         return False
     
     def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SiteSettings)
+class SiteSettingsAdmin(admin.ModelAdmin):
+    list_display = ['site_name', 'logo_text', 'logo_version', 'support_email', 'updated_at']
+    
+    fieldsets = (
+        ('🏷️ Site Identity', {
+            'fields': ('site_name', 'site_tagline')
+        }),
+        ('🖼️ Branding', {
+            'fields': ('favicon', 'logo', ('logo_text', 'logo_version')),
+            'description': 'Upload favicon (32x32 or 64x64 PNG/ICO) and logo image. If no logo image, text logo will be used.'
+        }),
+        ('📞 Support Contacts', {
+            'fields': ('support_email', ('telegram_en', 'telegram_en_url'), ('telegram_cn', 'telegram_cn_url'))
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        return not SiteSettings.objects.exists()
+    
+    def has_delete_permission(self, request, obj=None):
         return False

@@ -32,4 +32,7 @@ urlpatterns = [
     path('trade-commands/close-all/', views.close_all_positions, name='close_all_positions'),
     path('trade-commands/pending/', views.get_pending_commands, name='get_pending_commands'),
     path('trade-commands/update-status/', views.update_command_status, name='update_command_status'),
+    
+    # Site Settings
+    path('site-settings/', views.get_site_settings, name='get_site_settings'),
 ]

@@ -566,3 +566,39 @@ class TradeCommand(models.Model):
         verbose_name = "Trade Command"
         verbose_name_plural = "Trade Commands"
         ordering = ['-created_at']
+
+
+class SiteSettings(models.Model):
+    """Global site settings - only one instance should exist"""
+    
+    site_name = models.CharField(max_length=100, default="MARK'S AI 3.0")
+    site_tagline = models.CharField(max_length=200, default="Advanced Gold Scalping EA", blank=True)
+    
+    favicon = models.ImageField(upload_to='site/', blank=True, null=True, help_text="Favicon (recommended: 32x32 or 64x64 PNG/ICO)")
+    logo = models.ImageField(upload_to='site/', blank=True, null=True, help_text="Site logo image")
+    logo_text = models.CharField(max_length=50, default="MARK'S AI", blank=True, help_text="Text logo if no image")
+    logo_version = models.CharField(max_length=20, default="3.0", blank=True, help_text="Version text next to logo")
+    
+    support_email = models.EmailField(default="support@markstrades.com")
+    telegram_en = models.CharField(max_length=100, default="@MarksAISupportEnglish", help_text="English Telegram handle")
+    telegram_en_url = models.URLField(default="https://t.me/MarksAISupportEnglish", blank=True)
+    telegram_cn = models.CharField(max_length=100, default="@MarksAISupportChinese", help_text="Chinese Telegram handle")
+    telegram_cn_url = models.URLField(default="https://t.me/MarksAISupportChinese", blank=True)
+    
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def get_settings(cls):
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj
+    
+    def __str__(self):
+        return "Site Settings"
+    
+    class Meta:
+        verbose_name = "Site Settings"
+        verbose_name_plural = "Site Settings"
