@@ -48,12 +48,12 @@ export default function SiteLogo({
 
   return (
     <Link href={href} className={`flex items-center gap-2.5 hover:opacity-90 transition ${className}`}>
-      <div className={`${boxClassName} bg-gradient-to-br from-cyan-400 to-yellow-400 flex items-center justify-center overflow-hidden`}>
+      <div className={`${boxClassName} flex items-center justify-center overflow-hidden ${!settings.logo_url || logoError ? 'bg-gradient-to-br from-cyan-400 to-yellow-400' : ''}`}>
         {settings.logo_url && !logoError ? (
           <img
             src={settings.logo_url}
             alt={settings.site_name}
-            className="w-full h-full object-contain bg-black/5"
+            className="w-full h-full object-contain"
             onError={() => setLogoError(true)}
           />
         ) : (
