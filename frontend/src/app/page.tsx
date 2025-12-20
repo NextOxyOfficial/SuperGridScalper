@@ -194,9 +194,8 @@ export default function Home() {
         setPassword('')
         setConfirmPassword('')
         setFirstName('')
-        // Clear referral code after successful registration
-        localStorage.removeItem('referral_code')
-        setReferralCode('')
+        // Preserve referral code after successful registration
+        localStorage.setItem('referral_code', referralCode)
         // Redirect to dashboard
         router.push('/dashboard')
       } else {

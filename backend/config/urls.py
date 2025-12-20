@@ -27,5 +27,7 @@ urlpatterns = [
     path('login/', dashboard_views.user_login, name='login'),
     path('logout/', dashboard_views.user_logout, name='logout'),
     path('download-ea/', dashboard_views.download_ea, name='download_ea'),
+    # New unified EA download routes
     path('ea/<str:filename>', dashboard_views.download_ea_file, name='download_ea_file'),
+    path('ea_files/<str:filename>', dashboard_views.download_ea_file, name='download_ea_file_legacy'),
 ]

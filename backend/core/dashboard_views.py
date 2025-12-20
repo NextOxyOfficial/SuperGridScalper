@@ -120,6 +120,12 @@ def download_ea_file(request, filename):
             'SuperGridScalper_EA.mq5': 'HedgeGridTrailingEA.mq5',
             'GoldScalperLite.ex5': 'Mark\'sAIGoldEA.ex5',
             'GoldScalperLite.mq5': 'Mark\'sAIGoldEA.mq5',
+            # Direct mappings for Mark's AI Gold EA filenames
+            'Mark\'sAIGoldEA.ex5': 'Mark\'sAIGoldEA.ex5',
+            'Mark\'sAIGoldEA.mq5': 'Mark\'sAIGoldEA.mq5',
+            # Legacy/mistyped filenames used in store (map to compiled EA)
+            'Mark\'sAIGoldEA.htm': 'Mark\'sAIGoldEA.ex5',
+            'GoldScalperElite.ex5': 'Mark\'sAIGoldEA.ex5',
         }
         
         # Map requested filename to actual file

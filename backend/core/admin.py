@@ -314,7 +314,7 @@ class EAProductAdmin(admin.ModelAdmin):
             'fields': (('color', 'is_popular'), 'display_order')
         }),
         ('📁 EA File', {
-            'fields': ('ea_file', 'file_name'),
+            'fields': ('ea_file', 'file_name', 'external_download_url'),
             'description': 'Upload the .ex5 file for download'
         }),
         ('⚙️ Status', {

@@ -883,6 +883,20 @@ def get_ea_products(request):
     
     product_list = []
     for p in products:
+        # Determine a safe download filename
+        file_name = p.file_name
+        if not file_name:
+            if p.ea_file:
+                # Use only the filename portion from the stored path
+                try:
+                    file_name = p.ea_file.name.split('/')[-1]
+                except Exception:
+                    file_name = None
+            if not file_name:
+                file_name = f"{p.name.replace(' ', '')}.ex5"
+
+        download_url = (p.external_download_url or '').strip() or None
+
         product_list.append({
             'id': p.id,
             'name': p.name,
@@ -896,9 +910,9 @@ def get_ea_products(request):
             'features': p.get_features_list(),
             'color': p.color,
             'is_popular': p.is_popular,
-            'file_name': p.file_name or f"{p.name.replace(' ', '')}.ex5",
-            'has_file': bool(p.ea_file),
-            'download_url': p.ea_file.url if p.ea_file else None,
+            'file_name': file_name,
+            'has_file': bool(download_url),
+            'download_url': download_url,
         })
     
     return JsonResponse({

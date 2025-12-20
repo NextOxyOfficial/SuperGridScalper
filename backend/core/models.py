@@ -345,6 +345,8 @@ class EAProduct(models.Model):
     # EA File
     ea_file = models.FileField(upload_to='ea_files/', blank=True, null=True, help_text="Upload .ex5 file")
     file_name = models.CharField(max_length=100, blank=True, help_text="Custom file name for download")
+
+    external_download_url = models.URLField(blank=True, help_text="External download link (if set, store will redirect here)")
     
     # Status
     is_active = models.BooleanField(default=True)

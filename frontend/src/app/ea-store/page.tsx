@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Bot, Download, Shield, Zap, TrendingUp, DollarSign, Target, Star, CheckCircle, ArrowRight, LogIn, Store, Loader2 } from 'lucide-react';
 import ExnessBroker from '@/components/ExnessBroker';
@@ -45,14 +44,13 @@ interface EAProduct {
   download_url: string | null;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
+
 export default function PublicEAStorePage() {
-  const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState('');
   const [eaProducts, setEaProducts] = useState<EAProduct[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
 
   // Fetch EA products from API
   useEffect(() => {
@@ -249,6 +247,8 @@ export default function PublicEAStorePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-10">
           {eaProducts.map((ea) => {
             const colors = getColorClasses(ea.color);
+
+            const downloadHref = ea.download_url || '';
             return (
               <div
                 key={ea.id}
@@ -325,20 +325,33 @@ export default function PublicEAStorePage() {
                 </div>
 
                 {/* Download Button */}
-                <a
-                  href={ea.download_url || `/ea/${ea.file_name}`}
-                  download={ea.file_name}
-                  className={`w-full flex items-center justify-center gap-2 bg-gradient-to-r ${
-                    ea.color === 'yellow' ? 'from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400' :
-                    ea.color === 'cyan' ? 'from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400' :
-                    ea.color === 'purple' ? 'from-purple-500 to-purple-400 hover:from-purple-400 hover:to-cyan-400' :
-                    'from-orange-500 to-orange-400 hover:from-orange-400 hover:to-yellow-400'
-                  } text-black py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-[1.02] shadow-lg`}
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
-                  <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                  {ea.has_file ? 'DOWNLOAD' : 'COMING SOON'}
-                </a>
+                {ea.has_file ? (
+                  <a
+                    href={downloadHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`w-full flex items-center justify-center gap-2 bg-gradient-to-r ${
+                      ea.color === 'yellow' ? 'from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400' :
+                      ea.color === 'cyan' ? 'from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400' :
+                      ea.color === 'purple' ? 'from-purple-500 to-purple-400 hover:from-purple-400 hover:to-cyan-400' :
+                      'from-orange-500 to-orange-400 hover:from-orange-400 hover:to-yellow-400'
+                    } text-black py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-[1.02] shadow-lg`}
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                    DOWNLOAD
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className={`w-full flex items-center justify-center gap-2 bg-gradient-to-r from-gray-700 to-gray-600 text-gray-300 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base cursor-not-allowed opacity-80`}
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                    COMING SOON
+                  </button>
+                )}
               </div>
             );
           })}

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, Orbitron } from 'next/font/google'
 import './globals.css'
+import SupportWidget from '@/components/SupportWidget'
 
 const inter = Inter({ subsets: ['latin'] })
 const orbitron = Orbitron({ 
@@ -26,7 +27,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
       </head>
-      <body className={`${inter.className} ${orbitron.variable}`}>{children}</body>
+      <body className={`${inter.className} ${orbitron.variable}`}>
+        {children}
+        <SupportWidget />
+      </body>
     </html>
   )
 }
