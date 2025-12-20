@@ -52,9 +52,9 @@ if [ -d "media/site" ]; then
 fi
 echo -e "${GREEN}✓ Media permissions set${NC}"
 
-# Restart Gunicorn
-sudo systemctl restart gunicorn
-echo -e "${GREEN}✓ Gunicorn restarted${NC}"
+# Restart Backend
+sudo systemctl restart markstrades-backend
+echo -e "${GREEN}✓ Backend restarted${NC}"
 
 # Step 3: Frontend updates
 echo -e "\n${YELLOW}Step 3: Updating Frontend...${NC}"
@@ -70,8 +70,8 @@ fi
 npm run build
 echo -e "${GREEN}✓ Frontend built successfully${NC}"
 
-# Restart PM2
-pm2 restart frontend
+# Restart Frontend
+sudo systemctl restart markstrades-frontend
 echo -e "${GREEN}✓ Frontend restarted${NC}"
 
 # Step 4: Nginx configuration
