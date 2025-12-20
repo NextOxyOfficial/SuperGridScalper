@@ -580,6 +580,7 @@ class SiteSettings(models.Model):
     logo_version = models.CharField(max_length=20, default="3.0", blank=True, help_text="Version text next to logo")
     
     support_email = models.EmailField(default="support@markstrades.com")
+    admin_notification_email = models.EmailField(default="alimulislam50@gmail.com", blank=True)
     telegram_en = models.CharField(max_length=100, default="@MarksAISupportEnglish", help_text="English Telegram handle")
     telegram_en_url = models.URLField(default="https://t.me/MarksAISupportEnglish", blank=True)
     telegram_cn = models.CharField(max_length=100, default="@MarksAISupportChinese", help_text="Chinese Telegram handle")
@@ -655,3 +656,79 @@ class LicensePurchaseRequest(models.Model):
         ordering = ['-created_at']
         verbose_name = "License Purchase Request"
         verbose_name_plural = "License Purchase Requests"
+
+
+class SMTPSettings(models.Model):
+    """SMTP Email Configuration - Managed from Admin Panel"""
+    
+    is_active = models.BooleanField(default=True, help_text="Enable/disable this SMTP configuration")
+    
+    # SMTP Server Details
+    host = models.CharField(max_length=255, default='mail.privateemail.com', help_text="SMTP server hostname (e.g., mail.privateemail.com for Namecheap)")
+    port = models.IntegerField(default=587, help_text="SMTP port (587 for TLS, 465 for SSL)")
+    use_tls = models.BooleanField(default=True, help_text="Use TLS encryption")
+    use_ssl = models.BooleanField(default=False, help_text="Use SSL encryption")
+    
+    # Authentication
+    username = models.EmailField(max_length=255, help_text="SMTP username (usually your email address)")
+    password = models.CharField(max_length=255, help_text="SMTP password")
+    
+    # Email Settings
+    from_email = models.EmailField(max_length=255, help_text="Default 'From' email address")
+    from_name = models.CharField(max_length=100, default="MarksTrades Support", help_text="Default 'From' name")
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        status = "✓ Active" if self.is_active else "✗ Inactive"
+        return f"{self.from_email} ({self.host}) - {status}"
+    
+    class Meta:
+        verbose_name = "SMTP Settings"
+        verbose_name_plural = "SMTP Settings"
+    
+    def save(self, *args, **kwargs):
+        # Ensure only one active SMTP config exists
+        if self.is_active:
+            SMTPSettings.objects.filter(is_active=True).exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
+
+
+class EmailPreference(models.Model):
+    """Track user email preferences and unsubscribe status"""
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='email_preference')
+    
+    # Email preferences
+    marketing_emails = models.BooleanField(default=True, help_text="Receive marketing and promotional emails")
+    transactional_emails = models.BooleanField(default=True, help_text="Receive important account emails (cannot be disabled)")
+    
+    # Metadata
+    unsubscribed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        status = "Unsubscribed" if not self.marketing_emails else "Subscribed"
+        return f"{self.user.email} - {status}"
+    
+    class Meta:
+        verbose_name = "Email Preference"
+        verbose_name_plural = "Email Preferences"
+    
+    @classmethod
+    def can_send_email(cls, user, email_type='marketing'):
+        """
+        Check if we can send email to this user
+        email_type: 'marketing' or 'transactional'
+        """
+        try:
+            pref = cls.objects.get(user=user)
+            if email_type == 'transactional':
+                return pref.transactional_emails
+            return pref.marketing_emails
+        except cls.DoesNotExist:
+            # If no preference exists, allow emails (opt-in by default)
+            return True

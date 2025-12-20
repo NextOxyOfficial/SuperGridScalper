@@ -322,12 +322,12 @@ export default function PublicEAStorePage() {
         {/* Support */}
         <div className="mt-8 text-center">
           <p className="text-gray-500 text-sm mb-3">Need help choosing the right EA?</p>
-          <a 
-            href={`mailto:${supportEmail}`}
+          <Link 
+            href="/contact"
             className="inline-flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition"
           >
             Contact Support <ArrowRight className="w-4 h-4" />
-          </a>
+          </Link>
         </div>
       </div>
     </main>

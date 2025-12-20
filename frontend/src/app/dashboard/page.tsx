@@ -37,6 +37,7 @@ export default function DashboardHome() {
   const [purchaseSuccess, setPurchaseSuccess] = useState<any>(null);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Positions tab state
   const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
@@ -483,13 +484,19 @@ export default function DashboardHome() {
                     <button
                       type="button"
                       onClick={async () => {
-                        await fetchPurchaseRequests();
-                        await refreshLicenses();
+                        setRefreshing(true);
+                        try {
+                          await fetchPurchaseRequests();
+                          await refreshLicenses();
+                        } finally {
+                          setRefreshing(false);
+                        }
                       }}
-                      className="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg font-bold text-xs"
+                      disabled={refreshing}
+                      className="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed text-black px-4 py-2 rounded-lg font-bold text-xs"
                       style={{ fontFamily: 'Orbitron, sans-serif' }}
                     >
-                      <RefreshCw className="w-4 h-4" /> Refresh Status
+                      <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh Status'}
                     </button>
                     <button
                       type="button"
@@ -1213,13 +1220,19 @@ export default function DashboardHome() {
                   <div className="mt-3 flex flex-col sm:flex-row gap-2">
                     <button
                       onClick={async () => {
-                        await fetchPurchaseRequests();
-                        await refreshLicenses();
+                        setRefreshing(true);
+                        try {
+                          await fetchPurchaseRequests();
+                          await refreshLicenses();
+                        } finally {
+                          setRefreshing(false);
+                        }
                       }}
-                      className="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg font-bold text-xs sm:text-sm"
+                      disabled={refreshing}
+                      className="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed text-black px-4 py-2 rounded-lg font-bold text-xs sm:text-sm"
                       style={{ fontFamily: 'Orbitron, sans-serif' }}
                     >
-                      <RefreshCw className="w-4 h-4" /> Refresh Status
+                      <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh Status'}
                     </button>
                     <button
                       onClick={() => {
@@ -1454,12 +1467,18 @@ export default function DashboardHome() {
                       <p className="text-xs sm:text-sm font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MY PAYMENT REQUESTS</p>
                       <button
                         onClick={async () => {
-                          await fetchPurchaseRequests();
-                          await refreshLicenses();
+                          setRefreshing(true);
+                          try {
+                            await fetchPurchaseRequests();
+                            await refreshLicenses();
+                          } finally {
+                            setRefreshing(false);
+                          }
                         }}
-                        className="inline-flex items-center gap-2 text-cyan-300 hover:text-cyan-200 text-xs font-medium"
+                        disabled={refreshing}
+                        className="inline-flex items-center gap-2 text-cyan-300 hover:text-cyan-200 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
                       >
-                        <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                        <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
                       </button>
                     </div>
 

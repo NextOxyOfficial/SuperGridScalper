@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import unsubscribe_views
 
 urlpatterns = [
     path('health/', views.api_health, name='api_health'),
@@ -11,6 +12,9 @@ urlpatterns = [
     path('license-purchase-requests/', views.list_license_purchase_requests, name='list_license_purchase_requests'),
     path('register/', views.register, name='register'),
     path('login/', views.login, name='login'),
+    path('unsubscribe/', unsubscribe_views.unsubscribe, name='unsubscribe'),
+    path('unsubscribe/one-click/', unsubscribe_views.unsubscribe_one_click, name='unsubscribe_one_click'),
+    path('resubscribe/', unsubscribe_views.resubscribe, name='resubscribe'),
     path('password-reset/request/', views.password_reset_request, name='password_reset_request'),
     path('password-reset/confirm/', views.password_reset_confirm, name='password_reset_confirm'),
     path('licenses/', views.get_licenses, name='get_licenses'),

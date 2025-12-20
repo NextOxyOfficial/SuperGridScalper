@@ -5,7 +5,7 @@ from django.conf import settings as django_settings
 from django.core.mail import send_mail
 from django.utils.html import format_html
 from django.utils import timezone
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest, SMTPSettings, EmailPreference
 
 
 # Unregister default User admin and register with search
@@ -109,25 +109,72 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                 obj.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
 
                 try:
+                    from core.utils import send_admin_notification
+                    send_admin_notification(
+                        subject=f'Admin Alert: License Approved (#{obj.id})',
+                        heading='License Activated',
+                        html_body=(
+                            f"<p><strong>User:</strong> {obj.user.email}</p>"
+                            f"<p><strong>Plan:</strong> {obj.plan.name}</p>"
+                            f"<p><strong>Request ID:</strong> #{obj.id}</p>"
+                            f"<p><strong>License Key:</strong> {obj.issued_license.license_key if obj.issued_license else '-'} </p>"
+                            f"<p><strong>Expires At:</strong> {obj.issued_license.expires_at.isoformat() if obj.issued_license else '-'} </p>"
+                            f"<p><strong>Reviewed By:</strong> {request.user.username}</p>"
+                        ),
+                        text_body=(
+                            f"License approved\n"
+                            f"User: {obj.user.email}\n"
+                            f"Plan: {obj.plan.name}\n"
+                            f"Request ID: #{obj.id}\n"
+                            f"License Key: {obj.issued_license.license_key if obj.issued_license else '-'}\n"
+                            f"Expires At: {obj.issued_license.expires_at.isoformat() if obj.issued_license else '-'}\n"
+                            f"Reviewed By: {request.user.username}"
+                        ),
+                        preheader=f'Approved: {obj.user.email} ({obj.plan.name})'
+                    )
+                except Exception:
+                    pass
+
+                try:
+                    from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+                    from django.core.mail import EmailMultiAlternatives
+                    
                     base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
                     subject = 'Payment Approved - Your License is Ready'
-                    message = (
-                        f"Hi {obj.user.first_name or 'Trader'},\n\n"
-                        "Your payment has been approved and your license is ready.\n\n"
-                        f"Request ID: #{obj.id}\n"
-                        f"Plan: {obj.plan.name}\n"
-                        f"License Key: {obj.issued_license.license_key if obj.issued_license else '-'}\n"
-                        f"Expires At: {obj.issued_license.expires_at.isoformat() if obj.issued_license else '-'}\n\n"
-                        f"Open your dashboard: {base}/dashboard\n\n"
-                        "Thank you for your purchase."
+
+                    if not can_send_email_to_user(obj.user, 'transactional'):
+                        raise Exception('User opted out of transactional emails')
+                    
+                    html_message = render_email_template(
+                        subject=subject,
+                        heading='🎉 Payment Approved!',
+                        message=f"""
+                            <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                            <p>Great news! Your payment has been <strong style="color: #10b981;">approved</strong> and your license is ready to use.</p>
+                            
+                            <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">License Details:</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.id}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>License Key:</strong> <code style="background-color: rgba(6, 182, 212, 0.1); padding: 2px 6px; border-radius: 4px; color: #06b6d4;">{obj.issued_license.license_key if obj.issued_license else '-'}</code></p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Expires At:</strong> {obj.issued_license.expires_at.strftime('%B %d, %Y') if obj.issued_license else '-'}</p>
+                            </div>
+                            
+                            <p>You can now access your license and start trading with our AI Expert Advisor.</p>
+                        """,
+                        cta_text='OPEN DASHBOARD',
+                        cta_url=f'{base}/dashboard',
+                        footer_note='Thank you for choosing MarksTrades!',
+                        preheader=f'Your {obj.plan.name} license has been approved and activated. Start trading now!',
+                        unsubscribe_url=get_unsubscribe_url(obj.user)
                     )
-                    send_mail(
-                        subject,
-                        message,
-                        getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
-                        [obj.user.email],
-                        fail_silently=False,
-                    )
+                    
+                    text_msg = f"Hi {obj.user.first_name or 'Trader'},\n\nYour payment has been approved and your license is ready.\n\nRequest ID: #{obj.id}\nPlan: {obj.plan.name}\nLicense Key: {obj.issued_license.license_key if obj.issued_license else '-'}\n\nOpen your dashboard: {base}/dashboard\n\nThank you for choosing MarksTrades!"
+                    
+                    msg = EmailMultiAlternatives(subject, text_msg, get_email_from_address(), [obj.user.email])
+                    msg.attach_alternative(html_message, "text/html")
+                    msg = add_email_headers(msg, 'transactional', user=obj.user)
+                    msg.send(fail_silently=False)
                 except Exception:
                     pass
                 continue
@@ -144,9 +191,40 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
             obj.save(update_fields=['issued_license', 'status', 'reviewed_by', 'reviewed_at', 'updated_at'])
 
             try:
+                from core.utils import send_admin_notification
+                send_admin_notification(
+                    subject=f'Admin Alert: License Approved (#{obj.id})',
+                    heading='License Activated',
+                    html_body=(
+                        f"<p><strong>User:</strong> {obj.user.email}</p>"
+                        f"<p><strong>Plan:</strong> {obj.plan.name}</p>"
+                        f"<p><strong>Request ID:</strong> #{obj.id}</p>"
+                        f"<p><strong>License Key:</strong> {new_license.license_key}</p>"
+                        f"<p><strong>Expires At:</strong> {new_license.expires_at.isoformat()}</p>"
+                        f"<p><strong>Reviewed By:</strong> {request.user.username}</p>"
+                    ),
+                    text_body=(
+                        f"License approved\n"
+                        f"User: {obj.user.email}\n"
+                        f"Plan: {obj.plan.name}\n"
+                        f"Request ID: #{obj.id}\n"
+                        f"License Key: {new_license.license_key}\n"
+                        f"Expires At: {new_license.expires_at.isoformat()}\n"
+                        f"Reviewed By: {request.user.username}"
+                    ),
+                    preheader=f'Approved: {obj.user.email} ({obj.plan.name})'
+                )
+            except Exception:
+                pass
+
+            try:
+                from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+                from django.core.mail import EmailMultiAlternatives
+                
                 base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
                 subject = 'Payment Approved - Your License is Ready'
-                message = (
+                
+                text_message = (
                     f"Hi {obj.user.first_name or 'Trader'},\n\n"
                     "Your payment has been approved and your license has been issued.\n\n"
                     f"Request ID: #{obj.id}\n"
@@ -156,13 +234,35 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                     f"Open your dashboard: {base}/dashboard\n\n"
                     "Thank you for your purchase."
                 )
-                send_mail(
-                    subject,
-                    message,
-                    getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
-                    [obj.user.email],
-                    fail_silently=False,
+                
+                html_message = render_email_template(
+                    subject=subject,
+                    heading='🎉 Payment Approved!',
+                    message=f"""
+                        <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                        <p>Great news! Your payment has been <strong style="color: #10b981;">approved</strong> and your license has been issued.</p>
+                        
+                        <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                            <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">License Details:</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.id}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>License Key:</strong> <code style="background-color: rgba(6, 182, 212, 0.1); padding: 2px 6px; border-radius: 4px; color: #06b6d4;">{new_license.license_key}</code></p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Expires At:</strong> {new_license.expires_at.strftime('%B %d, %Y')}</p>
+                        </div>
+                        
+                        <p>You can now access your license and start trading with our AI Expert Advisor.</p>
+                    """,
+                    cta_text='OPEN DASHBOARD',
+                    cta_url=f'{base}/dashboard',
+                    footer_note='Thank you for choosing MarksTrades!',
+                    preheader=f'Your {obj.plan.name} license has been approved and activated. Start trading now!',
+                    unsubscribe_url=get_unsubscribe_url(obj.user)
                 )
+                
+                msg = EmailMultiAlternatives(subject, text_message, get_email_from_address(), [obj.user.email])
+                msg.attach_alternative(html_message, "text/html")
+                msg = add_email_headers(msg, 'transactional', user=obj.user)
+                msg.send(fail_silently=False)
             except Exception:
                 pass
 
@@ -178,9 +278,16 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
             obj.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
 
             try:
+                from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+                from django.core.mail import EmailMultiAlternatives
+                
                 base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
                 subject = 'Payment Rejected - Action Needed'
-                message = (
+
+                if not can_send_email_to_user(obj.user, 'transactional'):
+                    raise Exception('User opted out of transactional emails')
+                
+                text_message = (
                     f"Hi {obj.user.first_name or 'Trader'},\n\n"
                     "Unfortunately, your payment could not be verified and has been rejected.\n\n"
                     f"Request ID: #{obj.id}\n"
@@ -191,13 +298,40 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                     f"Open your dashboard: {base}/dashboard\n\n"
                     "If you believe this is a mistake, please contact support."
                 )
-                send_mail(
-                    subject,
-                    message,
-                    getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
-                    [obj.user.email],
-                    fail_silently=False,
+                
+                html_message = render_email_template(
+                    subject=subject,
+                    heading='Payment Verification Failed',
+                    message=f"""
+                        <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                        <p>Unfortunately, your payment could not be verified and has been <strong style="color: #ef4444;">rejected</strong>.</p>
+                        
+                        <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                            <p style="margin: 0 0 8px 0; color: #ef4444; font-weight: 600;">Request Details:</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.id}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Network:</strong> {obj.network.name if obj.network else '-'}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>TXID:</strong> {obj.txid or '-'}</p>
+                        </div>
+                        
+                        <p><strong>What to do next:</strong></p>
+                        <ul style="color: #d1d5db; line-height: 1.7;">
+                            <li>Double-check your payment transaction</li>
+                            <li>Submit a new payment proof from your dashboard</li>
+                            <li>Contact support if you believe this is a mistake</li>
+                        </ul>
+                    """,
+                    cta_text='SUBMIT NEW PROOF',
+                    cta_url=f'{base}/dashboard',
+                    footer_note='If you believe this is a mistake, please contact our support team immediately.',
+                    preheader=f'Payment verification failed for request #{obj.id}. Please review and resubmit.',
+                    unsubscribe_url=get_unsubscribe_url(obj.user)
                 )
+                
+                msg = EmailMultiAlternatives(subject, text_message, get_email_from_address(), [obj.user.email])
+                msg.attach_alternative(html_message, "text/html")
+                msg = add_email_headers(msg, 'transactional', user=obj.user)
+                msg.send(fail_silently=False)
             except Exception:
                 pass
 
@@ -652,7 +786,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             'description': 'Upload favicon (32x32 or 64x64 PNG/ICO) and logo image. If no logo image, text logo will be used.'
         }),
         ('📞 Support Contacts', {
-            'fields': ('support_email', ('telegram_en', 'telegram_en_url'), ('telegram_cn', 'telegram_cn_url'))
+            'fields': ('support_email', 'admin_notification_email', ('telegram_en', 'telegram_en_url'), ('telegram_cn', 'telegram_cn_url'))
         }),
     )
     
@@ -661,3 +795,74 @@ class SiteSettingsAdmin(admin.ModelAdmin):
     
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(SMTPSettings)
+class SMTPSettingsAdmin(admin.ModelAdmin):
+    list_display = ['from_email', 'host', 'port', 'is_active', 'updated_at']
+    list_filter = ['is_active', 'use_tls', 'use_ssl']
+    search_fields = ['from_email', 'host', 'username']
+    
+    fieldsets = (
+        ('📧 Email Identity', {
+            'fields': ('from_email', 'from_name')
+        }),
+        ('🔌 SMTP Server', {
+            'fields': ('host', 'port', ('use_tls', 'use_ssl'))
+        }),
+        ('🔐 Authentication', {
+            'fields': ('username', 'password'),
+            'description': 'For Namecheap Private Email: Host=mail.privateemail.com, Port=587, TLS=Yes'
+        }),
+        ('⚙️ Status', {
+            'fields': ('is_active',),
+            'description': 'Only one SMTP configuration can be active at a time.'
+        }),
+    )
+    
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Make password field use password input widget
+        if 'password' in form.base_fields:
+            form.base_fields['password'].widget = admin.widgets.AdminTextInputWidget(attrs={'type': 'password'})
+        return form
+
+
+@admin.register(EmailPreference)
+class EmailPreferenceAdmin(admin.ModelAdmin):
+    class UnsubscribedFilter(admin.SimpleListFilter):
+        title = 'unsubscribed'
+        parameter_name = 'unsubscribed'
+
+        def lookups(self, request, model_admin):
+            return (
+                ('yes', 'Unsubscribed'),
+                ('no', 'Subscribed'),
+            )
+
+        def queryset(self, request, queryset):
+            value = self.value()
+            if value == 'yes':
+                return queryset.filter(marketing_emails=False, transactional_emails=False)
+            if value == 'no':
+                return queryset.exclude(marketing_emails=False, transactional_emails=False)
+            return queryset
+
+    list_display = ['user', 'marketing_emails', 'transactional_emails', 'unsubscribed_at', 'updated_at']
+    list_filter = [UnsubscribedFilter, 'marketing_emails', 'transactional_emails', 'unsubscribed_at']
+    search_fields = ['user__email', 'user__username']
+    readonly_fields = ['created_at', 'updated_at', 'unsubscribed_at']
+    
+    fieldsets = (
+        ('👤 User', {
+            'fields': ('user',)
+        }),
+        ('📧 Email Preferences', {
+            'fields': ('marketing_emails', 'transactional_emails'),
+            'description': 'Marketing emails can be disabled. Transactional emails (license, payment) cannot be disabled.'
+        }),
+        ('📅 Timestamps', {
+            'fields': ('unsubscribed_at', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )

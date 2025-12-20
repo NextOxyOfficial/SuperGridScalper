@@ -240,9 +240,45 @@ def create_license_purchase_request(request):
     )
 
     try:
+        from core.utils import send_admin_notification
+        send_admin_notification(
+            subject=f'Admin Alert: New Payment Proof Submitted (#{purchase.id})',
+            heading='New License Purchase Request',
+            html_body=(
+                f"<p><strong>User:</strong> {user.email}</p>"
+                f"<p><strong>Name:</strong> {user.first_name or '-'} </p>"
+                f"<p><strong>Plan:</strong> {plan.name}</p>"
+                f"<p><strong>Amount:</strong> ${float(plan.price)} {network.token_symbol}</p>"
+                f"<p><strong>Network:</strong> {network.name}</p>"
+                f"<p><strong>MT5 Account:</strong> {purchase.mt5_account or '-'}</p>"
+                f"<p><strong>TXID:</strong> {purchase.txid or '-'}</p>"
+                f"<p><strong>Status:</strong> PENDING</p>"
+            ),
+            text_body=(
+                f"New purchase request\n"
+                f"User: {user.email}\n"
+                f"Plan: {plan.name}\n"
+                f"Amount: ${float(plan.price)} {network.token_symbol}\n"
+                f"Network: {network.name}\n"
+                f"MT5 Account: {purchase.mt5_account or '-'}\n"
+                f"TXID: {purchase.txid or '-'}\n"
+                f"Request ID: #{purchase.id}\n"
+                f"Status: pending"
+            ),
+            preheader=f'New payment proof submitted by {user.email} for {plan.name}'
+        )
+    except Exception:
+        pass
+
+    try:
+        from core.utils import get_email_from_address, render_email_template, can_send_email_to_user, get_unsubscribe_url
+        from django.core.mail import EmailMultiAlternatives
+        
         base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
-        subject = 'Payment Proof Submitted (Pending Verification)'
-        message = (
+        subject = '✓ Payment Proof Submitted - Verification & Activation in Progress'
+        
+        # Plain text version
+        text_message = (
             f"Hi {user.first_name or 'Trader'},\n\n"
             "We received your payment proof and your request is now pending verification.\n\n"
             f"Request ID: #{purchase.id}\n"
@@ -255,13 +291,48 @@ def create_license_purchase_request(request):
             f"You can track status in your dashboard: {base}/dashboard\n\n"
             "If you did not submit this request, please contact support immediately."
         )
-        send_mail(
-            subject,
-            message,
-            getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
-            [user.email],
-            fail_silently=False,
+
+        if not can_send_email_to_user(user, 'transactional'):
+            raise Exception('User opted out of transactional emails')
+        
+        # HTML version
+        html_message = render_email_template(
+            subject=subject,
+            heading='Payment Proof Received',
+            message=f"""
+                <p>Hi <strong>{user.first_name or 'Trader'}</strong>,</p>
+                <p>We received your payment proof and your request is now <strong style="color: #fbbf24;">pending verification</strong>.</p>
+                
+                <div style="background-color: rgba(6, 182, 212, 0.1); border-left: 3px solid #06b6d4; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                    <p style="margin: 0 0 8px 0; color: #06b6d4; font-weight: 600;">Request Details:</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{purchase.id}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {plan.name}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Amount:</strong> ${plan.price} {network.token_symbol}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Network:</strong> {network.name}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>MT5 Account:</strong> {purchase.mt5_account or '-'}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>TXID:</strong> {purchase.txid or '-'}</p>
+                </div>
+                
+                <p><strong>Next step:</strong> Our team will verify your payment and activate your license. You'll receive an email notification once approved.</p>
+            """,
+            cta_text='TRACK STATUS',
+            cta_url=f'{base}/dashboard',
+            footer_note='If you did not submit this request, please contact support immediately.',
+            preheader=f'Payment proof received for {plan.name}. Request #{purchase.id} is pending verification.',
+            unsubscribe_url=get_unsubscribe_url(user)
         )
+        
+        from core.utils import add_email_headers
+        
+        msg = EmailMultiAlternatives(
+            subject,
+            text_message,
+            get_email_from_address(),
+            [user.email]
+        )
+        msg.attach_alternative(html_message, "text/html")
+        msg = add_email_headers(msg, 'transactional', user=user)
+        msg.send(fail_silently=False)
     except Exception:
         pass
 
@@ -274,20 +345,34 @@ def create_license_purchase_request(request):
 
     return JsonResponse({
         'success': True,
-        'message': 'Payment proof submitted. Your request is pending approval.',
+        'message': '✓ Payment proof submitted successfully! Your request is now pending verification.',
+        'title': 'Submission Successful',
+        'status': 'pending',
         'request': {
             'id': purchase.id,
             'status': purchase.status,
+            'status_label': 'Pending Verification',
+            'status_color': 'yellow',
             'created_at': purchase.created_at.isoformat(),
-            'plan': purchase.plan.name,
-            'amount_usd': float(purchase.amount_usd),
-            'network': purchase.network.name,
-            'wallet_address': purchase.network.wallet_address,
-            'token_symbol': purchase.network.token_symbol,
+            'plan': {
+                'name': purchase.plan.name,
+                'price': float(purchase.amount_usd),
+            },
+            'payment': {
+                'network': purchase.network.name,
+                'wallet_address': purchase.network.wallet_address,
+                'token_symbol': purchase.network.token_symbol,
+                'txid': purchase.txid,
+                'proof_url': proof_url,
+            },
             'mt5_account': purchase.mt5_account,
-            'txid': purchase.txid,
-            'proof_url': proof_url,
-        }
+        },
+        'next_steps': [
+            'Our team will verify your payment within 24 hours',
+            'You will receive an email notification once approved',
+            'Your license will be activated automatically after approval',
+            'Track your request status in the dashboard'
+        ]
     })
 
 
@@ -378,6 +463,33 @@ def register(request):
         password=password,
         first_name=name
     )
+
+    try:
+        from core.utils import send_admin_notification
+        send_admin_notification(
+            subject='Admin Alert: New User Registration',
+            heading='New User Registered',
+            html_body=(
+                f"<p><strong>Email:</strong> {user.email}</p>"
+                f"<p><strong>Name:</strong> {user.first_name or '-'}</p>"
+                f"<p><strong>Time:</strong> {timezone.now().isoformat()}</p>"
+            ),
+            text_body=(
+                f"New user registered\n"
+                f"Email: {user.email}\n"
+                f"Name: {user.first_name or '-'}\n"
+                f"Time: {timezone.now().isoformat()}"
+            ),
+            preheader=f'New registration: {user.email}'
+        )
+    except Exception:
+        pass
+
+    try:
+        from core.models import EmailPreference
+        EmailPreference.objects.get_or_create(user=user)
+    except Exception:
+        pass
     
     # Track referral signup
     if referral_code:
@@ -389,21 +501,50 @@ def register(request):
             pass  # Invalid referral code, just ignore
 
     try:
+        from core.utils import get_email_from_address, render_email_template
+        from django.core.mail import EmailMultiAlternatives
+        
         base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
         subject = 'Welcome to MarksTrades'
-        message = (
+        
+        # Plain text version
+        text_message = (
             f"Hi {user.first_name or 'Trader'},\n\n"
             "Welcome! Your account has been created successfully.\n\n"
             f"Login here: {base}/?auth=login\n\n"
             "If you need help, reply to this email or contact support."
         )
-        send_mail(
-            subject,
-            message,
-            getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
-            [user.email],
-            fail_silently=False,
+        
+        if not can_send_email_to_user(user, 'transactional'):
+            raise Exception('User opted out of transactional emails')
+
+        # HTML version
+        html_message = render_email_template(
+            subject=subject,
+            heading='Welcome to MarksTrades!',
+            message=f"""
+                <p>Hi <strong>{user.first_name or 'Trader'}</strong>,</p>
+                <p>Welcome! Your account has been created successfully.</p>
+                <p>You can now access your dashboard and start your trading journey with our AI-powered Expert Advisor.</p>
+            """,
+            cta_text='LOGIN TO DASHBOARD',
+            cta_url=f'{base}/?auth=login',
+            footer_note='If you did not create this account, please contact support immediately.',
+            preheader='Your MarksTrades account is ready. Login to access your dashboard.',
+            unsubscribe_url=get_unsubscribe_url(user)
         )
+        
+        from core.utils import add_email_headers
+        
+        msg = EmailMultiAlternatives(
+            subject,
+            text_message,
+            get_email_from_address(),
+            [user.email]
+        )
+        msg.attach_alternative(html_message, "text/html")
+        msg = add_email_headers(msg, 'transactional', user=user)
+        msg.send(fail_silently=False)
     except Exception:
         pass
     
