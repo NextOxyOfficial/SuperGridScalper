@@ -639,6 +639,7 @@ class LicensePurchaseRequest(models.Model):
     txid = models.CharField(max_length=255, blank=True)
     proof = models.FileField(upload_to='payment_proofs/', blank=True, null=True)
     user_note = models.TextField(blank=True)
+    request_number = models.CharField(max_length=6, unique=True, editable=False, null=True, blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     admin_note = models.TextField(blank=True)
@@ -649,8 +650,22 @@ class LicensePurchaseRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def save(self, *args, **kwargs):
+        if not self.request_number:
+            self.request_number = self.generate_request_number()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def generate_request_number():
+        """Generate a unique 6-digit request number"""
+        import random
+        while True:
+            number = str(random.randint(100000, 999999))
+            if not LicensePurchaseRequest.objects.filter(request_number=number).exists():
+                return number
+
     def __str__(self):
-        return f"{self.user.email} - {self.plan.name} - {self.network.name} - {self.status}"
+        return f"#{self.request_number} - {self.user.email} - {self.plan.name} - {self.status}"
 
     class Meta:
         ordering = ['-created_at']

@@ -350,6 +350,7 @@ def create_license_purchase_request(request):
         'status': 'pending',
         'request': {
             'id': purchase.id,
+            'request_number': purchase.request_number,
             'status': purchase.status,
             'status_label': 'Pending Verification',
             'status_color': 'yellow',
@@ -406,6 +407,7 @@ def list_license_purchase_requests(request):
 
         items.append({
             'id': pr.id,
+            'request_number': pr.request_number,
             'status': pr.status,
             'created_at': pr.created_at.isoformat(),
             'reviewed_at': pr.reviewed_at.isoformat() if pr.reviewed_at else None,

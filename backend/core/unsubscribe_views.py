@@ -1,4 +1,5 @@
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.models import User
@@ -33,21 +34,47 @@ def _unsubscribe_user(user):
     return True
 
 
+def _resubscribe_user(user):
+    pref, _ = EmailPreference.objects.get_or_create(user=user)
+    if pref.marketing_emails is True and pref.transactional_emails is True:
+        return False
+    pref.marketing_emails = True
+    pref.transactional_emails = True
+    pref.unsubscribed_at = None
+    pref.save()
+    return True
+
+
 @csrf_exempt
 @require_http_methods(["GET"])
 def unsubscribe_one_click(request):
+    """Show unsubscribe confirmation page with choice to unsubscribe or resubscribe"""
     token = (request.GET.get('token') or '').strip()
     if not token:
-        return JsonResponse({'success': False, 'message': 'Missing token'}, status=400)
+        return render(request, 'unsubscribe.html', {
+            'error': 'Invalid or missing token',
+            'email': 'Unknown',
+            'token': '',
+            'is_subscribed': False
+        })
 
     user = _resolve_user_from_token(token)
     if not user:
-        return JsonResponse({'success': False, 'message': 'Invalid token'}, status=400)
+        return render(request, 'unsubscribe.html', {
+            'error': 'Invalid or expired token',
+            'email': 'Unknown',
+            'token': '',
+            'is_subscribed': False
+        })
 
-    changed = _unsubscribe_user(user)
-    return JsonResponse({
-        'success': True,
-        'message': 'You have been unsubscribed from emails.' if changed else 'You are already unsubscribed.'
+    # Check current subscription status
+    pref, _ = EmailPreference.objects.get_or_create(user=user)
+    is_subscribed = pref.marketing_emails or pref.transactional_emails
+
+    return render(request, 'unsubscribe.html', {
+        'email': user.email,
+        'token': token,
+        'is_subscribed': is_subscribed
     })
 
 
@@ -86,31 +113,20 @@ def resubscribe(request):
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
     
+    token = (data.get('token') or '').strip()
     email = (data.get('email') or '').strip().lower()
     
-    if not email:
-        return JsonResponse({'success': False, 'message': 'Email is required'}, status=400)
+    user = None
+    if token:
+        user = _resolve_user_from_token(token)
+    elif email:
+        user = User.objects.filter(email=email).first()
     
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        return JsonResponse({'success': False, 'message': 'Email not found'}, status=404)
+    if not user:
+        return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
     
-    # Get or create email preference
-    pref, created = EmailPreference.objects.get_or_create(user=user)
-    
-    if pref.marketing_emails and pref.transactional_emails:
-        return JsonResponse({
-            'success': True,
-            'message': 'You are already subscribed.'
-        })
-
-    pref.marketing_emails = True
-    pref.transactional_emails = True
-    pref.unsubscribed_at = None
-    pref.save()
-
+    changed = _resubscribe_user(user)
     return JsonResponse({
         'success': True,
-        'message': 'You have been re-subscribed.'
+        'message': 'You have been re-subscribed to emails.' if changed else 'You are already subscribed.'
     })

@@ -5,6 +5,7 @@ import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wall
 import { useDashboard } from './context';
 import axios from 'axios';
 import ExnessBroker from '@/components/ExnessBroker';
+import QRCode from 'qrcode';
 
 const POLLING_INTERVAL = 2000; // Faster polling for real-time updates
 const EA_CONNECTED_TIMEOUT_SECONDS = 30; // Allow up to 30s between heartbeats before marking disconnected
@@ -38,6 +39,7 @@ export default function DashboardHome() {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1);
   const [refreshing, setRefreshing] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   
   // Positions tab state
   const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
@@ -78,6 +80,30 @@ export default function DashboardHome() {
     setLastUpdate(null);
     setEaConnected(false);
   }, [selectedLicense]);
+
+  // Generate QR code when wallet address changes
+  useEffect(() => {
+    const selectedNetwork = paymentNetworks.find((n) => String(n.id) === String(selectedNetworkId));
+    if (selectedNetwork?.wallet_address) {
+      QRCode.toDataURL(selectedNetwork.wallet_address, {
+        width: 200,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      })
+        .then((url: string) => {
+          setQrCodeDataUrl(url);
+        })
+        .catch((err: Error) => {
+          console.error('QR Code generation error:', err);
+          setQrCodeDataUrl('');
+        });
+    } else {
+      setQrCodeDataUrl('');
+    }
+  }, [selectedNetworkId, paymentNetworks]);
 
   const selectedNetwork = paymentNetworks.find((n) => String(n.id) === String(selectedNetworkId));
 
@@ -1209,11 +1235,11 @@ export default function DashboardHome() {
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3">
                       <p className="text-[10px] text-gray-500">Request ID</p>
-                      <p className="text-sm text-white font-mono">#{purchaseSuccess.id}</p>
+                      <p className="text-sm text-white font-mono">#{purchaseSuccess.request_number || purchaseSuccess.id}</p>
                     </div>
                     <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3">
                       <p className="text-[10px] text-gray-500">Amount</p>
-                      <p className="text-sm text-yellow-300 font-bold">${purchaseSuccess.amount_usd} {purchaseSuccess.token_symbol}</p>
+                      <p className="text-sm text-yellow-300 font-bold">${purchaseSuccess.plan?.price || purchaseSuccess.amount_usd} {purchaseSuccess.payment?.token_symbol}</p>
                     </div>
                   </div>
 
@@ -1382,11 +1408,17 @@ export default function DashboardHome() {
                         </div>
 
                         <div className="w-24 h-24 sm:w-28 sm:h-28 bg-white rounded-lg p-2 flex items-center justify-center flex-shrink-0">
-                          <img
-                            alt="Wallet QR"
-                            className="w-full h-full"
-                            src={`https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(selectedNetwork.wallet_address)}`}
-                          />
+                          {qrCodeDataUrl ? (
+                            <img
+                              alt="Wallet QR"
+                              className="w-full h-full object-contain"
+                              src={qrCodeDataUrl}
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center w-full h-full text-gray-400 text-xs">
+                              Loading QR...
+                            </div>
+                          )}
                         </div>
                       </div>
                       <p className="text-[10px] text-gray-500 mt-2">After sending funds, upload proof and submit for admin approval.</p>
@@ -1492,7 +1524,7 @@ export default function DashboardHome() {
                           <div key={r.id} className="bg-black/30 border border-cyan-500/10 rounded-lg p-3">
                             <div className="flex items-center justify-between gap-2">
                               <div>
-                                <p className="text-white text-xs font-semibold">#{r.id} • {r.plan} • ${r.amount_usd}</p>
+                                <p className="text-white text-xs font-semibold">#{r.request_number || r.id} • {r.plan} • ${r.amount_usd}</p>
                                 <p className="text-gray-500 text-[10px]">{r.network?.name} • {new Date(r.created_at).toLocaleString()}</p>
                               </div>
                               <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
