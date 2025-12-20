@@ -34,5 +34,6 @@ urlpatterns = [
     path('ea_files/<str:filename>', dashboard_views.download_ea_file, name='download_ea_file_legacy'),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Serve media files in both development and production
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

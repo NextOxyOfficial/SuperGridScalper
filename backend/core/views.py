@@ -1851,9 +1851,18 @@ def get_site_settings(request):
     logo_url = None
     
     if settings.favicon:
-        favicon_url = request.build_absolute_uri(settings.favicon.url)
+        try:
+            # Build absolute URL for media files
+            favicon_url = request.build_absolute_uri(settings.favicon.url)
+        except Exception:
+            favicon_url = None
+    
     if settings.logo:
-        logo_url = request.build_absolute_uri(settings.logo.url)
+        try:
+            # Build absolute URL for media files
+            logo_url = request.build_absolute_uri(settings.logo.url)
+        except Exception:
+            logo_url = None
     
     return JsonResponse({
         'success': True,
