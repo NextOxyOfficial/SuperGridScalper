@@ -26,10 +26,10 @@ const defaultSettings: SiteSettings = {
   logo_text: "MARK'S AI",
   logo_version: "3.0",
   support_email: "support@markstrades.com",
-  telegram_en: "@MarksAISupport",
-  telegram_en_url: "https://t.me/MarksAISupport",
-  telegram_cn: "@MarksAIChinese",
-  telegram_cn_url: "https://t.me/MarksAIChinese",
+  telegram_en: "@MarksAISupportEnglish",
+  telegram_en_url: "https://t.me/MarksAISupportEnglish",
+  telegram_cn: "@MarksAISupportChinese",
+  telegram_cn_url: "https://t.me/MarksAISupportChinese",
 };
 
 const SiteSettingsContext = createContext<SiteSettings>(defaultSettings);

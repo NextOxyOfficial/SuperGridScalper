@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { MessageCircle, X, Mail, Headphones, Sparkles } from 'lucide-react';
+import { useSiteSettings } from '@/context/SiteSettingsContext';
 
 const TELEGRAM_EN_URL = 'https://t.me/MarksAISupportEnglish';
 const TELEGRAM_EN_HANDLE = '@MarksAISupportEnglish';
@@ -12,6 +13,13 @@ const SUPPORT_EMAIL = 'support@markstrades.com';
 
 export default function SupportWidget() {
   const [open, setOpen] = useState(false);
+  const settings = useSiteSettings();
+
+  const telegramEnUrl = settings.telegram_en_url || TELEGRAM_EN_URL;
+  const telegramEnHandle = settings.telegram_en || TELEGRAM_EN_HANDLE;
+  const telegramCnUrl = settings.telegram_cn_url || TELEGRAM_CN_URL;
+  const telegramCnHandle = settings.telegram_cn || TELEGRAM_CN_HANDLE;
+  const supportEmail = settings.support_email || SUPPORT_EMAIL;
 
   return (
     <>
@@ -80,7 +88,7 @@ export default function SupportWidget() {
 
             {/* Telegram English */}
             <a
-              href={TELEGRAM_EN_URL}
+              href={telegramEnUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="block bg-gradient-to-br from-[#0d1420] to-[#0a0f18] border border-cyan-500/30 rounded-2xl p-4 hover:border-cyan-400/60 hover:shadow-xl hover:shadow-cyan-500/10 transition-all duration-300 group hover:-translate-y-0.5"
@@ -93,7 +101,7 @@ export default function SupportWidget() {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold text-cyan-300">🇺🇸 ENGLISH SUPPORT</span>
                   </div>
-                  <div className="text-base text-white font-semibold">{TELEGRAM_EN_HANDLE}</div>
+                  <div className="text-base text-white font-semibold">{telegramEnHandle}</div>
                   <div className="text-xs text-gray-500 mt-0.5">Tap to open Telegram</div>
                 </div>
               </div>
@@ -101,7 +109,7 @@ export default function SupportWidget() {
 
             {/* Telegram Chinese */}
             <a
-              href={TELEGRAM_CN_URL}
+              href={telegramCnUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="block bg-gradient-to-br from-[#0d1420] to-[#0a0f18] border border-yellow-500/30 rounded-2xl p-4 hover:border-yellow-400/60 hover:shadow-xl hover:shadow-yellow-500/10 transition-all duration-300 group hover:-translate-y-0.5"
@@ -114,7 +122,7 @@ export default function SupportWidget() {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold text-yellow-300">🇨🇳 中文客服</span>
                   </div>
-                  <div className="text-base text-white font-semibold">{TELEGRAM_CN_HANDLE}</div>
+                  <div className="text-base text-white font-semibold">{telegramCnHandle}</div>
                   <div className="text-xs text-gray-500 mt-0.5">点击打开 Telegram</div>
                 </div>
               </div>
@@ -122,7 +130,7 @@ export default function SupportWidget() {
 
             {/* Email Support */}
             <a
-              href={`mailto:${SUPPORT_EMAIL}`}
+              href={`mailto:${supportEmail}`}
               className="block bg-gradient-to-br from-[#0d1420] to-[#0a0f18] border border-purple-500/30 rounded-2xl p-4 hover:border-purple-400/60 hover:shadow-xl hover:shadow-purple-500/10 transition-all duration-300 group hover:-translate-y-0.5"
             >
               <div className="flex items-center gap-4">
@@ -133,7 +141,7 @@ export default function SupportWidget() {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold text-purple-300">📧 EMAIL SUPPORT</span>
                   </div>
-                  <div className="text-sm sm:text-base text-white font-semibold break-all">{SUPPORT_EMAIL}</div>
+                  <div className="text-sm sm:text-base text-white font-semibold break-all">{supportEmail}</div>
                   <div className="text-xs text-gray-500 mt-0.5">Billing & license inquiries</div>
                 </div>
               </div>

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Bot, Download, Shield, Zap, TrendingUp, DollarSign, Target, Star, CheckCircle, ArrowRight, LogIn, Store, Loader2 } from 'lucide-react';
 import ExnessBroker from '@/components/ExnessBroker';
+import SiteLogo from '@/components/SiteLogo';
+import { useSiteSettings } from '@/context/SiteSettingsContext';
 
 // Fallback EA Products Data (used if API fails)
 const fallbackProducts = [
@@ -47,10 +49,13 @@ interface EAProduct {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
 
 export default function PublicEAStorePage() {
+  const settings = useSiteSettings();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState('');
   const [eaProducts, setEaProducts] = useState<EAProduct[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const supportEmail = settings.support_email || 'support@markstrades.com';
 
   // Fetch EA products from API
   useEffect(() => {
@@ -128,12 +133,7 @@ export default function PublicEAStorePage() {
                 {/* Logged In: Dashboard Style Header */}
                 <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
                   <div className="flex items-center gap-3 sm:gap-4">
-                    <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
-                      <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                        <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
-                      </div>
-                      <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
-                    </Link>
+                    <SiteLogo size="sm" />
                   </div>
                 </div>
                 
@@ -170,12 +170,7 @@ export default function PublicEAStorePage() {
               <>
                 {/* Non-Logged In: Homepage Style Header */}
                 <div className="flex items-center gap-2 sm:gap-4">
-                  <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                      <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
-                    </div>
-                    <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
-                  </Link>
+                  <SiteLogo size="sm" />
                   <div className="h-5 sm:h-6 w-px bg-cyan-500/30"></div>
                   <span className="flex items-center gap-1.5 sm:gap-2 text-yellow-400 text-xs sm:text-sm font-medium" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                     <Store className="w-4 h-4 sm:w-5 sm:h-5" /> EA STORE
@@ -441,53 +436,13 @@ export default function PublicEAStorePage() {
         <div className="mt-8 text-center">
           <p className="text-gray-500 text-sm mb-3">Need help choosing the right EA?</p>
           <a 
-            href="mailto:support@marksai.com" 
+            href={`mailto:${supportEmail}`}
             className="inline-flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition"
           >
             Contact Support <ArrowRight className="w-4 h-4" />
           </a>
         </div>
       </div>
-
-      {/* Footer - Same as Homepage */}
-      <footer className="relative z-10 border-t border-cyan-500/10 pt-6 sm:pt-8 pb-4 mt-10">
-        <div className="max-w-7xl mx-auto px-4">
-          {/* Footer Links */}
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 mb-4">
-            <Link href="/guideline" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-              Guidelines
-            </Link>
-            <span className="text-gray-700">•</span>
-            <Link href="/ea-store" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-              EA Store
-            </Link>
-            <span className="text-gray-700">•</span>
-            <Link href="/terms" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-              Terms & Conditions
-            </Link>
-            <span className="text-gray-700">•</span>
-            <Link href="/privacy" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-              Privacy Policy
-            </Link>
-          </div>
-
-          {/* Copyright */}
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-2 sm:gap-3 mb-3">
-              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
-              </div>
-              <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
-            </div>
-            <p className="text-gray-500 text-xs sm:text-sm">
-              © 2025 Mark's AI - Advanced Gold Scalping EA
-            </p>
-            <p className="text-gray-600 text-[10px] sm:text-xs mt-1 sm:mt-2">
-              Trading involves risk. Past performance does not guarantee future results.
-            </p>
-          </div>
-        </div>
-      </footer>
     </main>
   );
 }

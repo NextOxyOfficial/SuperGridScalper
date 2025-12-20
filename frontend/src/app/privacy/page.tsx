@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Bot, ArrowLeft, Shield, Database, Lock, Share2, BarChart3, Cookie, UserCheck, Clock, Users, RefreshCw, Mail } from 'lucide-react';
+import { ArrowLeft, Shield, Database, Lock, Share2, BarChart3, Cookie, UserCheck, Clock, Users, RefreshCw, Mail } from 'lucide-react';
+import SiteLogo from '@/components/SiteLogo';
 
 export default function PrivacyPage() {
   const currentYear = new Date().getFullYear();
@@ -20,12 +21,7 @@ export default function PrivacyPage() {
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             <span className="text-xs sm:text-sm font-medium">Back to Home</span>
           </Link>
-          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-              <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
-            </div>
-            <span className="text-sm sm:text-base font-bold hidden sm:inline" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
-          </Link>
+          <SiteLogo size="sm" className="hidden sm:flex" />
         </div>
       </nav>
 
@@ -368,24 +364,9 @@ export default function PrivacyPage() {
           </section>
         </div>
 
-        {/* Footer */}
         <div className="mt-8 sm:mt-12 pt-6 border-t border-cyan-500/20">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-gray-500 text-xs sm:text-sm">
-              Last updated: December {currentYear}
-            </p>
-            <div className="flex items-center gap-4">
-              <Link href="/terms" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-                Terms & Conditions
-              </Link>
-              <span className="text-gray-700">•</span>
-              <Link href="/" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-                Back to Home
-              </Link>
-            </div>
-          </div>
-          <p className="text-center text-gray-600 text-xs mt-4">
-            © {currentYear} Mark's AI - Advanced Gold Scalping EA. All rights reserved.
+          <p className="text-gray-500 text-xs sm:text-sm text-center">
+            Last updated: December {currentYear}
           </p>
         </div>
       </div>

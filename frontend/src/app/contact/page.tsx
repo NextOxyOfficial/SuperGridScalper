@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bot, Mail, MessageCircle, Send, CheckCircle, AlertCircle, ArrowLeft, ArrowRight, Store, LogIn, Zap, Clock } from 'lucide-react';
+import { Mail, MessageCircle, Send, CheckCircle, AlertCircle, ArrowLeft, ArrowRight, Store, LogIn, Zap, Clock, Bot } from 'lucide-react';
+import SiteLogo from '@/components/SiteLogo';
+import { useSiteSettings } from '@/context/SiteSettingsContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
 
@@ -13,6 +15,7 @@ const TELEGRAM_CN_HANDLE = '@MarksAISupportChinese';
 const SUPPORT_EMAIL = 'support@markstrades.com';
 
 export default function ContactPage() {
+  const settings = useSiteSettings();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState('');
   const [formData, setFormData] = useState({
@@ -25,6 +28,12 @@ export default function ContactPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+
+  const telegramEnUrl = settings.telegram_en_url || TELEGRAM_EN_URL;
+  const telegramEnHandle = settings.telegram_en || TELEGRAM_EN_HANDLE;
+  const telegramCnUrl = settings.telegram_cn_url || TELEGRAM_CN_URL;
+  const telegramCnHandle = settings.telegram_cn || TELEGRAM_CN_HANDLE;
+  const supportEmail = settings.support_email || SUPPORT_EMAIL;
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -65,120 +74,188 @@ export default function ContactPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#05060a] relative">
-      {/* Subtle Background */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.015)_1px,transparent_1px)] bg-[size:40px_40px]" />
-      <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-cyan-500/5 rounded-full blur-[120px]" />
+    <main className="min-h-screen bg-[#0a0a0f] relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.03)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]" />
+      <div className="absolute top-20 left-10 w-72 h-72 bg-cyan-500/20 rounded-full blur-[100px] animate-pulse" />
+      <div className="absolute bottom-20 right-10 w-96 h-96 bg-yellow-500/10 rounded-full blur-[120px] animate-pulse" />
 
-      {/* Compact Navigation */}
-      <nav className="relative z-20 bg-[#05060a]/95 backdrop-blur-md border-b border-white/5">
-        <div className="max-w-5xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition">
-              <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                <Bot className="w-4 h-4 text-black" />
-              </div>
-              <span className="text-base font-bold text-white hidden sm:block" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI <span className="text-cyan-400">3.0</span></span>
-            </Link>
-            <div className="flex items-center gap-2">
-              {isLoggedIn ? (
-                <>
-                  <Link href="/dashboard" className="px-3 py-1.5 text-gray-400 hover:text-white text-xs font-medium transition rounded-md hover:bg-white/5">Dashboard</Link>
-                  <Link href="/ea-store" className="hidden sm:flex items-center gap-1 px-3 py-1.5 text-yellow-400 text-xs font-medium border border-yellow-500/20 rounded-md hover:bg-yellow-500/10 transition">
-                    <Store className="w-3.5 h-3.5" /> Store
+      {/* Navigation - Different for logged in vs non-logged in */}
+      <nav className="relative z-20 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-cyan-500/20">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
+            {isLoggedIn ? (
+              <>
+                {/* Logged In: Dashboard Style Header */}
+                <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <SiteLogo size="sm" />
+                  </div>
+                </div>
+                
+                {/* Nav buttons row */}
+                <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+                  <Link
+                    href="/dashboard"
+                    className="flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    Dashboard
                   </Link>
-                </>
-              ) : (
-                <>
-                  <Link href="/" className="px-3 py-1.5 text-gray-400 hover:text-white text-xs font-medium transition rounded-md hover:bg-white/5">Home</Link>
-                  <Link href="/" className="flex items-center gap-1 px-3 py-1.5 bg-cyan-500 text-black text-xs font-bold rounded-md hover:bg-cyan-400 transition">
-                    <LogIn className="w-3.5 h-3.5" /> Login
+                  <Link
+                    href="/ea-store"
+                    className="flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    EA Store
                   </Link>
-                </>
-              )}
-            </div>
+                  <Link
+                    href="/guideline"
+                    className="flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    Guidelines
+                  </Link>
+                  <div className="hidden sm:flex items-center gap-3">
+                    <div className="h-5 w-px bg-cyan-500/30"></div>
+                    <span className="text-cyan-300 text-xs sm:text-sm">{userName}</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Non-Logged In: Homepage Style Header */}
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <SiteLogo size="sm" />
+                </div>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Link 
+                    href="/" 
+                    className="px-3 sm:px-4 py-2 sm:py-2 text-cyan-300 hover:text-white hover:bg-cyan-500/20 rounded-lg text-xs sm:text-sm font-medium transition border border-cyan-500/30"
+                  >
+                    Home
+                  </Link>
+                  <Link 
+                    href="/guideline" 
+                    className="px-3 sm:px-4 py-2 sm:py-2 text-cyan-300 hover:text-white hover:bg-cyan-500/20 rounded-lg text-xs sm:text-sm font-medium transition border border-cyan-500/30"
+                  >
+                    Guidelines
+                  </Link>
+                  <Link 
+                    href="/" 
+                    className="px-3 sm:px-4 py-2 sm:py-2 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-1.5"
+                  >
+                    <LogIn className="w-4 h-4 sm:w-4 sm:h-4" /> Login
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </nav>
 
-      {/* Main Content - Compact */}
-      <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
-        {/* Compact Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-            Contact <span className="text-cyan-400">Support</span>
+      {/* Main Content */}
+      <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-10">
+        {/* Header */}
+        <div className="text-center mb-6 sm:mb-10">
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-3 sm:mb-4">
+            <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-400" />
+            <span className="text-cyan-400 text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>SUPPORT CENTER</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+            Get Help & Support
           </h1>
-          <p className="text-gray-500 text-sm">Get help via Telegram or Email • 24/7 Available</p>
+          <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">
+            Contact us via Telegram or Email • Available 24/7
+          </p>
         </div>
 
-        {/* Compact Contact Cards - Horizontal on desktop */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
+        {/* Contact Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
           {/* Telegram English */}
           <a
-            href={TELEGRAM_EN_URL}
+            href={telegramEnUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="group flex items-center gap-3 bg-[#0a0e14] border border-cyan-500/20 rounded-xl p-4 hover:border-cyan-400/50 hover:bg-[#0c1218] transition-all"
+            className="group bg-[#0a0a0f]/50 border border-cyan-500/30 rounded-2xl p-5 sm:p-6 hover:border-cyan-400 hover:bg-[#0a0a0f]/80 transition-all"
           >
-            <div className="w-10 h-10 bg-cyan-500/10 rounded-lg flex items-center justify-center group-hover:bg-cyan-500/20 transition-colors flex-shrink-0">
-              <MessageCircle className="w-5 h-5 text-cyan-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="text-[10px] font-bold text-cyan-300/80">🇺🇸 ENGLISH</span>
+            <div className="flex items-start gap-3 sm:gap-4 mb-3 sm:mb-4">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 bg-cyan-500/10 rounded-xl flex items-center justify-center group-hover:bg-cyan-500/20 transition-colors flex-shrink-0">
+                <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
               </div>
-              <p className="text-white font-semibold text-sm truncate">{TELEGRAM_EN_HANDLE}</p>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] sm:text-xs font-bold text-cyan-300/70">🇺🇸 ENGLISH</span>
+                </div>
+                <h3 className="text-white font-bold text-base sm:text-lg mb-1">Telegram Support</h3>
+                <p className="text-cyan-400 text-xs sm:text-sm font-medium">{telegramEnHandle}</p>
+              </div>
             </div>
-            <ArrowRight className="w-4 h-4 text-cyan-400/50 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+            <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400">
+              <span>Instant Response</span>
+              <ArrowRight className="w-4 h-4 text-cyan-400/50 group-hover:text-cyan-400 group-hover:translate-x-1 transition-all" />
+            </div>
           </a>
 
           {/* Telegram Chinese */}
           <a
-            href={TELEGRAM_CN_URL}
+            href={telegramCnUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="group flex items-center gap-3 bg-[#0a0e14] border border-yellow-500/20 rounded-xl p-4 hover:border-yellow-400/50 hover:bg-[#0c1218] transition-all"
+            className="group bg-[#0a0a0f]/50 border border-yellow-500/30 rounded-2xl p-5 sm:p-6 hover:border-yellow-400 hover:bg-[#0a0a0f]/80 transition-all"
           >
-            <div className="w-10 h-10 bg-yellow-500/10 rounded-lg flex items-center justify-center group-hover:bg-yellow-500/20 transition-colors flex-shrink-0">
-              <MessageCircle className="w-5 h-5 text-yellow-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="text-[10px] font-bold text-yellow-300/80">🇨🇳 中文</span>
+            <div className="flex items-start gap-3 sm:gap-4 mb-3 sm:mb-4">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 bg-yellow-500/10 rounded-xl flex items-center justify-center group-hover:bg-yellow-500/20 transition-colors flex-shrink-0">
+                <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" />
               </div>
-              <p className="text-white font-semibold text-sm truncate">{TELEGRAM_CN_HANDLE}</p>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] sm:text-xs font-bold text-yellow-300/70">🇨🇳 中文</span>
+                </div>
+                <h3 className="text-white font-bold text-base sm:text-lg mb-1">Telegram 支持</h3>
+                <p className="text-yellow-400 text-xs sm:text-sm font-medium">{telegramCnHandle}</p>
+              </div>
             </div>
-            <ArrowRight className="w-4 h-4 text-yellow-400/50 group-hover:text-yellow-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+            <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400">
+              <span>即时响应</span>
+              <ArrowRight className="w-4 h-4 text-yellow-400/50 group-hover:text-yellow-400 group-hover:translate-x-1 transition-all" />
+            </div>
           </a>
 
           {/* Email */}
           <a
-            href={`mailto:${SUPPORT_EMAIL}`}
-            className="group flex items-center gap-3 bg-[#0a0e14] border border-purple-500/20 rounded-xl p-4 hover:border-purple-400/50 hover:bg-[#0c1218] transition-all"
+            href={`mailto:${supportEmail}`}
+            className="group bg-[#0a0a0f]/50 border border-purple-500/30 rounded-2xl p-5 sm:p-6 hover:border-purple-400 hover:bg-[#0a0a0f]/80 transition-all"
           >
-            <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center group-hover:bg-purple-500/20 transition-colors flex-shrink-0">
-              <Mail className="w-5 h-5 text-purple-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="text-[10px] font-bold text-purple-300/80">📧 EMAIL</span>
+            <div className="flex items-start gap-3 sm:gap-4 mb-3 sm:mb-4">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 bg-purple-500/10 rounded-xl flex items-center justify-center group-hover:bg-purple-500/20 transition-colors flex-shrink-0">
+                <Mail className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
               </div>
-              <p className="text-white font-semibold text-sm truncate">{SUPPORT_EMAIL}</p>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] sm:text-xs font-bold text-purple-300/70">📧 EMAIL</span>
+                </div>
+                <h3 className="text-white font-bold text-base sm:text-lg mb-1">Email Support</h3>
+                <p className="text-purple-400 text-xs sm:text-sm font-medium">{supportEmail}</p>
+              </div>
             </div>
-            <ArrowRight className="w-4 h-4 text-purple-400/50 group-hover:text-purple-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+            <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400">
+              <span>24-48 Hour Response</span>
+              <ArrowRight className="w-4 h-4 text-purple-400/50 group-hover:text-purple-400 group-hover:translate-x-1 transition-all" />
+            </div>
           </a>
         </div>
 
         {/* Info Bar */}
-        <div className="flex items-center justify-center gap-6 mb-8 py-3 px-4 bg-[#0a0e14]/50 border border-white/5 rounded-lg">
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <Zap className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Fast Response</span>
+        <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 mb-8 sm:mb-12 py-3 sm:py-4 px-4 bg-[#0a0a0f]/50 border border-cyan-500/20 rounded-xl">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-400">
+            <Zap className="w-4 h-4 text-cyan-400" />
+            <span className="font-medium">Fast Response</span>
           </div>
           <div className="w-px h-4 bg-white/10" />
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <Clock className="w-3.5 h-3.5 text-yellow-400" />
-            <span>24/7 Available</span>
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-400">
+            <Clock className="w-4 h-4 text-yellow-400" />
+            <span className="font-medium">24/7 Available</span>
           </div>
         </div>
 
@@ -286,19 +363,6 @@ export default function ContactPage() {
           </Link>
         </div>
       </div>
-
-      {/* Minimal Footer */}
-      <footer className="relative z-10 border-t border-white/5 mt-8">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-center gap-4 text-xs text-gray-600">
-          <Link href="/guideline" className="hover:text-cyan-400 transition">Guidelines</Link>
-          <span>•</span>
-          <Link href="/ea-store" className="hover:text-cyan-400 transition">EA Store</Link>
-          <span>•</span>
-          <Link href="/terms" className="hover:text-cyan-400 transition">Terms</Link>
-          <span>•</span>
-          <span>© {new Date().getFullYear()} Mark's AI</span>
-        </div>
-      </footer>
     </main>
   );
 }

@@ -4,6 +4,7 @@ import { DashboardProvider, useDashboard } from './context';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Bot, Store, Gift } from 'lucide-react';
+import SiteLogo from '@/components/SiteLogo';
 
 function DashboardNav() {
   const { user, selectedLicense, logout, clearSelectedLicense } = useDashboard();
@@ -27,14 +28,8 @@ function DashboardNav() {
             {/* Row 1: Logo + Logout (mobile) */}
             <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
               <div className="flex items-center gap-3 sm:gap-4">
-                <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
-                  <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                    <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
-                  </div>
-                  <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
-                </Link>
+                <SiteLogo size="sm" />
               </div>
-              
               {/* Mobile only: Logout on right */}
               <button onClick={logout} className="sm:hidden text-cyan-300 hover:text-white text-xs px-3 py-2.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30">
                 Logout
@@ -115,9 +110,7 @@ function DashboardNav() {
               {selectedLicense && (
                 <>
                   <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                      <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
-                    </div>
+                    <SiteLogo size="sm" showText={false} />
                     <span className="text-white font-semibold text-sm sm:text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>{selectedLicense.plan}</span>
                     <span className="bg-yellow-500/20 text-yellow-300 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1 rounded-full border border-yellow-500/30">
                       {getDaysRemaining(selectedLicense)}d

@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift } from 'lucide-react'
 import axios from 'axios'
 import ExnessBroker from '@/components/ExnessBroker'
+import SiteLogo from '@/components/SiteLogo'
+import { useSiteSettings } from '@/context/SiteSettingsContext'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api'
 
@@ -27,6 +29,7 @@ interface LicenseResult {
 
 export default function Home() {
   const router = useRouter()
+  const settings = useSiteSettings()
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -440,12 +443,7 @@ export default function Home() {
           
           {/* Row 1: Logo + Login/Dashboard */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
-              </div>
-              <span className="text-sm sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
-            </div>
+            <SiteLogo size="md" />
             
             {/* Center Menu - Desktop Only */}
             <div className="hidden md:flex items-center gap-6">
@@ -562,7 +560,7 @@ export default function Home() {
               
               {/* Main Title */}
               <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-white to-yellow-400 mb-1 sm:mb-2 drop-shadow-2xl" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                MARK'S AI 3.0
+                {settings.logo_text} {settings.logo_version}
               </h1>
               <h2 className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white/90 mb-3 sm:mb-4 drop-shadow-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                 ADVANCE AI SCALPER
@@ -570,7 +568,7 @@ export default function Home() {
               
               {/* Tagline */}
               <p className="text-sm sm:text-lg md:text-xl text-cyan-300 mb-4 sm:mb-6 font-light drop-shadow-lg">
-                The Most Powerful Automated Gold AI Trading
+                {settings.site_tagline || 'The Most Powerful Automated Gold AI Trading'}
               </p>
               
               {/* CTA Buttons */}
@@ -1027,9 +1025,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-cyan-500/10 pt-6 sm:pt-8 pb-4">
-          {/* Referral CTA */}
+        <div className="border-t border-cyan-500/10 pt-6 sm:pt-8">
           <div className="text-center mb-6 sm:mb-8">
             <div className="inline-block bg-gradient-to-r from-green-500/10 to-green-400/5 border border-green-500/30 rounded-2xl p-6 sm:p-8 max-w-2xl mx-4">
               <Gift className="w-10 h-10 sm:w-12 sm:h-12 text-green-400 mx-auto mb-3" />
@@ -1048,45 +1044,6 @@ export default function Home() {
                 Get My Referral Code
               </Link>
             </div>
-          </div>
-
-          {/* Footer Links */}
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 mb-4 px-4">
-            <Link href="/guideline" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-              Guidelines
-            </Link>
-            <span className="text-gray-700">•</span>
-            <Link href="/ea-store" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-              EA Store
-            </Link>
-            <span className="text-gray-700">•</span>
-            <Link href="/contact" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-              Contact Support
-            </Link>
-            <span className="text-gray-700">•</span>
-            <Link href="/terms" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-              Terms & Conditions
-            </Link>
-            <span className="text-gray-700">•</span>
-            <Link href="/privacy" className="text-cyan-400 hover:text-cyan-300 text-xs sm:text-sm transition">
-              Privacy Policy
-            </Link>
-          </div>
-
-          {/* Copyright */}
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-2 sm:gap-3 mb-3">
-              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-lg flex items-center justify-center">
-                <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
-              </div>
-              <span className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</span>
-            </div>
-            <p className="text-gray-500 text-xs sm:text-sm px-4">
-              © 2025 Mark's AI - Advanced Gold Scalping EA
-            </p>
-            <p className="text-gray-600 text-[10px] sm:text-xs mt-1 sm:mt-2 px-4">
-              Trading involves risk. Past performance does not guarantee future results.
-            </p>
           </div>
         </div>
       </div>

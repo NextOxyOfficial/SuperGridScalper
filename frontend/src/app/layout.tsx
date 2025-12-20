@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter, Orbitron } from 'next/font/google'
 import './globals.css'
 import SupportWidget from '@/components/SupportWidget'
+import Footer from '@/components/Footer'
 import { SiteSettingsProvider } from '@/context/SiteSettingsContext'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body className={`${inter.className} ${orbitron.variable}`}>
         <SiteSettingsProvider>
           {children}
+          <Footer />
           <SupportWidget />
         </SiteSettingsProvider>
       </body>

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, Eye, EyeOff, Loader2, Play, Copy, Check, LogOut, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Play, Copy, Check, LogOut, ArrowRight } from 'lucide-react';
+import SiteLogo from '@/components/SiteLogo';
 
 const DEMO_EMAIL = 'demo@marksai.com';
 const DEMO_PASSWORD = 'demo123456';
@@ -97,15 +98,9 @@ export default function DemoLoginPage() {
           </div>
         </div>
 
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2 sm:gap-3 mb-4 sm:mb-6">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/25">
-            <Bot className="w-5 h-5 sm:w-7 sm:h-7 text-black" />
-          </div>
-          <div>
-            <h1 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MARK'S AI 3.0</h1>
-            <p className="text-cyan-400 text-[10px] sm:text-xs">Demo Dashboard Access</p>
-          </div>
+        <div className="flex flex-col items-center justify-center gap-2 mb-4 sm:mb-6">
+          <SiteLogo size="lg" className="justify-center" />
+          <p className="text-cyan-400 text-[10px] sm:text-xs">Demo Dashboard Access</p>
         </div>
 
         {/* Demo Credentials Card */}
