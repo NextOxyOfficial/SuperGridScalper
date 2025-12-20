@@ -436,6 +436,11 @@ export default function DashboardHome() {
         setUserNote('');
         setProofFile(null);
         setPurchaseStep(1);
+        
+        // Add new request to pending list immediately
+        setPurchaseRequests(prev => [data.request, ...prev]);
+        
+        // Also refresh from server to ensure sync
         await fetchPurchaseRequests();
       } else {
         setMessage({ type: 'error', text: data.message || 'Submission failed' });
