@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { Bot } from 'lucide-react';
 import { useSiteSettings } from '@/context/SiteSettingsContext';
 
@@ -18,6 +19,11 @@ export default function SiteLogo({
   className?: string;
 }) {
   const settings = useSiteSettings();
+  const [logoError, setLogoError] = useState(false);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [settings.logo_url]);
 
   const iconClassName =
     size === 'sm'
@@ -43,11 +49,12 @@ export default function SiteLogo({
   return (
     <Link href={href} className={`flex items-center gap-2.5 hover:opacity-90 transition ${className}`}>
       <div className={`${boxClassName} bg-gradient-to-br from-cyan-400 to-yellow-400 flex items-center justify-center overflow-hidden`}>
-        {settings.logo_url ? (
+        {settings.logo_url && !logoError ? (
           <img
             src={settings.logo_url}
             alt={settings.site_name}
             className="w-full h-full object-contain bg-black/5"
+            onError={() => setLogoError(true)}
           />
         ) : (
           <Bot className={`${iconClassName} text-black`} />

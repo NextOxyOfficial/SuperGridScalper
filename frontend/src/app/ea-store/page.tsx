@@ -180,7 +180,7 @@ export default function PublicEAStorePage() {
                 <p className="text-gray-400 text-xs sm:text-sm mb-3 sm:mb-4 line-clamp-2">{ea.description}</p>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
+                <div className="grid text-center grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
                   <div className="bg-black/30 rounded-lg p-2 sm:p-3">
                     <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
                       <DollarSign className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" />

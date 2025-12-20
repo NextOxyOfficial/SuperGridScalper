@@ -33,6 +33,10 @@ DEBUG = os.environ.get('DEBUG', 'False' if IS_PRODUCTION else 'True') == 'True'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'markstrades.com', 'www.markstrades.com']
 
+# Trust reverse proxy headers (Nginx) so request.build_absolute_uri uses https on production
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # CSRF Settings
 CSRF_TRUSTED_ORIGINS = [
     'https://markstrades.com',

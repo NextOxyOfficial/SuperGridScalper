@@ -23,6 +23,10 @@ FRONTEND_DIR="$PROJECT_DIR/frontend"
 # Step 1: Pull latest code
 echo -e "\n${YELLOW}Step 1: Pulling latest code from Git...${NC}"
 cd $PROJECT_DIR
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo -e "${YELLOW}Local changes detected - stashing before pull...${NC}"
+    git stash push -u -m "auto-stash before deploy $(date +%Y%m%d_%H%M%S)"
+fi
 git pull origin main
 echo -e "${GREEN}✓ Code updated${NC}"
 

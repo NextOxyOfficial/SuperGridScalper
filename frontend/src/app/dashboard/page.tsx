@@ -1817,7 +1817,7 @@ export default function DashboardHome() {
                 </div>
               </div>
               {/* Mobile-only: Status & Expires row */}
-              <div className="sm:hidden px-3 pb-3 grid grid-cols-2 gap-2 border-t border-cyan-500/10 pt-2">
+              <div className="sm:hidden px-3 pb-3 grid text-center grid-cols-2 gap-2 border-t border-cyan-500/10 pt-2">
                 <div className="text-center">
                   <p className="text-[10px] text-gray-500">Status</p>
                   <p className={`text-sm font-bold ${isConnected ? 'text-cyan-400' : 'text-gray-600'}`}>

@@ -41,13 +41,33 @@ export function useSiteSettings() {
 export function SiteSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<SiteSettings>(defaultSettings);
 
+  const normalizeAssetUrl = (url: string | null) => {
+    if (!url) return null;
+    try {
+      const u = new URL(url);
+      if (u.hostname.endsWith('markstrades.com')) {
+        return `${u.pathname}${u.search}`;
+      }
+    } catch {
+      // ignore
+    }
+
+    if (url.startsWith('http://')) return url.replace('http://', 'https://');
+    return url;
+  };
+
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         const res = await fetch(`${API_URL}/site-settings/`);
         const data = await res.json();
         if (data.success && data.settings) {
-          setSettings({ ...defaultSettings, ...data.settings });
+          setSettings({
+            ...defaultSettings,
+            ...data.settings,
+            favicon_url: normalizeAssetUrl(data.settings.favicon_url),
+            logo_url: normalizeAssetUrl(data.settings.logo_url),
+          });
         }
       } catch (err) {
         console.error('Failed to fetch site settings:', err);

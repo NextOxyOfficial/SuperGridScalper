@@ -212,7 +212,7 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
         {mobileMenuOpen ? (
           <div className="lg:hidden mt-3 pt-3 border-t border-cyan-500/10">
             <div className="bg-black/30 border border-cyan-500/20 rounded-xl p-3">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid text-center grid-cols-2 gap-2">
                 <Link
                   href="/ea-store"
                   onClick={() => setMobileMenuOpen(false)}
