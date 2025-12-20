@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
+from django.conf import settings as django_settings
+from django.core.mail import send_mail
 from django.utils.html import format_html
 from django.utils import timezone
 from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest
@@ -97,7 +99,7 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
     actions = ['approve_requests', 'reject_requests']
 
     def approve_requests(self, request, queryset):
-        for obj in queryset.select_related('user', 'plan'):
+        for obj in queryset.select_related('user', 'plan', 'network', 'issued_license'):
             if obj.status != 'pending':
                 continue
             if obj.issued_license_id:
@@ -105,6 +107,29 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                 obj.reviewed_by = request.user
                 obj.reviewed_at = timezone.now()
                 obj.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+
+                try:
+                    base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
+                    subject = 'Payment Approved - Your License is Ready'
+                    message = (
+                        f"Hi {obj.user.first_name or 'Trader'},\n\n"
+                        "Your payment has been approved and your license is ready.\n\n"
+                        f"Request ID: #{obj.id}\n"
+                        f"Plan: {obj.plan.name}\n"
+                        f"License Key: {obj.issued_license.license_key if obj.issued_license else '-'}\n"
+                        f"Expires At: {obj.issued_license.expires_at.isoformat() if obj.issued_license else '-'}\n\n"
+                        f"Open your dashboard: {base}/dashboard\n\n"
+                        "Thank you for your purchase."
+                    )
+                    send_mail(
+                        subject,
+                        message,
+                        getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
+                        [obj.user.email],
+                        fail_silently=False,
+                    )
+                except Exception:
+                    pass
                 continue
 
             new_license = License.objects.create(
@@ -118,10 +143,63 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
             obj.reviewed_at = timezone.now()
             obj.save(update_fields=['issued_license', 'status', 'reviewed_by', 'reviewed_at', 'updated_at'])
 
+            try:
+                base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
+                subject = 'Payment Approved - Your License is Ready'
+                message = (
+                    f"Hi {obj.user.first_name or 'Trader'},\n\n"
+                    "Your payment has been approved and your license has been issued.\n\n"
+                    f"Request ID: #{obj.id}\n"
+                    f"Plan: {obj.plan.name}\n"
+                    f"License Key: {new_license.license_key}\n"
+                    f"Expires At: {new_license.expires_at.isoformat()}\n\n"
+                    f"Open your dashboard: {base}/dashboard\n\n"
+                    "Thank you for your purchase."
+                )
+                send_mail(
+                    subject,
+                    message,
+                    getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
+                    [obj.user.email],
+                    fail_silently=False,
+                )
+            except Exception:
+                pass
+
     approve_requests.short_description = 'Approve selected requests and issue license'
 
     def reject_requests(self, request, queryset):
-        queryset.filter(status='pending').update(status='rejected', reviewed_by_id=request.user.id, reviewed_at=timezone.now())
+        for obj in queryset.select_related('user', 'plan', 'network'):
+            if obj.status != 'pending':
+                continue
+            obj.status = 'rejected'
+            obj.reviewed_by = request.user
+            obj.reviewed_at = timezone.now()
+            obj.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+
+            try:
+                base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
+                subject = 'Payment Rejected - Action Needed'
+                message = (
+                    f"Hi {obj.user.first_name or 'Trader'},\n\n"
+                    "Unfortunately, your payment could not be verified and has been rejected.\n\n"
+                    f"Request ID: #{obj.id}\n"
+                    f"Plan: {obj.plan.name}\n"
+                    f"Network: {obj.network.name if obj.network else '-'}\n"
+                    f"TXID: {obj.txid or '-'}\n\n"
+                    "You can submit a new payment proof from your dashboard.\n"
+                    f"Open your dashboard: {base}/dashboard\n\n"
+                    "If you believe this is a mistake, please contact support."
+                )
+                send_mail(
+                    subject,
+                    message,
+                    getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
+                    [obj.user.email],
+                    fail_silently=False,
+                )
+            except Exception:
+                pass
 
     reject_requests.short_description = 'Reject selected requests'
 

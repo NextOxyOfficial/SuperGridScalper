@@ -239,6 +239,32 @@ def create_license_purchase_request(request):
         status='pending',
     )
 
+    try:
+        base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
+        subject = 'Payment Proof Submitted (Pending Verification)'
+        message = (
+            f"Hi {user.first_name or 'Trader'},\n\n"
+            "We received your payment proof and your request is now pending verification.\n\n"
+            f"Request ID: #{purchase.id}\n"
+            f"Plan: {plan.name}\n"
+            f"Amount: ${plan.price} {network.token_symbol}\n"
+            f"Network: {network.name}\n"
+            f"MT5 Account: {purchase.mt5_account or '-'}\n"
+            f"TXID: {purchase.txid or '-'}\n\n"
+            "Next step: our team will verify your payment and activate your license.\n"
+            f"You can track status in your dashboard: {base}/dashboard\n\n"
+            "If you did not submit this request, please contact support immediately."
+        )
+        send_mail(
+            subject,
+            message,
+            getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
+            [user.email],
+            fail_silently=False,
+        )
+    except Exception:
+        pass
+
     proof_url = None
     if purchase.proof:
         try:
@@ -361,6 +387,25 @@ def register(request):
             referral.save()
         except Referral.DoesNotExist:
             pass  # Invalid referral code, just ignore
+
+    try:
+        base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
+        subject = 'Welcome to MarksTrades'
+        message = (
+            f"Hi {user.first_name or 'Trader'},\n\n"
+            "Welcome! Your account has been created successfully.\n\n"
+            f"Login here: {base}/?auth=login\n\n"
+            "If you need help, reply to this email or contact support."
+        )
+        send_mail(
+            subject,
+            message,
+            getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
+            [user.email],
+            fail_silently=False,
+        )
+    except Exception:
+        pass
     
     return JsonResponse({
         'success': True,

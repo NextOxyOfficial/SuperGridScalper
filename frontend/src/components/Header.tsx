@@ -31,15 +31,6 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
     }
   }, []);
 
-  useEffect(() => {
-    if (!mobileMenuOpen) return;
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [mobileMenuOpen]);
-
   const handleLogout = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('licenses');
@@ -208,65 +199,43 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
 
             <button
               type="button"
-              onClick={() => setMobileMenuOpen(true)}
+              onClick={() => setMobileMenuOpen((v) => !v)}
               className="p-2 rounded-lg border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20 transition"
-              aria-label="Open menu"
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
             >
-              <Menu className="w-5 h-5" />
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
 
         {mobileMenuOpen ? (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <div
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-              onClick={() => setMobileMenuOpen(false)}
-            />
-            <div className="absolute right-0 top-0 h-full w-80 max-w-[85vw] bg-[#0a0a0f] border-l border-cyan-500/20 p-4 overflow-y-auto">
-              <div className="flex items-center justify-between">
-                <SiteLogo size="sm" />
-                <button
-                  type="button"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="p-2 rounded-lg border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20 transition"
-                  aria-label="Close menu"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="mt-4 space-y-2">
+          <div className="lg:hidden mt-3 pt-3 border-t border-cyan-500/10">
+            <div className="bg-black/30 border border-cyan-500/20 rounded-xl p-3">
+              <div className="grid grid-cols-2 gap-2">
                 <Link
                   href="/ea-store"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full inline-flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition border border-yellow-500/30 text-yellow-300 hover:text-white hover:bg-yellow-500/20"
+                  className="px-3 py-2 rounded-lg text-xs font-medium transition border border-yellow-500/30 text-yellow-300 hover:text-white hover:bg-yellow-500/20 inline-flex items-center justify-center gap-2"
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  <span className="inline-flex items-center gap-2">
-                    <Store className="w-4 h-4" /> EA Store
-                  </span>
-                  <span className="text-xs text-yellow-500/70">Browse</span>
+                  <Store className="w-4 h-4" /> EA Store
                 </Link>
-
                 <Link
                   href="/guideline"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full inline-flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20"
+                  className="px-3 py-2 rounded-lg text-xs font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20"
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  <span>Guidelines</span>
-                  <span className="text-xs text-cyan-500/70">Learn</span>
+                  Guidelines
                 </Link>
-
                 <Link
                   href="/demo"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full inline-flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition border border-green-500/30 text-green-300 hover:text-white hover:bg-green-500/20"
+                  className="px-3 py-2 rounded-lg text-xs font-medium transition border border-green-500/30 text-green-300 hover:text-white hover:bg-green-500/20"
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  <span>Demo</span>
-                  <span className="text-xs text-green-500/70">Watch</span>
+                  Demo
                 </Link>
 
                 {scrollToPricing ? (
@@ -276,56 +245,36 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                       setMobileMenuOpen(false);
                       scrollToPricing();
                     }}
-                    className="w-full inline-flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition border border-purple-500/30 text-purple-300 hover:text-white hover:bg-purple-500/20"
+                    className="px-3 py-2 rounded-lg text-xs font-medium transition border border-purple-500/30 text-purple-300 hover:text-white hover:bg-purple-500/20"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
-                    <span>Pricing</span>
-                    <span className="text-xs text-purple-500/70">Plans</span>
+                    Pricing
                   </button>
                 ) : (
                   <Link
                     href={pricingHref}
                     onClick={() => setMobileMenuOpen(false)}
-                    className="w-full inline-flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition border border-purple-500/30 text-purple-300 hover:text-white hover:bg-purple-500/20"
+                    className="px-3 py-2 rounded-lg text-xs font-medium transition border border-purple-500/30 text-purple-300 hover:text-white hover:bg-purple-500/20 text-center"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
-                    <span>Pricing</span>
-                    <span className="text-xs text-purple-500/70">Plans</span>
+                    Pricing
                   </Link>
                 )}
 
                 {isLoggedIn ? (
-                  <Link
-                    href="/dashboard"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="w-full inline-flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleLogout();
+                    }}
+                    className="col-span-2 px-3 py-2 rounded-lg text-xs font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20 inline-flex items-center justify-center gap-2"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
-                    <span>Dashboard</span>
-                    <span className="text-xs text-cyan-500/70">Open</span>
-                  </Link>
-                ) : null}
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-cyan-500/10">
-                {isLoggedIn ? (
-                  <>
-                    <div className="text-xs text-gray-500">Signed in as</div>
-                    <div className="text-sm text-cyan-300 break-all mt-1">{userName}</div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMobileMenuOpen(false);
-                        handleLogout();
-                      }}
-                      className="mt-3 w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20"
-                      style={{ fontFamily: 'Orbitron, sans-serif' }}
-                    >
-                      <LogOut className="w-4 h-4" /> Logout
-                    </button>
-                  </>
+                    <LogOut className="w-4 h-4" /> Logout
+                  </button>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2">
+                  <>
                     {onLoginClick ? (
                       <button
                         type="button"
@@ -333,7 +282,7 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                           setMobileMenuOpen(false);
                           onLoginClick();
                         }}
-                        className="px-4 py-3 rounded-xl text-sm font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20"
+                        className="px-3 py-2 rounded-lg text-xs font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20"
                         style={{ fontFamily: 'Orbitron, sans-serif' }}
                       >
                         Login
@@ -342,13 +291,12 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                       <Link
                         href={loginHref}
                         onClick={() => setMobileMenuOpen(false)}
-                        className="px-4 py-3 rounded-xl text-sm font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20 text-center"
+                        className="px-3 py-2 rounded-lg text-xs font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20 text-center"
                         style={{ fontFamily: 'Orbitron, sans-serif' }}
                       >
                         Login
                       </Link>
                     )}
-
                     {onRegisterClick ? (
                       <button
                         type="button"
@@ -356,7 +304,7 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                           setMobileMenuOpen(false);
                           onRegisterClick();
                         }}
-                        className="px-4 py-3 rounded-xl text-sm font-medium transition bg-cyan-500 hover:bg-cyan-400 text-black"
+                        className="px-3 py-2 rounded-lg text-xs font-medium transition bg-cyan-500 hover:bg-cyan-400 text-black"
                         style={{ fontFamily: 'Orbitron, sans-serif' }}
                       >
                         Get Started
@@ -365,15 +313,19 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                       <Link
                         href={registerHref}
                         onClick={() => setMobileMenuOpen(false)}
-                        className="px-4 py-3 rounded-xl text-sm font-medium transition bg-cyan-500 hover:bg-cyan-400 text-black text-center"
+                        className="px-3 py-2 rounded-lg text-xs font-medium transition bg-cyan-500 hover:bg-cyan-400 text-black text-center"
                         style={{ fontFamily: 'Orbitron, sans-serif' }}
                       >
                         Get Started
                       </Link>
                     )}
-                  </div>
+                  </>
                 )}
               </div>
+
+              {isLoggedIn ? (
+                <div className="mt-2 text-[10px] text-gray-500 break-all">{userName}</div>
+              ) : null}
             </div>
           </div>
         ) : null}

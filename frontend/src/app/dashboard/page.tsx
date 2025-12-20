@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet } from 'lucide-react';
+import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock } from 'lucide-react';
 import { useDashboard } from './context';
 import axios from 'axios';
 import ExnessBroker from '@/components/ExnessBroker';
@@ -10,7 +10,7 @@ const POLLING_INTERVAL = 2000; // Faster polling for real-time updates
 const EA_CONNECTED_TIMEOUT_SECONDS = 30; // Allow up to 30s between heartbeats before marking disconnected
 
 export default function DashboardHome() {
-  const { user, licenses, selectedLicense, selectLicense, settings, API_URL, refreshLicenses } = useDashboard();
+  const { user, licenses, selectedLicense, selectLicense, clearSelectedLicense, settings, API_URL, refreshLicenses } = useDashboard();
   
   // Trading state
   const [tradeData, setTradeData] = useState<any>(null);
@@ -36,6 +36,7 @@ export default function DashboardHome() {
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState<any>(null);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1);
   
   // Positions tab state
   const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
@@ -70,7 +71,26 @@ export default function DashboardHome() {
     };
   }, [licenses, selectedLicense, user?.email]);
 
+  useEffect(() => {
+    setTradeData(null);
+    setActionLogs([]);
+    setLastUpdate(null);
+    setEaConnected(false);
+  }, [selectedLicense]);
+
   const selectedNetwork = paymentNetworks.find((n) => String(n.id) === String(selectedNetworkId));
+
+  const pendingActivationCards = (purchaseRequests || [])
+    .filter((r) => String(r.status || '').toLowerCase() === 'pending')
+    .map((r) => ({
+      _type: 'purchase_request',
+      status: 'pending',
+      license_key: `PENDING-${r.id}`,
+      plan: r.plan,
+      mt5_account: r.mt5_account,
+      created_at: r.created_at,
+      request: r,
+    }));
 
   const fetchPaymentNetworks = async () => {
     try {
@@ -127,7 +147,8 @@ export default function DashboardHome() {
 
   // Polling for trade data when license is selected
   useEffect(() => {
-    if (!selectedLicense) return;
+    const isPurchaseRequest = selectedLicense && selectedLicense._type === 'purchase_request';
+    if (!selectedLicense || isPurchaseRequest || selectedLicense.status !== 'active') return;
 
     // Initial fetch
     fetchTradeData(selectedLicense.license_key);
@@ -271,6 +292,80 @@ export default function DashboardHome() {
     selectLicense(lic);
   };
 
+  const canGoToStep2 = !!selectedPlan && !!mt5Account.trim();
+
+  const resetPurchaseForm = () => {
+    setSelectedPlan(null);
+    setMt5Account('');
+    setTxid('');
+    setUserNote('');
+    setProofFile(null);
+    setMessage({ type: '', text: '' });
+    setPurchaseStep(1);
+  };
+
+  const renderActivationProgress = (req: any) => {
+    const status = String(req?.status || '').toLowerCase();
+    const isRejected = status === 'rejected';
+    const isApproved = status === 'approved';
+    const issuedKey = req?.issued_license_key;
+    const isActivated = !!issuedKey && (licenses || []).some((l) => String(l.license_key) === String(issuedKey));
+
+    const steps = [
+      { id: 'submitted', label: 'Payment Submitted', done: true },
+      { id: 'verification', label: isRejected ? 'Payment Rejected' : isApproved ? 'Payment Verified' : 'Payment Verification', done: isRejected || isApproved },
+      { id: 'issued', label: 'License Issued', done: !!issuedKey },
+      { id: 'activated', label: 'Activation Ready', done: isActivated },
+    ];
+
+    return (
+      <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-xl p-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 bg-cyan-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Clock className="w-5 h-5 text-cyan-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-white font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>License Activation Progress</p>
+            <p className="text-gray-500 text-[11px] mt-0.5">We are verifying your payment and preparing your license.</p>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {steps.map((s) => (
+            <div key={s.id} className="flex items-center gap-3">
+              <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                s.done ? 'bg-green-500/20 border-green-500/40' : 'bg-white/5 border-cyan-500/20'
+              }`}>
+                {s.done ? <Check className="w-3.5 h-3.5 text-green-300" /> : <span className="w-1.5 h-1.5 rounded-full bg-cyan-500/40" />}
+              </div>
+              <div className="flex-1">
+                <p className={`text-xs font-semibold ${s.done ? 'text-green-300' : isRejected ? 'text-red-300' : 'text-cyan-200'}`}>{s.label}</p>
+              </div>
+              {s.done ? <span className="text-[10px] text-gray-500">Done</span> : <span className="text-[10px] text-gray-600">Pending</span>}
+            </div>
+          ))}
+        </div>
+
+        {issuedKey ? (
+          <div className="mt-4">
+            <p className="text-[10px] text-gray-500 mb-1">Issued License Key</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 font-mono text-[10px] text-cyan-300 bg-black/40 px-2 py-1.5 rounded border border-cyan-500/20 truncate">{issuedKey}</code>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(issuedKey)}
+                className="p-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30"
+                title="Copy license key"
+              >
+                <Copy className="w-4 h-4 text-cyan-300" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   const handlePurchase = async () => {
     if (!selectedPlan) {
       setMessage({ type: 'error', text: 'Please select a plan' });
@@ -313,6 +408,7 @@ export default function DashboardHome() {
         setTxid('');
         setUserNote('');
         setProofFile(null);
+        setPurchaseStep(1);
         await fetchPurchaseRequests();
       } else {
         setMessage({ type: 'error', text: data.message || 'Submission failed' });
@@ -334,12 +430,95 @@ export default function DashboardHome() {
 
   // If license selected, show dashboard with trading
   if (selectedLicense) {
+    const isPurchaseRequest = selectedLicense._type === 'purchase_request';
+    const isActive = !isPurchaseRequest && selectedLicense.status === 'active';
+
+    if (!isActive) {
+      const request = isPurchaseRequest ? selectedLicense.request : null;
+      return (
+        <div className="max-w-7xl mx-auto pt-3 sm:pt-5 px-0.5 sm:px-4 pb-6 sm:pb-8">
+          <div className="space-y-3 sm:space-y-4">
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-white font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    {isPurchaseRequest ? 'PENDING ACTIVATION' : String(selectedLicense.status || 'INACTIVE').toUpperCase()}
+                  </p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    {isPurchaseRequest
+                      ? 'Your purchase is under verification. Once approved, your license will be activated.'
+                      : 'This license is not active. Trading dashboard is unavailable.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => clearSelectedLicense()}
+                  className="px-3 py-2 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 text-cyan-300 border border-cyan-500/30"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  Back
+                </button>
+              </div>
+
+              {isPurchaseRequest ? (
+                <div className="mt-4 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="bg-[#0a0a0f] border border-cyan-500/10 rounded-lg p-3">
+                      <p className="text-[10px] text-gray-500">Request</p>
+                      <p className="text-sm text-white font-mono">#{request?.id}</p>
+                    </div>
+                    <div className="bg-[#0a0a0f] border border-cyan-500/10 rounded-lg p-3">
+                      <p className="text-[10px] text-gray-500">Plan</p>
+                      <p className="text-sm text-white">{request?.plan}</p>
+                    </div>
+                    <div className="bg-[#0a0a0f] border border-cyan-500/10 rounded-lg p-3">
+                      <p className="text-[10px] text-gray-500">Status</p>
+                      <p className="text-sm font-bold text-yellow-300">{String(request?.status || '').toUpperCase()}</p>
+                    </div>
+                  </div>
+
+                  {renderActivationProgress(request)}
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await fetchPurchaseRequests();
+                        await refreshLicenses();
+                      }}
+                      className="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg font-bold text-xs"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      <RefreshCw className="w-4 h-4" /> Refresh Status
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (request?.issued_license_key) {
+                          navigator.clipboard.writeText(request.issued_license_key);
+                        }
+                      }}
+                      disabled={!request?.issued_license_key}
+                      className="inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-cyan-300 border border-cyan-500/30 px-4 py-2 rounded-lg font-bold text-xs"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      <Copy className="w-4 h-4" /> Copy License Key
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     const isRecoveryModeDetails = tradeData?.trading_mode?.toLowerCase().includes('recovery');
     return (
       <div className="max-w-7xl mx-auto pt-3 sm:pt-5 px-0.5 sm:px-4 pb-6 sm:pb-8">
         <div className="space-y-3 sm:space-y-4">
           {/* License Expiry Warning Banner */}
-          {getDaysRemaining(selectedLicense) <= 7 && (
+          {isActive && getDaysRemaining(selectedLicense) <= 7 && (
             <div className={`rounded-lg px-3 sm:px-4 py-2 sm:py-3 border ${
               getDaysRemaining(selectedLicense) <= 0 
                 ? 'bg-red-500/10 border-red-500/30' 
@@ -985,7 +1164,7 @@ export default function DashboardHome() {
 
   // License Selection Screen
   return (
-    <div className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+    <div className="max-w-3xl mx-auto px-1 sm:px-4 py-4 sm:py-8">
       <div className="text-center mb-4 sm:mb-6">
         <h2 className="text-lg sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Welcome,</h2>
         <h2 className="text-sm sm:text-xl font-bold text-cyan-400 mb-1 break-all px-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{user?.name || user?.email}</h2>
@@ -1016,6 +1195,10 @@ export default function DashboardHome() {
                     Your payment proof has been submitted. Status: <span className="text-yellow-300 font-semibold">PENDING</span>
                   </p>
 
+                  <div className="mt-3">
+                    {renderActivationProgress(purchaseSuccess)}
+                  </div>
+
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3">
                       <p className="text-[10px] text-gray-500">Request ID</p>
@@ -1041,7 +1224,7 @@ export default function DashboardHome() {
                     <button
                       onClick={() => {
                         setPurchaseSuccess(null);
-                        setMessage({ type: '', text: '' });
+                        resetPurchaseForm();
                       }}
                       className="inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-cyan-300 border border-cyan-500/30 px-4 py-2 rounded-lg font-bold text-xs sm:text-sm"
                       style={{ fontFamily: 'Orbitron, sans-serif' }}
@@ -1054,6 +1237,24 @@ export default function DashboardHome() {
             </div>
           ) : (
             <div className="pt-4">
+              <div className="mb-4 bg-[#0a0a0f] border border-cyan-500/10 rounded-xl p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Step {purchaseStep} / 2</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetPurchaseForm();
+                      }}
+                      className="text-[10px] text-gray-500 hover:text-cyan-300"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-600 mt-1">Step 1: Plan & MT5 • Step 2: Payment Details</p>
+              </div>
+
               {plans.length === 0 ? (
                 <div className="text-center py-4">
                   <p className="text-gray-500 text-sm">Loading plans...</p>
@@ -1084,7 +1285,7 @@ export default function DashboardHome() {
                 </div>
               )}
               
-              {plans.length > 0 && (
+              {plans.length > 0 && purchaseStep === 1 ? (
                 <>
                   <div className="mb-3">
                     <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">MT5 Account Number</label>
@@ -1096,6 +1297,31 @@ export default function DashboardHome() {
                       className="w-full px-3 py-2 sm:py-2.5 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white placeholder-gray-600"
                     />
                     <p className="text-[10px] sm:text-xs text-gray-600 mt-1">License will be bound to this account only</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPurchaseStep(2)}
+                    disabled={!canGoToStep2}
+                    className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    NEXT: PAYMENT DETAILS
+                  </button>
+                </>
+              ) : null}
+
+              {plans.length > 0 && purchaseStep === 2 ? (
+                <>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPurchaseStep(1)}
+                      className="text-cyan-300 hover:text-cyan-200 text-xs font-medium"
+                    >
+                      ← Back
+                    </button>
+                    <p className="text-[10px] text-gray-600">Review wallet, upload proof, submit</p>
                   </div>
 
                   <div className="mb-3">
@@ -1220,8 +1446,10 @@ export default function DashboardHome() {
                   >
                     {purchasing ? 'SUBMITTING...' : 'SUBMIT PAYMENT PROOF'}
                   </button>
+                </>
+              ) : null}
 
-                  <div className="mt-4 border-t border-cyan-500/10 pt-4">
+              <div className="mt-4 border-t border-cyan-500/10 pt-4">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs sm:text-sm font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MY PAYMENT REQUESTS</p>
                       <button
@@ -1275,9 +1503,7 @@ export default function DashboardHome() {
                         ))}
                       </div>
                     )}
-                  </div>
-                </>
-              )}
+              </div>
             </div>
           )}
         </div>
@@ -1299,6 +1525,50 @@ export default function DashboardHome() {
         <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">{licenses.length} license(s)</span>
       </div>
       
+      {pendingActivationCards.length > 0 ? (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs sm:text-sm font-semibold text-yellow-300" style={{ fontFamily: 'Orbitron, sans-serif' }}>PENDING ACTIVATIONS</h3>
+            <span className="text-[10px] sm:text-xs text-gray-500">{pendingActivationCards.length} pending</span>
+          </div>
+          <div className="space-y-2">
+            {pendingActivationCards.map((p: any) => (
+              <div
+                key={p.license_key}
+                onClick={() => handleSelectLicense(p)}
+                className="bg-[#12121a] rounded-xl cursor-pointer hover:shadow-lg hover:shadow-yellow-500/10 transition-all border border-yellow-500/20 hover:border-yellow-400/50 overflow-hidden"
+              >
+                <div className="px-3 sm:px-5 py-3 bg-gradient-to-r from-yellow-500/10 to-transparent border-b border-yellow-500/10 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/10 text-yellow-300 border border-yellow-500/30">PENDING</span>
+                    <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{p.plan}</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500">Open →</div>
+                </div>
+                <div className="px-3 sm:px-5 py-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div>
+                    <p className="text-[10px] text-gray-500">Request</p>
+                    <p className="text-xs text-white font-mono">#{p.request?.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500">MT5</p>
+                    <p className="text-xs text-gray-300">{p.mt5_account || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500">Network</p>
+                    <p className="text-xs text-gray-300">{p.request?.network?.name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500">Created</p>
+                    <p className="text-xs text-gray-300">{p.created_at ? new Date(p.created_at).toLocaleDateString() : '-'}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {licenses.length === 0 ? (
         <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-4 sm:p-8 text-center">
           <p className="text-2xl sm:text-4xl mb-2 sm:mb-3">🔑</p>
