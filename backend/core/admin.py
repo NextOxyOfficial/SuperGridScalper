@@ -140,6 +140,59 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                 obj.reviewed_by = request.user
                 obj.reviewed_at = timezone.now()
                 self.message_user(request, f'License {new_license.license_key[:16]}... created for {obj.user.email}')
+                
+                # Send approval email
+                try:
+                    from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+                    from django.core.mail import EmailMultiAlternatives
+                    
+                    base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+                    subject = 'Payment Approved - Your License is Ready'
+                    
+                    if can_send_email_to_user(obj.user, 'transactional'):
+                        text_message = (
+                            f"Hi {obj.user.first_name or 'Trader'},\n\n"
+                            "Your payment has been approved and your license has been issued.\n\n"
+                            f"Request ID: #{obj.id}\n"
+                            f"Plan: {obj.plan.name}\n"
+                            f"License Key: {new_license.license_key}\n"
+                            f"Expires At: {new_license.expires_at.isoformat()}\n\n"
+                            f"Open your dashboard: {base}/dashboard\n\n"
+                            "Thank you for your purchase."
+                        )
+                        
+                        html_message = render_email_template(
+                            subject=subject,
+                            heading='🎉 Payment Approved!',
+                            message=f"""
+                                <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                                <p>Great news! Your payment has been <strong style="color: #10b981;">approved</strong> and your license has been issued.</p>
+                                
+                                <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                    <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">License Details:</p>
+                                    <p style="margin: 4px 0; color: #374151;"><strong>Request ID:</strong> #{obj.id}</p>
+                                    <p style="margin: 4px 0; color: #374151;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                    <p style="margin: 4px 0; color: #374151;"><strong>License Key:</strong> <code style="background-color: rgba(6, 182, 212, 0.2); padding: 2px 6px; border-radius: 4px; color: #0891b2;">{new_license.license_key}</code></p>
+                                    <p style="margin: 4px 0; color: #374151;"><strong>Expires At:</strong> {new_license.expires_at.strftime('%B %d, %Y')}</p>
+                                </div>
+                                
+                                <p>You can now access your license and start trading with our AI Expert Advisor.</p>
+                            """,
+                            cta_text='OPEN DASHBOARD',
+                            cta_url=f'{base}/dashboard',
+                            footer_note='Thank you for choosing MarksTrades!',
+                            preheader=f'Your {obj.plan.name} license has been approved and activated. Start trading now!',
+                            unsubscribe_url=get_unsubscribe_url(obj.user)
+                        )
+                        
+                        msg = EmailMultiAlternatives(subject, text_message, get_email_from_address(), [obj.user.email])
+                        msg.attach_alternative(html_message, "text/html")
+                        msg = add_email_headers(msg, 'transactional', user=obj.user)
+                        msg.send(fail_silently=False)
+                        self.message_user(request, f'Approval email sent to {obj.user.email}')
+                except Exception as e:
+                    print(f'[ADMIN] Failed to send approval email: {e}')
+                    
             except Exception as e:
                 self.message_user(request, f'Failed to create license: {e}', level='error')
         super().save_model(request, obj, form, change)
@@ -293,54 +346,59 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
             except Exception:
                 pass
 
+            # Send approval email to user
             try:
                 from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
                 from django.core.mail import EmailMultiAlternatives
                 
-                base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
+                base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
                 subject = 'Payment Approved - Your License is Ready'
                 
-                text_message = (
-                    f"Hi {obj.user.first_name or 'Trader'},\n\n"
-                    "Your payment has been approved and your license has been issued.\n\n"
-                    f"Request ID: #{obj.id}\n"
-                    f"Plan: {obj.plan.name}\n"
-                    f"License Key: {new_license.license_key}\n"
-                    f"Expires At: {new_license.expires_at.isoformat()}\n\n"
-                    f"Open your dashboard: {base}/dashboard\n\n"
-                    "Thank you for your purchase."
-                )
-                
-                html_message = render_email_template(
-                    subject=subject,
-                    heading='🎉 Payment Approved!',
-                    message=f"""
-                        <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
-                        <p>Great news! Your payment has been <strong style="color: #10b981;">approved</strong> and your license has been issued.</p>
-                        
-                        <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
-                            <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">License Details:</p>
-                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.id}</p>
-                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
-                            <p style="margin: 4px 0; color: #d1d5db;"><strong>License Key:</strong> <code style="background-color: rgba(6, 182, 212, 0.1); padding: 2px 6px; border-radius: 4px; color: #06b6d4;">{new_license.license_key}</code></p>
-                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Expires At:</strong> {new_license.expires_at.strftime('%B %d, %Y')}</p>
-                        </div>
-                        
-                        <p>You can now access your license and start trading with our AI Expert Advisor.</p>
-                    """,
-                    cta_text='OPEN DASHBOARD',
-                    cta_url=f'{base}/dashboard',
-                    footer_note='Thank you for choosing MarksTrades!',
-                    preheader=f'Your {obj.plan.name} license has been approved and activated. Start trading now!',
-                    unsubscribe_url=get_unsubscribe_url(obj.user)
-                )
-                
-                msg = EmailMultiAlternatives(subject, text_message, get_email_from_address(), [obj.user.email])
-                msg.attach_alternative(html_message, "text/html")
-                msg = add_email_headers(msg, 'transactional', user=obj.user)
-                msg.send(fail_silently=False)
-            except Exception:
-                pass
+                if not can_send_email_to_user(obj.user, 'transactional'):
+                    print(f'[ADMIN] User {obj.user.email} opted out of transactional emails')
+                else:
+                    text_message = (
+                        f"Hi {obj.user.first_name or 'Trader'},\n\n"
+                        "Your payment has been approved and your license has been issued.\n\n"
+                        f"Request ID: #{obj.id}\n"
+                        f"Plan: {obj.plan.name}\n"
+                        f"License Key: {new_license.license_key}\n"
+                        f"Expires At: {new_license.expires_at.isoformat()}\n\n"
+                        f"Open your dashboard: {base}/dashboard\n\n"
+                        "Thank you for your purchase."
+                    )
+                    
+                    html_message = render_email_template(
+                        subject=subject,
+                        heading='🎉 Payment Approved!',
+                        message=f"""
+                            <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                            <p>Great news! Your payment has been <strong style="color: #10b981;">approved</strong> and your license has been issued.</p>
+                            
+                            <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">License Details:</p>
+                                <p style="margin: 4px 0; color: #374151;"><strong>Request ID:</strong> #{obj.id}</p>
+                                <p style="margin: 4px 0; color: #374151;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                <p style="margin: 4px 0; color: #374151;"><strong>License Key:</strong> <code style="background-color: rgba(6, 182, 212, 0.2); padding: 2px 6px; border-radius: 4px; color: #0891b2;">{new_license.license_key}</code></p>
+                                <p style="margin: 4px 0; color: #374151;"><strong>Expires At:</strong> {new_license.expires_at.strftime('%B %d, %Y')}</p>
+                            </div>
+                            
+                            <p>You can now access your license and start trading with our AI Expert Advisor.</p>
+                        """,
+                        cta_text='OPEN DASHBOARD',
+                        cta_url=f'{base}/dashboard',
+                        footer_note='Thank you for choosing MarksTrades!',
+                        preheader=f'Your {obj.plan.name} license has been approved and activated. Start trading now!',
+                        unsubscribe_url=get_unsubscribe_url(obj.user)
+                    )
+                    
+                    msg = EmailMultiAlternatives(subject, text_message, get_email_from_address(), [obj.user.email])
+                    msg.attach_alternative(html_message, "text/html")
+                    msg = add_email_headers(msg, 'transactional', user=obj.user)
+                    msg.send(fail_silently=False)
+                    print(f'[ADMIN] Approval email sent to {obj.user.email}')
+            except Exception as e:
+                print(f'[ADMIN] Failed to send approval email to {obj.user.email}: {e}')
 
     approve_requests.short_description = 'Approve selected requests and issue license'
 
