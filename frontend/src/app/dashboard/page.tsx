@@ -40,6 +40,9 @@ export default function DashboardHome() {
   const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1);
   const [refreshing, setRefreshing] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
+
+  const lastAutoLicenseRefreshRef = useRef<number>(0);
+  const purchaseRequestsPollingRef = useRef<NodeJS.Timeout | null>(null);
   
   // Positions tab state
   const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
@@ -113,11 +116,15 @@ export default function DashboardHome() {
       _type: 'purchase_request',
       status: 'pending',
       license_key: `PENDING-${r.id}`,
-      plan: r.plan,
+      plan: typeof r.plan === 'string' ? r.plan : (r.plan?.name || '-'),
       mt5_account: r.mt5_account,
       created_at: r.created_at,
       request: r,
     }));
+
+  const pendingPaymentRequests = (purchaseRequests || []).filter(
+    (r) => String(r?.status || '').toLowerCase() === 'pending'
+  );
 
   const fetchPaymentNetworks = async () => {
     try {
@@ -145,7 +152,24 @@ export default function DashboardHome() {
       });
       const data = await res.json();
       if (data.success) {
-        setPurchaseRequests(data.requests || []);
+        const nextRequests = data.requests || [];
+        setPurchaseRequests(nextRequests);
+
+        // If admin approved and license key issued, refresh licenses so the card appears.
+        try {
+          const approvedKeys = (nextRequests || [])
+            .filter((r: any) => String(r?.status || '').toLowerCase() === 'approved' && r?.issued_license_key)
+            .map((r: any) => String(r.issued_license_key));
+
+          const missing = approvedKeys.some((k: string) => !(licenses || []).some((l: any) => String(l?.license_key) === k));
+          const now = Date.now();
+          if (missing && now - lastAutoLicenseRefreshRef.current > 5000) {
+            lastAutoLicenseRefreshRef.current = now;
+            await refreshLicenses();
+          }
+        } catch (e) {
+          // ignore
+        }
       }
     } catch (e) {
       console.error('Failed to fetch purchase requests');
@@ -153,6 +177,32 @@ export default function DashboardHome() {
       setLoadingRequests(false);
     }
   };
+
+  // Poll purchase requests when there is at least one pending item (so approvals show without manual refresh)
+  useEffect(() => {
+    const hasPending = (purchaseRequests || []).some((r: any) => String(r?.status || '').toLowerCase() === 'pending');
+
+    if (!user?.email || !hasPending) {
+      if (purchaseRequestsPollingRef.current) {
+        clearInterval(purchaseRequestsPollingRef.current);
+        purchaseRequestsPollingRef.current = null;
+      }
+      return;
+    }
+
+    if (!purchaseRequestsPollingRef.current) {
+      purchaseRequestsPollingRef.current = setInterval(() => {
+        fetchPurchaseRequests();
+      }, 10000);
+    }
+
+    return () => {
+      if (purchaseRequestsPollingRef.current) {
+        clearInterval(purchaseRequestsPollingRef.current);
+        purchaseRequestsPollingRef.current = null;
+      }
+    };
+  }, [user?.email, purchaseRequests]);
   
   const fetchAllLicensesTradeData = async () => {
     if (!licenses || licenses.length === 0) return;
@@ -437,8 +487,37 @@ export default function DashboardHome() {
         setProofFile(null);
         setPurchaseStep(1);
         
-        // Add new request to pending list immediately
-        setPurchaseRequests(prev => [data.request, ...prev]);
+        // Add new request to list immediately (normalize to match list endpoint shape)
+        setPurchaseRequests((prev) => [
+          {
+            id: data.request?.id,
+            request_number: data.request?.request_number,
+            status: data.request?.status || 'pending',
+            created_at: data.request?.created_at || new Date().toISOString(),
+            reviewed_at: data.request?.reviewed_at || null,
+            plan: (typeof data.request?.plan === 'string')
+              ? data.request.plan
+              : (data.request?.plan?.name || selectedPlan?.name || '-'),
+            plan_id: data.request?.plan_id || selectedPlan?.id,
+            amount_usd: (typeof data.request?.plan === 'object' && data.request?.plan?.price != null)
+              ? data.request.plan.price
+              : (data.request?.amount_usd ?? selectedPlan?.price),
+            network: data.request?.network || {
+              id: selectedNetwork?.id,
+              name: selectedNetwork?.name || data.request?.payment?.network,
+              code: selectedNetwork?.code,
+              token_symbol: selectedNetwork?.token_symbol || data.request?.payment?.token_symbol,
+              wallet_address: selectedNetwork?.wallet_address,
+            },
+            mt5_account: data.request?.mt5_account ?? mt5Account.trim(),
+            txid: data.request?.payment?.txid ?? txid.trim(),
+            user_note: userNote.trim(),
+            admin_note: null,
+            proof_url: data.request?.payment?.proof_url,
+            issued_license_key: data.request?.issued_license_key || null,
+          },
+          ...(prev || []),
+        ]);
         
         // Also refresh from server to ensure sync
         await fetchPurchaseRequests();
@@ -464,6 +543,9 @@ export default function DashboardHome() {
   if (selectedLicense) {
     const isPurchaseRequest = selectedLicense._type === 'purchase_request';
     const isActive = !isPurchaseRequest && selectedLicense.status === 'active';
+    const isExpiredLicense = !isPurchaseRequest && (
+      String(selectedLicense.status || '').toLowerCase() === 'expired' || getDaysRemaining(selectedLicense) <= 0
+    );
 
     if (!isActive) {
       const request = isPurchaseRequest ? selectedLicense.request : null;
@@ -479,17 +561,31 @@ export default function DashboardHome() {
                   <p className="text-gray-500 text-xs mt-1">
                     {isPurchaseRequest
                       ? 'Your purchase is under verification. Once approved, your license will be activated.'
-                      : 'This license is not active. Trading dashboard is unavailable.'}
+                      : isExpiredLicense
+                        ? 'Your license has expired. Extend now to continue trading.'
+                        : 'This license is not active. Trading dashboard is unavailable.'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => clearSelectedLicense()}
-                  className="px-3 py-2 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 text-cyan-300 border border-cyan-500/30"
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
-                  Back
-                </button>
+                <div className="flex items-center gap-2">
+                  {isExpiredLicense ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowExtendModal(true)}
+                      className="px-3 py-2 rounded-lg text-xs font-bold bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/40"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      Extend
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => clearSelectedLicense()}
+                    className="px-3 py-2 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 text-cyan-300 border border-cyan-500/30"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    Back
+                  </button>
+                </div>
               </div>
 
               {isPurchaseRequest ? (
@@ -501,7 +597,7 @@ export default function DashboardHome() {
                     </div>
                     <div className="bg-[#0a0a0f] border border-cyan-500/10 rounded-lg p-3">
                       <p className="text-[10px] text-gray-500">Plan</p>
-                      <p className="text-sm text-white">{request?.plan}</p>
+                      <p className="text-sm text-white">{typeof request?.plan === 'string' ? request?.plan : (request?.plan?.name || '-')}</p>
                     </div>
                     <div className="bg-[#0a0a0f] border border-cyan-500/10 rounded-lg p-3">
                       <p className="text-[10px] text-gray-500">Status</p>
@@ -542,6 +638,45 @@ export default function DashboardHome() {
                     >
                       <Copy className="w-4 h-4" /> Copy License Key
                     </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {isExpiredLicense && showExtendModal ? (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                  <div className="bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-6 w-full max-w-xl border border-purple-500/30">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <Sparkles className="w-6 h-6 text-cyan-400" />
+                        <h2 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extend Your License</h2>
+                      </div>
+                      <button
+                        onClick={() => setShowExtendModal(false)}
+                        className="text-gray-400 hover:text-white transition-colors"
+                      >
+                        <X className="w-6 h-6" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {plans.map((plan: any) => (
+                        <button
+                          key={plan.id}
+                          type="button"
+                          onClick={() => handleExtendLicense(plan.id)}
+                          disabled={extendingPlan === plan.id}
+                          className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <div className="text-left">
+                            <p className="text-white font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</p>
+                            <p className="text-gray-400 text-xs">{plan.duration_days} days</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-cyan-300 font-bold">${plan.price}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -1521,11 +1656,11 @@ export default function DashboardHome() {
 
                     {loadingRequests ? (
                       <div className="text-gray-500 text-xs">Loading requests...</div>
-                    ) : purchaseRequests.length === 0 ? (
-                      <div className="text-gray-600 text-xs">No requests yet.</div>
+                    ) : pendingPaymentRequests.length === 0 ? (
+                      <div className="text-gray-600 text-xs">No pending requests.</div>
                     ) : (
                       <div className="space-y-2">
-                        {purchaseRequests.slice(0, 5).map((r) => (
+                        {pendingPaymentRequests.slice(0, 5).map((r) => (
                           <div key={r.id} className="bg-black/30 border border-cyan-500/10 rounded-lg p-3">
                             <div className="flex items-center justify-between gap-2">
                               <div>
