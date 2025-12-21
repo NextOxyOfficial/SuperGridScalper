@@ -615,9 +615,7 @@ def login(request):
     # Get all user's licenses with EA settings
     licenses = License.objects.filter(user=user).select_related('plan').prefetch_related('ea_settings')
     
-    if not licenses.exists():
-        return JsonResponse({'success': False, 'message': 'No license found for this account'})
-    
+    # Allow login even without license - user needs to login to purchase license
     license_list = []
     for lic in licenses:
         # Get EA settings (BTCUSD preferred, or any)
