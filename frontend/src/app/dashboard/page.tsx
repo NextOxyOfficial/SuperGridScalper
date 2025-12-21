@@ -40,6 +40,7 @@ export default function DashboardHome() {
   const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1);
   const [refreshing, setRefreshing] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
+  const [walletCopied, setWalletCopied] = useState(false);
 
   const lastAutoLicenseRefreshRef = useRef<number>(0);
   const purchaseRequestsPollingRef = useRef<NodeJS.Timeout | null>(null);
@@ -1544,11 +1545,19 @@ export default function DashboardHome() {
                             </code>
                             <button
                               type="button"
-                              onClick={() => navigator.clipboard.writeText(selectedNetwork.wallet_address)}
-                              className="p-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30"
-                              title="Copy wallet"
+                              onClick={() => {
+                                navigator.clipboard.writeText(selectedNetwork.wallet_address);
+                                setWalletCopied(true);
+                                setTimeout(() => setWalletCopied(false), 2000);
+                              }}
+                              className={`p-2 rounded-lg border transition-all duration-300 ${walletCopied ? 'bg-green-500/20 border-green-500/50' : 'bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30'}`}
+                              title={walletCopied ? 'Copied!' : 'Copy wallet'}
                             >
-                              <Copy className="w-4 h-4 text-cyan-300" />
+                              {walletCopied ? (
+                                <Check className="w-4 h-4 text-green-400" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-cyan-300" />
+                              )}
                             </button>
                           </div>
                         </div>
