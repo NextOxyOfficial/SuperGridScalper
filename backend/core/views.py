@@ -10,6 +10,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.db.models import Count
 from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest
 from decimal import Decimal
 import json
@@ -23,6 +24,26 @@ def get_client_ip(request):
     else:
         ip = request.META.get('REMOTE_ADDR')
     return ip
+
+
+def resolve_user(identifier: str):
+    ident = (identifier or '').strip()
+    if not ident:
+        return None
+
+    email_qs = User.objects.filter(email__iexact=ident)
+    username_qs = User.objects.filter(username__iexact=ident).exclude(id__in=email_qs.values('id'))
+    ids = list(email_qs.values_list('id', flat=True)) + list(username_qs.values_list('id', flat=True))
+    if not ids:
+        return None
+
+    # Prefer the user record that actually has licenses (handles duplicate emails / legacy data)
+    return (
+        User.objects.filter(id__in=ids)
+        .annotate(license_count=Count('licenses'))
+        .order_by('-license_count', '-id')
+        .first()
+    )
 
 
 def admin_stats(request):
@@ -198,7 +219,7 @@ def get_payment_networks(request):
 @require_http_methods(["POST"])
 def create_license_purchase_request(request):
     """Create a manual payment request with proof upload."""
-    email = (request.POST.get('email') or '').strip().lower()
+    email = (request.POST.get('email') or '').strip()
     plan_id = (request.POST.get('plan_id') or '').strip()
     network_id = (request.POST.get('network_id') or '').strip()
     mt5_account = (request.POST.get('mt5_account') or '').strip()
@@ -212,9 +233,8 @@ def create_license_purchase_request(request):
     if not proof:
         return JsonResponse({'success': False, 'message': 'Payment proof file is required'}, status=400)
 
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
+    user = resolve_user(email)
+    if not user:
         return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
 
     try:
@@ -386,13 +406,12 @@ def list_license_purchase_requests(request):
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
 
-    email = (data.get('email') or '').strip().lower()
+    email = (data.get('email') or '').strip()
     if not email:
         return JsonResponse({'success': False, 'message': 'Email is required'}, status=400)
 
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
+    user = resolve_user(email)
+    if not user:
         return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
 
     qs = LicensePurchaseRequest.objects.filter(user=user).select_related('plan', 'network', 'issued_license')
@@ -621,7 +640,8 @@ def login(request):
         'message': 'Login successful',
         'user': {
             'id': user.id,
-            'email': user.email,
+            'email': user.email or user.username,
+            'username': user.username,
             'name': user.first_name
         },
         'licenses': license_list
@@ -723,23 +743,17 @@ def get_licenses(request):
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
     
-    email = data.get('email', '').strip().lower()
+    email = data.get('email', '').strip()
     
     if not email:
         return JsonResponse({'success': False, 'message': 'Email is required'})
     
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
+    user = resolve_user(email)
+    if not user:
         return JsonResponse({'success': False, 'message': 'User not found'})
     
     # Get all user's licenses with EA settings
     licenses = License.objects.filter(user=user).select_related('plan').prefetch_related('ea_settings')
-    
-    # Debug logging
-    print(f"[DEBUG] get_licenses: user={user.email}, license_count={licenses.count()}")
-    for lic in licenses:
-        print(f"[DEBUG]   - License: {lic.license_key[:16]}... status={lic.status} plan={lic.plan.name}")
     
     license_list = []
     for lic in licenses:
@@ -784,7 +798,7 @@ def subscribe(request):
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
     
-    email = data.get('email', '').strip().lower()
+    email = data.get('email', '').strip()
     password = data.get('password', '')
     plan_id = data.get('plan_id')
     mt5_account = data.get('mt5_account', '').strip()
@@ -798,9 +812,8 @@ def subscribe(request):
     # Check if this is an existing logged-in user (password = 'existing_user')
     if password == 'existing_user':
         # Get user by email (already logged in from dashboard)
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
+        user = resolve_user(email)
+        if not user:
             return JsonResponse({'success': False, 'message': 'User not found. Please login again.'})
     else:
         # Authenticate or create user (from landing page)

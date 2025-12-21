@@ -31,23 +31,20 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // Fetch fresh licenses from server
   const fetchLicensesFromServer = async (email: string) => {
     try {
-      console.log('[DEBUG] Fetching licenses for:', email);
       const res = await fetch(`${API_URL}/licenses/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
       });
       const data = await res.json();
-      console.log('[DEBUG] Licenses response:', data);
       if (data.success) {
-        console.log('[DEBUG] Setting licenses count:', data.licenses?.length || 0);
         setLicenses(data.licenses);
         localStorage.setItem('licenses', JSON.stringify(data.licenses));
       } else {
-        console.error('[DEBUG] License fetch failed:', data.message);
+        console.error('Failed to fetch licenses from server');
       }
     } catch (e) {
-      console.error('Failed to fetch licenses from server', e);
+      console.error('Failed to fetch licenses from server');
     }
   };
 
@@ -71,8 +68,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
     
     // Fetch fresh data from server
-    if (parsedUser?.email) {
-      fetchLicensesFromServer(parsedUser.email);
+    const identifier = parsedUser?.email || parsedUser?.username;
+    if (identifier) {
+      fetchLicensesFromServer(identifier);
     }
     
     if (selectedLicenseData) {
@@ -132,8 +130,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     if (userData) {
       try {
         const parsed = JSON.parse(userData);
-        if (parsed?.email) {
-          await fetchLicensesFromServer(parsed.email);
+        const identifier = parsed?.email || parsed?.username;
+        if (identifier) {
+          await fetchLicensesFromServer(identifier);
           return;
         }
       } catch (e) {

@@ -184,13 +184,11 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                 plan=obj.plan,
                 mt5_account=(obj.mt5_account or None)
             )
-            print(f"[DEBUG] Admin approval: Created license {new_license.license_key} for user {obj.user.email}")
             obj.issued_license = new_license
             obj.status = 'approved'
             obj.reviewed_by = request.user
             obj.reviewed_at = timezone.now()
             obj.save(update_fields=['issued_license', 'status', 'reviewed_by', 'reviewed_at', 'updated_at'])
-            print(f"[DEBUG] Admin approval: Updated purchase request #{obj.id} status to approved")
 
             try:
                 from core.utils import send_admin_notification

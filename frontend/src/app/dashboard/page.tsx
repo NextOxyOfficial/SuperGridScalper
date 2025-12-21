@@ -142,13 +142,14 @@ export default function DashboardHome() {
   };
 
   const fetchPurchaseRequests = async () => {
-    if (!user?.email) return;
+    const identifier = user?.email || (user as any)?.username;
+    if (!identifier) return;
     setLoadingRequests(true);
     try {
       const res = await fetch(`${API_URL}/license-purchase-requests/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email })
+        body: JSON.stringify({ email: identifier })
       });
       const data = await res.json();
       if (data.success) {
@@ -161,18 +162,14 @@ export default function DashboardHome() {
             .filter((r: any) => String(r?.status || '').toLowerCase() === 'approved' && r?.issued_license_key)
             .map((r: any) => String(r.issued_license_key));
 
-          console.log('[DEBUG] Approved keys:', approvedKeys);
-          console.log('[DEBUG] Current licenses:', (licenses || []).map((l: any) => l?.license_key));
-
           const missing = approvedKeys.some((k: string) => !(licenses || []).some((l: any) => String(l?.license_key) === k));
           const now = Date.now();
           if (missing && now - lastAutoLicenseRefreshRef.current > 5000) {
-            console.log('[DEBUG] Missing approved licenses detected, refreshing...');
             lastAutoLicenseRefreshRef.current = now;
             await refreshLicenses();
           }
         } catch (e) {
-          console.error('[DEBUG] Auto-refresh error:', e);
+          // ignore
         }
       }
     } catch (e) {
@@ -185,8 +182,9 @@ export default function DashboardHome() {
   // Poll purchase requests when there is at least one pending item (so approvals show without manual refresh)
   useEffect(() => {
     const hasPending = (purchaseRequests || []).some((r: any) => String(r?.status || '').toLowerCase() === 'pending');
+    const identifier = user?.email || (user as any)?.username;
 
-    if (!user?.email || !hasPending) {
+    if (!identifier || !hasPending) {
       if (purchaseRequestsPollingRef.current) {
         clearInterval(purchaseRequestsPollingRef.current);
         purchaseRequestsPollingRef.current = null;
@@ -206,7 +204,7 @@ export default function DashboardHome() {
         purchaseRequestsPollingRef.current = null;
       }
     };
-  }, [user?.email, purchaseRequests]);
+  }, [user?.email, (user as any)?.username, purchaseRequests]);
   
   const fetchAllLicensesTradeData = async () => {
     if (!licenses || licenses.length === 0) return;
@@ -470,7 +468,7 @@ export default function DashboardHome() {
 
     try {
       const form = new FormData();
-      form.append('email', user?.email || '');
+      form.append('email', user?.email || (user as any)?.username || '');
       form.append('plan_id', String(selectedPlan.id));
       form.append('network_id', String(selectedNetworkId));
       form.append('mt5_account', mt5Account.trim());
