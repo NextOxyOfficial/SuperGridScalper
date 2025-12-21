@@ -9,7 +9,11 @@ import ExnessBroker from '@/components/ExnessBroker'
 import Header from '@/components/Header'
 import { useSiteSettings } from '@/context/SiteSettingsContext'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api'
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === 'development'
+    ? 'http://localhost:8000/api'
+    : 'https://markstrades.com/api')
 
 interface Plan {
   id: number

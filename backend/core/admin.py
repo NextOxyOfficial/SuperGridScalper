@@ -103,6 +103,8 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
         for obj in queryset.select_related('user', 'plan', 'network', 'issued_license'):
             if obj.status != 'pending':
                 continue
+            
+            # If already has a license linked, just update status
             if obj.issued_license_id:
                 obj.status = 'approved'
                 obj.reviewed_by = request.user
@@ -180,11 +182,18 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                     pass
                 continue
 
-            new_license = License.objects.create(
-                user=obj.user,
-                plan=obj.plan,
-                mt5_account=(obj.mt5_account or None)
-            )
+            # Create new license
+            try:
+                new_license = License.objects.create(
+                    user=obj.user,
+                    plan=obj.plan,
+                    mt5_account=(obj.mt5_account or None)
+                )
+            except Exception as e:
+                print(f'[ADMIN] License creation failed for request {obj.id}: {e}')
+                self.message_user(request, f'Failed to create license for request #{obj.id}: {e}', level='error')
+                continue
+            
             obj.issued_license = new_license
             obj.status = 'approved'
             obj.reviewed_by = request.user
