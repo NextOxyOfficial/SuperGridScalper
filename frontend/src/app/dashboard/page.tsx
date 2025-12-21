@@ -1769,7 +1769,7 @@ export default function DashboardHome() {
       {licenses.length === 0 ? (
         <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-4 sm:p-8 text-center">
           <p className="text-2xl sm:text-4xl mb-2 sm:mb-3">🔑</p>
-          <h3 className="text-sm sm:text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>No Licenses Found</h3>
+          <h3 className="text-sm sm:text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>No Active Licenses Found</h3>
           <p className="text-gray-500 text-xs sm:text-sm">Purchase a plan above to get started.</p>
         </div>
       ) : (

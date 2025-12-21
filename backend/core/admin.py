@@ -16,6 +16,26 @@ admin.site.unregister(User)
 class CustomUserAdmin(UserAdmin):
     search_fields = ['username', 'email', 'first_name', 'last_name']
     list_display = ['username', 'email', 'is_active', 'date_joined']
+    
+    def delete_model(self, request, obj):
+        """Safe delete: clear related references first"""
+        try:
+            # Clear issued_license references in purchase requests
+            LicensePurchaseRequest.objects.filter(issued_license__user=obj).update(issued_license=None)
+            # Clear reviewed_by references
+            LicensePurchaseRequest.objects.filter(reviewed_by=obj).update(reviewed_by=None)
+        except Exception:
+            pass
+        super().delete_model(request, obj)
+    
+    def delete_queryset(self, request, queryset):
+        """Safe bulk delete: clear related references first"""
+        try:
+            LicensePurchaseRequest.objects.filter(issued_license__user__in=queryset).update(issued_license=None)
+            LicensePurchaseRequest.objects.filter(reviewed_by__in=queryset).update(reviewed_by=None)
+        except Exception:
+            pass
+        super().delete_queryset(request, queryset)
 
 
 @admin.register(SubscriptionPlan)
@@ -459,6 +479,23 @@ class LicenseAdmin(admin.ModelAdmin):
             return format_html('<span style="color: orange; font-weight: bold;">{} days</span>', days)
         return format_html('<span style="color: green;">{} days</span>', days)
     days_remaining_display.short_description = 'Days Left'
+    
+    def delete_model(self, request, obj):
+        """Safe delete: clear related purchase request reference first"""
+        try:
+            # Clear the issued_license reference in purchase request
+            LicensePurchaseRequest.objects.filter(issued_license=obj).update(issued_license=None)
+        except Exception:
+            pass
+        super().delete_model(request, obj)
+    
+    def delete_queryset(self, request, queryset):
+        """Safe bulk delete: clear related purchase request references first"""
+        try:
+            LicensePurchaseRequest.objects.filter(issued_license__in=queryset).update(issued_license=None)
+        except Exception:
+            pass
+        super().delete_queryset(request, queryset)
 
 
 @admin.register(LicenseVerificationLog)

@@ -234,10 +234,10 @@ def render_email_template(subject, heading, message, cta_text=None, cta_url=None
                                         </td>
                                         <td style="vertical-align: middle;">
                                             <h1 style="margin: 0; font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 24px; font-weight: 700; color: #06b6d4; letter-spacing: 1px;">
-                                                MARK'S AI 3.0
+                                                Mark's AI 3.0
                                             </h1>
                                             <p style="margin: 8px 0 0 0; font-size: 13px; color: #6b7280; letter-spacing: 0.5px;">
-                                                PROFESSIONAL TRADING AUTOMATION
+                                                AI powered automated trading EA
                                             </p>
                                         </td>
                                     </tr>
