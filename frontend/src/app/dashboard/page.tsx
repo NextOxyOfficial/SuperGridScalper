@@ -161,14 +161,18 @@ export default function DashboardHome() {
             .filter((r: any) => String(r?.status || '').toLowerCase() === 'approved' && r?.issued_license_key)
             .map((r: any) => String(r.issued_license_key));
 
+          console.log('[DEBUG] Approved keys:', approvedKeys);
+          console.log('[DEBUG] Current licenses:', (licenses || []).map((l: any) => l?.license_key));
+
           const missing = approvedKeys.some((k: string) => !(licenses || []).some((l: any) => String(l?.license_key) === k));
           const now = Date.now();
           if (missing && now - lastAutoLicenseRefreshRef.current > 5000) {
+            console.log('[DEBUG] Missing approved licenses detected, refreshing...');
             lastAutoLicenseRefreshRef.current = now;
             await refreshLicenses();
           }
         } catch (e) {
-          // ignore
+          console.error('[DEBUG] Auto-refresh error:', e);
         }
       }
     } catch (e) {

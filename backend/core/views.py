@@ -736,6 +736,11 @@ def get_licenses(request):
     # Get all user's licenses with EA settings
     licenses = License.objects.filter(user=user).select_related('plan').prefetch_related('ea_settings')
     
+    # Debug logging
+    print(f"[DEBUG] get_licenses: user={user.email}, license_count={licenses.count()}")
+    for lic in licenses:
+        print(f"[DEBUG]   - License: {lic.license_key[:16]}... status={lic.status} plan={lic.plan.name}")
+    
     license_list = []
     for lic in licenses:
         # Get EA settings (BTCUSD preferred, or any)

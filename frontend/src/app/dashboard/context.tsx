@@ -31,18 +31,23 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // Fetch fresh licenses from server
   const fetchLicensesFromServer = async (email: string) => {
     try {
+      console.log('[DEBUG] Fetching licenses for:', email);
       const res = await fetch(`${API_URL}/licenses/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
       });
       const data = await res.json();
+      console.log('[DEBUG] Licenses response:', data);
       if (data.success) {
+        console.log('[DEBUG] Setting licenses count:', data.licenses?.length || 0);
         setLicenses(data.licenses);
         localStorage.setItem('licenses', JSON.stringify(data.licenses));
+      } else {
+        console.error('[DEBUG] License fetch failed:', data.message);
       }
     } catch (e) {
-      console.error('Failed to fetch licenses from server');
+      console.error('Failed to fetch licenses from server', e);
     }
   };
 
