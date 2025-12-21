@@ -93,11 +93,36 @@ class PaymentNetworkAdmin(admin.ModelAdmin):
 
 @admin.register(LicensePurchaseRequest)
 class LicensePurchaseRequestAdmin(admin.ModelAdmin):
-    list_display = ['created_at', 'user', 'plan', 'network', 'amount_usd', 'status', 'mt5_account', 'txid', 'reviewed_at']
+    list_display = ['created_at', 'user', 'plan', 'network', 'amount_usd', 'status', 'mt5_account', 'txid', 'reviewed_at', 'license_link']
     list_filter = ['status', 'network', 'plan', 'created_at']
     search_fields = ['user__email', 'txid', 'mt5_account']
     readonly_fields = ['created_at', 'updated_at', 'issued_license', 'reviewed_at', 'reviewed_by']
     actions = ['approve_requests', 'reject_requests']
+    
+    def license_link(self, obj):
+        if obj.issued_license:
+            url = f'/admin/core/license/{obj.issued_license.id}/change/'
+            return format_html('<a href="{}">View License</a>', url)
+        return '-'
+    license_link.short_description = 'License'
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-create license when status is changed to approved via admin form"""
+        if change and obj.status == 'approved' and not obj.issued_license_id:
+            # Create license automatically
+            try:
+                new_license = License.objects.create(
+                    user=obj.user,
+                    plan=obj.plan,
+                    mt5_account=(obj.mt5_account or None)
+                )
+                obj.issued_license = new_license
+                obj.reviewed_by = request.user
+                obj.reviewed_at = timezone.now()
+                self.message_user(request, f'License {new_license.license_key[:16]}... created for {obj.user.email}')
+            except Exception as e:
+                self.message_user(request, f'Failed to create license: {e}', level='error')
+        super().save_model(request, obj, form, change)
 
     def approve_requests(self, request, queryset):
         for obj in queryset.select_related('user', 'plan', 'network', 'issued_license'):
