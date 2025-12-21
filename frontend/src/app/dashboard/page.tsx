@@ -469,6 +469,10 @@ export default function DashboardHome() {
     try {
       const form = new FormData();
       form.append('email', user?.email || (user as any)?.username || '');
+      const referralCode = (typeof window !== 'undefined' ? localStorage.getItem('referral_code') : null) || '';
+      if (referralCode) {
+        form.append('referral_code', referralCode);
+      }
       form.append('plan_id', String(selectedPlan.id));
       form.append('network_id', String(selectedNetworkId));
       form.append('mt5_account', mt5Account.trim());

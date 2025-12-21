@@ -413,6 +413,19 @@ class Referral(models.Model):
         verbose_name_plural = "Referrals"
 
 
+class ReferralAttribution(models.Model):
+    referral = models.ForeignKey(Referral, on_delete=models.CASCADE, related_name='attributions')
+    referred_user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='referral_attribution')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.referred_user.username} -> {self.referral.referral_code}"
+
+    class Meta:
+        verbose_name = "Referral Attribution"
+        verbose_name_plural = "Referral Attributions"
+
+
 class ReferralTransaction(models.Model):
     """Track individual referral transactions"""
     
@@ -424,6 +437,14 @@ class ReferralTransaction(models.Model):
     
     referral = models.ForeignKey(Referral, on_delete=models.CASCADE, related_name='transactions')
     referred_user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    purchase_request = models.OneToOneField(
+        'LicensePurchaseRequest',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='referral_transaction'
+    )
     
     purchase_amount = models.DecimalField(max_digits=10, decimal_places=2)
     commission_amount = models.DecimalField(max_digits=10, decimal_places=2)

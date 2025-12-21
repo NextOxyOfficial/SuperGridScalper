@@ -11,7 +11,7 @@ from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.db.models import Count
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest
 from decimal import Decimal
 import json
 
@@ -220,6 +220,7 @@ def get_payment_networks(request):
 def create_license_purchase_request(request):
     """Create a manual payment request with proof upload."""
     email = (request.POST.get('email') or '').strip()
+    referral_code = (request.POST.get('referral_code') or '').strip()
     plan_id = (request.POST.get('plan_id') or '').strip()
     network_id = (request.POST.get('network_id') or '').strip()
     mt5_account = (request.POST.get('mt5_account') or '').strip()
@@ -236,6 +237,13 @@ def create_license_purchase_request(request):
     user = resolve_user(email)
     if not user:
         return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+
+    if referral_code:
+        try:
+            referral = Referral.objects.get(referral_code=referral_code)
+            ReferralAttribution.objects.get_or_create(referral=referral, referred_user=user)
+        except Exception:
+            pass
 
     try:
         plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
@@ -353,8 +361,8 @@ def create_license_purchase_request(request):
         msg.attach_alternative(html_message, "text/html")
         msg = add_email_headers(msg, 'transactional', user=user)
         msg.send(fail_silently=False)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Payment proof email error: {e}")
 
     proof_url = None
     if purchase.proof:
@@ -518,11 +526,16 @@ def register(request):
             referral = Referral.objects.get(referral_code=referral_code)
             referral.signups += 1
             referral.save()
+
+            try:
+                ReferralAttribution.objects.get_or_create(referral=referral, referred_user=user)
+            except Exception:
+                pass
         except Referral.DoesNotExist:
             pass  # Invalid referral code, just ignore
 
     try:
-        from core.utils import get_email_from_address, render_email_template
+        from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
         from django.core.mail import EmailMultiAlternatives
         
         base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
@@ -554,9 +567,7 @@ def register(request):
             preheader='Your MarksTrades account is ready. Login to access your dashboard.',
             unsubscribe_url=get_unsubscribe_url(user)
         )
-        
-        from core.utils import add_email_headers
-        
+
         msg = EmailMultiAlternatives(
             subject,
             text_message,
@@ -566,8 +577,8 @@ def register(request):
         msg.attach_alternative(html_message, "text/html")
         msg = add_email_headers(msg, 'transactional', user=user)
         msg.send(fail_silently=False)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Welcome email error: {e}")
     
     return JsonResponse({
         'success': True,
@@ -844,40 +855,25 @@ def subscribe(request):
         mt5_account=mt5_account
     )
     
-    # Track referral purchase and commission
+    # Track referral purchase and commission (if user is attributed to a referrer)
     try:
-        # Check if user was referred
-        referral = Referral.objects.filter(signups__gt=0).first()  # Temporary - need better tracking
-        # Better approach: store referrer in user profile or session
-        
-        # For now, check localStorage referral_code from frontend
-        # We'll need to pass this from frontend
-        referral_code = data.get('referral_code', '').strip()
-        
-        if referral_code:
-            try:
-                referral = Referral.objects.get(referral_code=referral_code)
-                
-                # Calculate commission (10% of plan price)
-                commission_amount = plan.price * Decimal('0.10')
-                
-                # Create transaction
-                transaction = ReferralTransaction.objects.create(
-                    referral=referral,
-                    referred_user=user,
-                    purchase_amount=plan.price,
-                    commission_amount=commission_amount,
-                    status='pending'  # Will be 'paid' after payout
-                )
-                
-                # Update referral stats
-                referral.purchases += 1
-                referral.total_earnings += commission_amount
-                referral.pending_earnings += commission_amount
-                referral.save()
-                
-            except Referral.DoesNotExist:
-                pass  # Invalid referral code
+        attribution = ReferralAttribution.objects.select_related('referral').filter(referred_user=user).first()
+        if attribution and attribution.referral and attribution.referral.is_active and attribution.referral.referrer_id != user.id:
+            referral = attribution.referral
+            commission_amount = (plan.price * referral.commission_percent) / Decimal('100')
+
+            ReferralTransaction.objects.create(
+                referral=referral,
+                referred_user=user,
+                purchase_amount=plan.price,
+                commission_amount=commission_amount,
+                status='pending'
+            )
+
+            referral.purchases += 1
+            referral.total_earnings += commission_amount
+            referral.pending_earnings += commission_amount
+            referral.save()
     except Exception as e:
         # Don't fail the purchase if referral tracking fails
         print(f"Referral tracking error: {e}")
@@ -1376,12 +1372,8 @@ def create_referral(request):
         if not username and not email:
             return JsonResponse({'success': False, 'message': 'Username or email required'}, status=400)
         
-        try:
-            if username:
-                user = User.objects.get(username=username)
-            else:
-                user = User.objects.get(email=email)
-        except User.DoesNotExist:
+        user = resolve_user(username or email)
+        if not user:
             return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
         
         # Get or create referral
@@ -1528,14 +1520,11 @@ def request_payout(request):
         if amount <= 0:
             return JsonResponse({'success': False, 'message': 'Invalid amount'}, status=400)
         
-        try:
-            if username:
-                user = User.objects.get(username=username)
-            else:
-                user = User.objects.get(email=email)
-            referral = Referral.objects.get(referrer=user)
-        except User.DoesNotExist:
+        user = resolve_user(username or email)
+        if not user:
             return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+        try:
+            referral = Referral.objects.get(referrer=user)
         except Referral.DoesNotExist:
             return JsonResponse({'success': False, 'message': 'No referral account found'}, status=404)
         

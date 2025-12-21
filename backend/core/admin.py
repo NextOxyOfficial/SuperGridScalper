@@ -5,7 +5,8 @@ from django.conf import settings as django_settings
 from django.core.mail import send_mail
 from django.utils.html import format_html
 from django.utils import timezone
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest, SMTPSettings, EmailPreference
+from decimal import Decimal
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest, SMTPSettings, EmailPreference
 
 
 # Unregister default User admin and register with search
@@ -189,6 +190,27 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
             obj.reviewed_by = request.user
             obj.reviewed_at = timezone.now()
             obj.save(update_fields=['issued_license', 'status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+
+            try:
+                attribution = ReferralAttribution.objects.select_related('referral').filter(referred_user=obj.user).first()
+                if attribution and attribution.referral and attribution.referral.is_active and attribution.referral.referrer_id != obj.user.id:
+                    referral = attribution.referral
+                    if not ReferralTransaction.objects.filter(purchase_request=obj).exists():
+                        commission_amount = (obj.amount_usd * referral.commission_percent) / Decimal('100')
+                        ReferralTransaction.objects.create(
+                            referral=referral,
+                            referred_user=obj.user,
+                            purchase_request=obj,
+                            purchase_amount=obj.amount_usd,
+                            commission_amount=commission_amount,
+                            status='pending'
+                        )
+                        referral.purchases += 1
+                        referral.total_earnings += commission_amount
+                        referral.pending_earnings += commission_amount
+                        referral.save()
+            except Exception:
+                pass
 
             try:
                 from core.utils import send_admin_notification
