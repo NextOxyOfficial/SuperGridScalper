@@ -44,4 +44,7 @@ urlpatterns = [
     
     # Site Settings
     path('site-settings/', views.get_site_settings, name='get_site_settings'),
+    
+    # License Toggle
+    path('toggle-license/', views.toggle_license_status, name='toggle_license_status'),
 ]

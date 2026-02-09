@@ -11,7 +11,7 @@ from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.db.models import Count
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest
+from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest
 from decimal import Decimal
 import json
 
@@ -88,6 +88,7 @@ def verify_license(request):
         }, status=400)
 
     license_key = data.get('license_key', '').strip().upper()
+    mt5_account = str(data.get('mt5_account', '') or '').strip()
     mt5_account = data.get('mt5_account', '').strip()
     hardware_id = data.get('hardware_id', '').strip()
     ip_address = get_client_ip(request)
@@ -123,21 +124,59 @@ def verify_license(request):
 
     # Check MT5 account binding (only if mt5_account provided)
     if mt5_account:
+        # Backward compatibility: if old single-binding exists, migrate it into bindings table
         if license.mt5_account:
-            # Already bound to an account
-            if license.mt5_account != mt5_account:
-                log_verification(license, license_key, mt5_account, hardware_id, ip_address, False, 
-                               f'License bound to different account: {license.mt5_account}')
+            LicenseMT5Account.objects.get_or_create(
+                license=license,
+                mt5_account=license.mt5_account,
+                defaults={
+                    'hardware_id': license.hardware_id or None,
+                    'last_seen': timezone.now(),
+                },
+            )
+
+        # Enforce max_accounts per plan
+        current_accounts_count = LicenseMT5Account.objects.filter(license=license).count()
+        binding = LicenseMT5Account.objects.filter(license=license, mt5_account=mt5_account).first()
+
+        if not binding:
+            if current_accounts_count >= (license.plan.max_accounts or 1):
+                log_verification(
+                    license,
+                    license_key,
+                    mt5_account,
+                    hardware_id,
+                    ip_address,
+                    False,
+                    f'Max accounts reached ({license.plan.max_accounts})'
+                )
                 return JsonResponse({
                     'valid': False,
-                    'message': f'License is bound to account {license.mt5_account}'
+                    'message': f'Max accounts reached for this plan ({license.plan.max_accounts})'
                 })
+
+            binding = LicenseMT5Account.objects.create(
+                license=license,
+                mt5_account=mt5_account,
+                hardware_id=hardware_id or None,
+                last_seen=timezone.now(),
+            )
         else:
-            # First time - bind to this account
+            update_fields = []
+            binding.last_seen = timezone.now()
+            update_fields.append('last_seen')
+            if hardware_id and not binding.hardware_id:
+                binding.hardware_id = hardware_id
+                update_fields.append('hardware_id')
+            if update_fields:
+                binding.save(update_fields=update_fields)
+
+        # Preserve old field for compatibility with existing admin/UI code
+        if not license.mt5_account:
             license.mt5_account = mt5_account
-            if hardware_id:
+            if hardware_id and not license.hardware_id:
                 license.hardware_id = hardware_id
-            license.save()
+            license.save(update_fields=['mt5_account', 'hardware_id', 'updated_at'])
 
     # Update verification stats
     license.last_verified = timezone.now()
@@ -153,7 +192,7 @@ def verify_license(request):
         'expires_at': license.expires_at.isoformat(),
         'days_remaining': license.days_remaining(),
         'plan': license.plan.name,
-        'mt5_account': license.mt5_account
+        'mt5_account': mt5_account or license.mt5_account
     })
 
 
@@ -613,7 +652,11 @@ def login(request):
         return JsonResponse({'success': False, 'message': 'Invalid email or password'})
     
     # Get all user's licenses with EA settings
-    licenses = License.objects.filter(user=user).select_related('plan').prefetch_related('ea_settings')
+    licenses = (
+        License.objects.filter(user=user)
+        .select_related('plan')
+        .prefetch_related('ea_settings', 'mt5_accounts')
+    )
     
     # Allow login even without license - user needs to login to purchase license
     license_list = []
@@ -641,6 +684,8 @@ def login(request):
             'expires_at': lic.expires_at.isoformat(),
             'days_remaining': lic.days_remaining(),
             'mt5_account': lic.mt5_account,
+            'mt5_accounts': [a.mt5_account for a in lic.mt5_accounts.all().order_by('created_at')],
+            'max_accounts': lic.plan.max_accounts,
             'ea_settings': ea_settings
         })
     
@@ -852,6 +897,13 @@ def subscribe(request):
         plan=plan,
         mt5_account=mt5_account
     )
+
+    # Create initial binding entry for multi-account support
+    LicenseMT5Account.objects.get_or_create(
+        license=new_license,
+        mt5_account=mt5_account,
+        defaults={'last_seen': timezone.now()},
+    )
     
     # Track referral purchase and commission (if user is attributed to a referrer)
     try:
@@ -877,7 +929,11 @@ def subscribe(request):
         print(f"Referral tracking error: {e}")
     
     # Get ALL user's licenses to return
-    all_licenses = License.objects.filter(user=user).select_related('plan').prefetch_related('ea_settings')
+    all_licenses = (
+        License.objects.filter(user=user)
+        .select_related('plan')
+        .prefetch_related('ea_settings', 'mt5_accounts')
+    )
     license_list = []
     for lic in all_licenses:
         # Get the first EA settings (BTCUSD preferred, or any)
@@ -914,7 +970,9 @@ def subscribe(request):
             'plan': plan.name,
             'expires_at': new_license.expires_at.isoformat(),
             'days_remaining': new_license.days_remaining(),
-            'mt5_account': new_license.mt5_account
+            'mt5_account': new_license.mt5_account,
+            'mt5_accounts': [mt5_account],
+            'max_accounts': plan.max_accounts,
         },
         'licenses': license_list,
         'user': {
@@ -1163,10 +1221,12 @@ def get_trade_data(request):
     """Get trade data for a license (for web dashboard)"""
     if request.method == "GET":
         license_key = request.GET.get('license_key', '').strip().upper()
+        mt5_account = (request.GET.get('mt5_account', '') or '').strip()
     else:
         try:
             data = json.loads(request.body)
             license_key = data.get('license_key', '').strip().upper()
+            mt5_account = (data.get('mt5_account', '') or '').strip()
         except json.JSONDecodeError:
             return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
     
@@ -1181,10 +1241,13 @@ def get_trade_data(request):
     
     # Get trade data
     try:
-        trade_data = TradeData.objects.get(license=license)
+        if not mt5_account:
+            mt5_account = license.mt5_account or ''
+        trade_data = TradeData.objects.get(license=license, mt5_account=mt5_account)
         return JsonResponse({
             'success': True,
             'data': {
+                'mt5_account': mt5_account,
                 'account_balance': float(trade_data.account_balance),
                 'account_equity': float(trade_data.account_equity),
                 'account_profit': float(trade_data.account_profit),
@@ -1883,5 +1946,57 @@ def get_site_settings(request):
             'telegram_en_url': settings.telegram_en_url,
             'telegram_cn': settings.telegram_cn,
             'telegram_cn_url': settings.telegram_cn_url,
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def toggle_license_status(request):
+    """Toggle license status between active and suspended (user self-service)"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    license_key = data.get('license_key', '').strip().upper()
+    email = data.get('email', '').strip()
+    action = data.get('action', '').strip()  # 'activate' or 'deactivate'
+
+    if not license_key or not email or action not in ('activate', 'deactivate'):
+        return JsonResponse({'success': False, 'message': 'license_key, email, and action (activate/deactivate) are required'}, status=400)
+
+    user = resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+
+    try:
+        license_obj = License.objects.get(license_key=license_key, user=user)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'License not found'}, status=404)
+
+    # Only allow toggling between active and suspended
+    if action == 'deactivate':
+        if license_obj.status != 'active':
+            return JsonResponse({'success': False, 'message': f'Cannot deactivate: license is {license_obj.status}'})
+        license_obj.status = 'suspended'
+        license_obj.save(update_fields=['status', 'updated_at'])
+    elif action == 'activate':
+        if license_obj.status not in ('suspended',):
+            return JsonResponse({'success': False, 'message': f'Cannot activate: license is {license_obj.status}'})
+        # Check if not expired
+        if license_obj.expires_at < timezone.now():
+            return JsonResponse({'success': False, 'message': 'Cannot activate: license has expired'})
+        license_obj.status = 'active'
+        license_obj.save(update_fields=['status', 'updated_at'])
+
+    return JsonResponse({
+        'success': True,
+        'message': f'License {action}d successfully',
+        'license': {
+            'license_key': license_obj.license_key,
+            'status': license_obj.status,
+            'expires_at': license_obj.expires_at.isoformat(),
+            'days_remaining': license_obj.days_remaining(),
         }
     })

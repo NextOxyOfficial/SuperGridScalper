@@ -92,6 +92,21 @@ class License(models.Model):
         ordering = ['-created_at']
 
 
+class LicenseMT5Account(models.Model):
+    license = models.ForeignKey(License, on_delete=models.CASCADE, related_name='mt5_accounts')
+    mt5_account = models.CharField(max_length=50)
+    hardware_id = models.CharField(max_length=255, blank=True, null=True)
+    last_seen = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.mt5_account} ({self.license.license_key[:8]}...)"
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = [['license', 'mt5_account']]
+
+
 class LicenseVerificationLog(models.Model):
     """Log of license verification attempts"""
     license = models.ForeignKey(License, on_delete=models.CASCADE, null=True, blank=True)
@@ -257,6 +272,7 @@ class EASettings(models.Model):
 class TradeData(models.Model):
     """Real-time trade data from MT5"""
     license = models.ForeignKey(License, on_delete=models.CASCADE, related_name='trade_data')
+    mt5_account = models.CharField(max_length=50, blank=True, default='')
     
     # Account Info
     account_balance = models.DecimalField(max_digits=15, decimal_places=2, default=0)
@@ -295,12 +311,15 @@ class TradeData(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Trade Data - {self.license.mt5_account} - {self.last_update}"
+        return f"Trade Data - {self.mt5_account or self.license.mt5_account} - {self.last_update}"
 
     class Meta:
         verbose_name = "Trade Data"
         verbose_name_plural = "Trade Data"
         ordering = ['-last_update']
+        constraints = [
+            models.UniqueConstraint(fields=['license', 'mt5_account'], name='unique_tradedata_license_mt5_account')
+        ]
 
 
 class EAProduct(models.Model):

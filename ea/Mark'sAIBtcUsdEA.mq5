@@ -2,7 +2,7 @@
 //|                                                 CleanGridEA.mq5   |
 //|                                  Simplified Grid Trading System   |
 //+------------------------------------------------------------------+
-#property copyright "Mark's AI Gold EA - Clean Version"
+#property copyright "Mark's AI BTCUSD EA - Clean Version"
 #property version   "2.00"
 #property strict
 
@@ -17,15 +17,16 @@ input bool      UseCachedLicenseInTester = true;
 input int       CachedLicenseMaxAgeHours = 24;
 
 //--- All Settings Hardcoded (Hidden from user)
-#define BuyRangeStart       2001.0
-#define BuyRangeEnd         8801.0
+// BTCUSD Range (pip = 100.0, so 68600 to 68700 = 1 pip, 68800 = 2 pip)
+#define BuyRangeStart       10000.0
+#define BuyRangeEnd         150000.0
 #define BuyGapPips          5.0
 #define MaxBuyOrders        5
 #define BuyTakeProfitPips   15
 #define BuyStopLossPips     0.0
 
-#define SellRangeStart      8802.0
-#define SellRangeEnd        2002.0
+#define SellRangeStart      150000.0
+#define SellRangeEnd        10000.0
 #define SellGapPips         6.0
 #define MaxSellOrders       5
 #define SellTakeProfitPips  15
@@ -37,10 +38,10 @@ input int       CachedLicenseMaxAgeHours = 24;
 // ===== TRAILING STOP SETTINGS (Normal Mode) =====
 // Formula: newSL = openPrice + InitialSL + ((profit - TrailingStart) × TrailingRatio)
 // 
-// Example (BUY @ 2650, Current = 2656, Profit = 6 pips):
+// Example (BUY @ 68600, Current = 69200, Profit = 6 pips):
 //   priceMovement = 6 - 3 = 3 pips
 //   slMovement = 3 × 0.5 = 1.5 pips  
-//   newSL = 2650 + 2 + 1.5 = 2653.50 (3.5 pips profit locked)
+//   newSL = 68600 + (2×100) + (1.5×100) = 68950 (3.5 pips profit locked)
 //
 // | Profit | SL Position | Calculation |
 // |--------|-------------|-------------|
@@ -72,15 +73,16 @@ input int       CachedLicenseMaxAgeHours = 24;
 #define MaxRecoveryOrders       200
 
 #define LotSize         0.15
-#define MagicNumber     999888
-#define OrderComment    "CleanGrid"
+#define MagicNumber     999890
+#define OrderComment    "CleanGridBTC"
 #define ManageAllTrades false
 
 //--- Server URL (Hidden from user)
 string    LicenseServer     = "https://markstrades.com";
 
 //--- Global Variables
-double pip = 1.0;
+// BTCUSD pip = 100.0 (68600 to 68700 = 1 pip, 68800 = 2 pip)
+double pip = 100.0;
 int currentBuyPositions = 0;      // Filled positions only (for recovery mode)
 int currentSellPositions = 0;     // Filled positions only (for recovery mode)
 int totalBuyOrders = 0;           // Positions + Pending (for grid limit)
@@ -114,7 +116,8 @@ datetime g_LicenseExpiry = 0;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-    pip = 1.0; // For XAUUSD
+    // BTCUSD pip calculation: 68600 to 68700 = 1 pip = 100.0
+    pip = 100.0;
     trade.SetExpertMagicNumber(MagicNumber);
     
     // FORCE license to invalid until verified
@@ -2010,8 +2013,8 @@ void CheckAndCloseRecoveryBreakeven(bool isBuy)
     double testOpen = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
     double testClose = isBuy ? testOpen + pip : testOpen - pip;
     if(!OrderCalcProfit(isBuy ? ORDER_TYPE_BUY : ORDER_TYPE_SELL, _Symbol, testLot, testOpen, testClose, pipValue))
-        pipValue = 10.0; // Fallback for XAUUSD
-    if(pipValue <= 0) pipValue = 10.0; // Fallback for XAUUSD
+        pipValue = 1.0; // Fallback for BTCUSD
+    if(pipValue <= 0) pipValue = 1.0; // Fallback for BTCUSD
     
     // Target profit = pips * lots * pipValue per lot per pip
     double targetProfit = RecoveryBreakevenPips * totalLots * pipValue;
@@ -2370,7 +2373,7 @@ void UpdateInfoPanel()
     }
     else
     {
-        modeText = "=== MARK'S AI 3.0 PILOT RUNNING ... ===";
+        modeText = "=== MARK'S AI BTCUSD 3.0 RUNNING ... ===";
         modeColor = clrLime;
     }
     

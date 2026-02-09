@@ -53,6 +53,9 @@ export default function DashboardHome() {
   const [showExtendModal, setShowExtendModal] = useState(false);
   const [extendingPlan, setExtendingPlan] = useState<number | null>(null);
 
+  // License toggle state
+  const [togglingLicense, setTogglingLicense] = useState<string | null>(null);
+
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
   
   // Keep closed positions scroll at top (latest positions shown first via reverse order)
@@ -123,7 +126,10 @@ export default function DashboardHome() {
       request: r,
     }));
 
-  const pendingPaymentRequests = (purchaseRequests || []).filter(
+  const allPaymentRequests = (purchaseRequests || []).sort(
+    (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  const pendingPaymentRequests = allPaymentRequests.filter(
     (r) => String(r?.status || '').toLowerCase() === 'pending'
   );
 
@@ -156,6 +162,16 @@ export default function DashboardHome() {
       if (data.success) {
         const nextRequests = data.requests || [];
         setPurchaseRequests(nextRequests);
+
+        // If purchaseSuccess is showing, update it with latest server data
+        if (purchaseSuccess) {
+          const updated = nextRequests.find((r: any) => 
+            r.id === purchaseSuccess.id || r.request_number === purchaseSuccess.request_number
+          );
+          if (updated && updated.status !== purchaseSuccess.status) {
+            setPurchaseSuccess(updated);
+          }
+        }
 
         // If admin approved and license key issued, refresh licenses so the card appears.
         try {
@@ -368,6 +384,42 @@ export default function DashboardHome() {
     }
   };
 
+  const handleToggleLicense = async (licenseKey: string, currentStatus: string) => {
+    const action = currentStatus === 'active' ? 'deactivate' : 'activate';
+    const confirmMsg = action === 'deactivate' 
+      ? 'Are you sure you want to deactivate this license? The EA will stop trading.' 
+      : 'Are you sure you want to activate this license?';
+    if (!confirm(confirmMsg)) return;
+
+    setTogglingLicense(licenseKey);
+    try {
+      const res = await fetch(`${API_URL}/toggle-license/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: licenseKey,
+          email: user?.email || user?.username,
+          action
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Refresh licenses from server
+        await refreshLicenses();
+        // If this is the selected license, update it
+        if (selectedLicense?.license_key === licenseKey) {
+          selectLicense({ ...selectedLicense, status: data.license.status });
+        }
+      } else {
+        alert(data.message || 'Failed to toggle license');
+      }
+    } catch (e) {
+      alert('Failed to toggle license. Please try again.');
+    } finally {
+      setTogglingLicense(null);
+    }
+  };
+
   const handleSelectLicense = (lic: any) => {
     selectLicense(lic);
   };
@@ -563,17 +615,30 @@ export default function DashboardHome() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-white font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                    {isPurchaseRequest ? 'PENDING ACTIVATION' : String(selectedLicense.status || 'INACTIVE').toUpperCase()}
+                    {isPurchaseRequest ? 'PENDING ACTIVATION' : selectedLicense.status === 'suspended' ? 'DEACTIVATED' : String(selectedLicense.status || 'INACTIVE').toUpperCase()}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
                     {isPurchaseRequest
                       ? 'Your purchase is under verification. Once approved, your license will be activated.'
                       : isExpiredLicense
                         ? 'Your license has expired. Extend now to continue trading.'
-                        : 'This license is not active. Trading dashboard is unavailable.'}
+                        : selectedLicense.status === 'suspended'
+                          ? 'You have deactivated this license. Click Activate to resume trading.'
+                          : 'This license is not active. Trading dashboard is unavailable.'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {selectedLicense.status === 'suspended' && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleLicense(selectedLicense.license_key, selectedLicense.status)}
+                      disabled={togglingLicense === selectedLicense.license_key}
+                      className={`px-3 py-2 rounded-lg text-xs font-bold bg-green-500/20 hover:bg-green-500/30 text-green-300 border border-green-500/40 ${togglingLicense === selectedLicense.license_key ? 'opacity-50 cursor-wait' : ''}`}
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      {togglingLicense === selectedLicense.license_key ? 'Activating...' : 'Activate'}
+                    </button>
+                  )}
                   {isExpiredLicense ? (
                     <button
                       type="button"
@@ -754,16 +819,15 @@ export default function DashboardHome() {
           {/* Compact Header Bar */}
           <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg px-2 sm:px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-              <button
-                onClick={() => setIsPolling(!isPolling)}
+              <span
                 className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded text-[10px] sm:text-xs font-medium ${
-                  isPolling ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-gray-400'
+                  eaConnected ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-gray-400'
                 }`}
                 style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${isPolling ? 'bg-black animate-pulse' : 'bg-gray-500'}`}></span>
-                {isPolling ? 'LIVE' : 'PAUSED'}
-              </button>
+                <span className={`w-1.5 h-1.5 rounded-full ${eaConnected ? 'bg-black animate-pulse' : 'bg-gray-500'}`}></span>
+                {eaConnected ? 'LIVE' : 'OFFLINE'}
+              </span>
               {eaConnected && tradeData?.trading_mode ? (
                 <span className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium border ${
                   isRecoveryModeDetails 
@@ -1156,20 +1220,30 @@ export default function DashboardHome() {
                   <p className="text-gray-500 text-[10px] sm:text-xs mb-1.5">License Key</p>
                   <div className="flex items-start sm:items-center gap-2">
                     <p className="font-mono text-[10px] sm:text-xs bg-[#0a0a0f] text-cyan-400 p-2 sm:p-2.5 rounded-lg border border-cyan-500/20 break-all flex-1 leading-relaxed">{selectedLicense.license_key}</p>
-                    <button
-                      onClick={(e) => {
-                        navigator.clipboard.writeText(selectedLicense.license_key);
-                        const btn = e.currentTarget;
-                        btn.classList.add('copied');
-                        setTimeout(() => btn.classList.remove('copied'), 1500);
-                      }}
-                      className="group flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-all whitespace-nowrap border border-cyan-500/30 [&.copied]:bg-green-500/20 [&.copied]:text-green-400 [&.copied]:border-green-500/30"
-                    >
-                      <Copy className="w-3 h-3 sm:w-3.5 sm:h-3.5 group-[.copied]:hidden" />
-                      <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 hidden group-[.copied]:block" />
-                      <span className="group-[.copied]:hidden">Copy</span>
-                      <span className="hidden group-[.copied]:inline">Copied</span>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={(e) => {
+                          navigator.clipboard.writeText(selectedLicense.license_key);
+                          const btn = e.currentTarget;
+                          btn.classList.add('copied');
+                          setTimeout(() => btn.classList.remove('copied'), 1500);
+                        }}
+                        className="group flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-all whitespace-nowrap border border-cyan-500/30 [&.copied]:bg-green-500/20 [&.copied]:text-green-400 [&.copied]:border-green-500/30"
+                      >
+                        <Copy className="w-3 h-3 sm:w-3.5 sm:h-3.5 group-[.copied]:hidden" />
+                        <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 hidden group-[.copied]:block" />
+                        <span className="group-[.copied]:hidden">Copy</span>
+                        <span className="hidden group-[.copied]:inline">Copied</span>
+                      </button>
+                      <button
+                        onClick={() => handleToggleLicense(selectedLicense.license_key, selectedLicense.status)}
+                        disabled={togglingLicense === selectedLicense.license_key}
+                        className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg transition-all whitespace-nowrap font-bold border bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20 ${togglingLicense === selectedLicense.license_key ? 'opacity-50 cursor-wait' : ''}`}
+                      >
+                        <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                        <span>{togglingLicense === selectedLicense.license_key ? '...' : 'Deactivate'}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
                 
@@ -1191,52 +1265,58 @@ export default function DashboardHome() {
                 </div>
                 
                 {/* Extend Subscription - Show when expired or about to expire */}
-                {getDaysRemaining(selectedLicense) <= 7 && (
-                  <div className={`rounded-lg p-3 sm:p-4 border ${
-                    getDaysRemaining(selectedLicense) <= 0 
-                      ? 'bg-red-500/10 border-red-500/30' 
-                      : getDaysRemaining(selectedLicense) <= 3 
-                        ? 'bg-orange-500/10 border-orange-500/30' 
-                        : 'bg-yellow-500/10 border-yellow-500/30'
-                  }`}>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                      <div>
-                        <p className={`font-semibold text-sm sm:text-base ${
-                          getDaysRemaining(selectedLicense) <= 0 
-                            ? 'text-red-400' 
-                            : getDaysRemaining(selectedLicense) <= 3 
-                              ? 'text-orange-400' 
-                              : 'text-yellow-400'
-                        }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                          {getDaysRemaining(selectedLicense) <= 0 
-                            ? '🚨 License Expired!' 
-                            : getDaysRemaining(selectedLicense) <= 3 
-                              ? '⚠️ License Expiring Soon!' 
-                              : '⏰ License Expiring in 7 Days!'}
-                        </p>
-                        <p className="text-gray-400 text-[10px] sm:text-xs mt-1">
-                          {getDaysRemaining(selectedLicense) <= 0 
-                            ? 'Your license has expired. Extend now to continue trading.' 
-                            : getDaysRemaining(selectedLicense) <= 3 
-                              ? `Only ${getDaysRemaining(selectedLicense)} ${getDaysRemaining(selectedLicense) === 1 ? 'day' : 'days'} remaining. Extend to avoid interruption.`
-                              : `Your license expires in ${getDaysRemaining(selectedLicense)} ${getDaysRemaining(selectedLicense) === 1 ? 'day' : 'days'}. Extend now to avoid any interruption.`}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setShowExtendModal(true)}
-                        className={`flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${
-                          getDaysRemaining(selectedLicense) <= 0 
-                            ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400 text-white shadow-lg shadow-red-500/20' 
-                            : 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black shadow-lg shadow-yellow-500/20'
-                        }`}
-                        style={{ fontFamily: 'Orbitron, sans-serif' }}
-                      >
-                        <Sparkles className="w-4 h-4" />
-                        EXTEND LICENSE
-                      </button>
+                <div className={`rounded-lg p-3 sm:p-4 border ${
+                  getDaysRemaining(selectedLicense) <= 0 
+                    ? 'bg-red-500/10 border-red-500/30' 
+                    : getDaysRemaining(selectedLicense) <= 3 
+                      ? 'bg-orange-500/10 border-orange-500/30' 
+                      : getDaysRemaining(selectedLicense) <= 7
+                        ? 'bg-yellow-500/10 border-yellow-500/30'
+                        : 'bg-cyan-500/5 border-cyan-500/20'
+                }`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <p className={`font-semibold text-sm sm:text-base ${
+                        getDaysRemaining(selectedLicense) <= 0 
+                          ? 'text-red-400' 
+                          : getDaysRemaining(selectedLicense) <= 3 
+                            ? 'text-orange-400' 
+                            : getDaysRemaining(selectedLicense) <= 7
+                              ? 'text-yellow-400'
+                              : 'text-cyan-400'
+                      }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                        {getDaysRemaining(selectedLicense) <= 0 
+                          ? '🚨 License Expired!' 
+                          : getDaysRemaining(selectedLicense) <= 3 
+                            ? '⚠️ License Expiring Soon!' 
+                            : getDaysRemaining(selectedLicense) <= 7
+                              ? '⏰ License Expiring in 7 Days!'
+                              : `📅 ${getDaysRemaining(selectedLicense)} Days Remaining`}
+                      </p>
+                      <p className="text-gray-400 text-[10px] sm:text-xs mt-1">
+                        {getDaysRemaining(selectedLicense) <= 0 
+                          ? 'Your license has expired. Extend now to continue trading.' 
+                          : getDaysRemaining(selectedLicense) <= 3 
+                            ? `Only ${getDaysRemaining(selectedLicense)} ${getDaysRemaining(selectedLicense) === 1 ? 'day' : 'days'} remaining. Extend to avoid interruption.`
+                            : `Extend your subscription anytime to add more days.`}
+                      </p>
                     </div>
+                    <button
+                      onClick={() => setShowExtendModal(true)}
+                      className={`flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${
+                        getDaysRemaining(selectedLicense) <= 0 
+                          ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400 text-white shadow-lg shadow-red-500/20' 
+                          : getDaysRemaining(selectedLicense) <= 7
+                            ? 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black shadow-lg shadow-yellow-500/20'
+                            : 'bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-black shadow-lg shadow-cyan-500/20'
+                      }`}
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      EXTEND LICENSE
+                    </button>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
@@ -1352,32 +1432,74 @@ export default function DashboardHome() {
       </div>
 
       {/* Purchase New License Section - Now at top */}
-      <details className="bg-[#12121a] border border-cyan-500/20 rounded-xl mb-4 sm:mb-6 overflow-hidden" open={licenses.length === 0}>
-        <summary className="p-3 sm:p-4 cursor-pointer font-semibold text-white hover:bg-white/5 rounded-xl flex items-center justify-between gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-          <div className="flex items-center gap-2">
-            <span className="text-cyan-400 text-lg">+</span>
-            <span className="text-xs sm:text-sm">PURCHASE NEW LICENSE</span>
+      <details className="relative bg-gradient-to-br from-[#12121a] via-[#12121a] to-cyan-950/20 border-2 border-cyan-500/40 rounded-xl mb-4 sm:mb-6 overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.08)]" open={licenses.length === 0}>
+        <summary className="p-3 sm:p-5 cursor-pointer font-semibold text-white hover:bg-cyan-500/5 rounded-xl flex items-center justify-between gap-2 transition-colors" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+              <span className="text-white text-lg sm:text-xl font-bold">+</span>
+            </div>
+            <div>
+              <span className="text-sm sm:text-base block">PURCHASE NEW LICENSE</span>
+              <span className="text-[10px] sm:text-xs text-cyan-400/60 font-normal block mt-0.5">Get started with AI-powered trading</span>
+            </div>
           </div>
-          <span className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Click to expand</span>
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline-block px-3 py-1 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 animate-pulse">NEW</span>
+            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+          </div>
         </summary>
-        <div className="px-3 sm:px-4 pb-4 border-t border-cyan-500/10">
+        <div className="px-3 sm:px-4 pb-4 border-t border-cyan-500/20">
           {purchaseSuccess ? (
-            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4 mt-4">
+            <div className={`border rounded-lg p-4 mt-4 ${
+              purchaseSuccess.status === 'approved' 
+                ? 'bg-green-500/10 border-green-500/30' 
+                : purchaseSuccess.status === 'rejected'
+                  ? 'bg-red-500/10 border-red-500/30'
+                  : 'bg-cyan-500/10 border-cyan-500/30'
+            }`}>
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="w-5 h-5 text-cyan-400" />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  purchaseSuccess.status === 'approved' ? 'bg-green-500/20' : purchaseSuccess.status === 'rejected' ? 'bg-red-500/20' : 'bg-cyan-500/20'
+                }`}>
+                  <CheckCircle className={`w-5 h-5 ${
+                    purchaseSuccess.status === 'approved' ? 'text-green-400' : purchaseSuccess.status === 'rejected' ? 'text-red-400' : 'text-cyan-400'
+                  }`} />
                 </div>
                 <div className="flex-1">
-                  <h4 className="text-base sm:text-lg font-bold text-cyan-300" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                    Submitted Successfully
+                  <h4 className={`text-base sm:text-lg font-bold ${
+                    purchaseSuccess.status === 'approved' ? 'text-green-300' : purchaseSuccess.status === 'rejected' ? 'text-red-300' : 'text-cyan-300'
+                  }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    {purchaseSuccess.status === 'approved' ? 'License Approved!' : purchaseSuccess.status === 'rejected' ? 'Request Rejected' : 'Submitted Successfully'}
                   </h4>
                   <p className="text-gray-400 text-xs sm:text-sm mt-0.5">
-                    Your payment proof has been submitted. Status: <span className="text-yellow-300 font-semibold">PENDING</span>
+                    {purchaseSuccess.status === 'approved' 
+                      ? 'Your license has been activated. You can start trading now!'
+                      : purchaseSuccess.status === 'rejected'
+                        ? (purchaseSuccess.admin_note || 'Your payment was not approved. Please contact support.')
+                        : <>Your payment proof has been submitted. Status: <span className="text-yellow-300 font-semibold">PENDING</span></>}
                   </p>
 
                   <div className="mt-3">
                     {renderActivationProgress(purchaseSuccess)}
                   </div>
+
+                  {purchaseSuccess.issued_license_key && (
+                    <div className="mt-3 bg-[#0a0a0f] border border-green-500/20 rounded-lg p-3">
+                      <p className="text-[10px] text-gray-500 mb-1">Your License Key</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 font-mono text-xs text-green-400 bg-black/40 px-2 py-1.5 rounded border border-green-500/20 truncate">
+                          {purchaseSuccess.issued_license_key}
+                        </code>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(purchaseSuccess.issued_license_key)}
+                          className="p-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 border border-green-500/30"
+                          title="Copy license key"
+                        >
+                          <Copy className="w-3.5 h-3.5 text-green-300" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3">
@@ -1386,7 +1508,7 @@ export default function DashboardHome() {
                     </div>
                     <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3">
                       <p className="text-[10px] text-gray-500">Amount</p>
-                      <p className="text-sm text-yellow-300 font-bold">${purchaseSuccess.plan?.price || purchaseSuccess.amount_usd} {purchaseSuccess.payment?.token_symbol}</p>
+                      <p className="text-sm text-yellow-300 font-bold">${purchaseSuccess.plan?.price || purchaseSuccess.amount_usd} {purchaseSuccess.payment?.token_symbol || purchaseSuccess.network?.token_symbol || ''}</p>
                     </div>
                   </div>
 
@@ -1675,7 +1797,7 @@ export default function DashboardHome() {
                       <div className="text-gray-600 text-xs">No pending requests.</div>
                     ) : (
                       <div className="space-y-2">
-                        {pendingPaymentRequests.slice(0, 5).map((r) => (
+                        {pendingPaymentRequests.slice(0, 10).map((r) => (
                           <div key={r.id} className="bg-black/30 border border-cyan-500/10 rounded-lg p-3">
                             <div className="flex items-center justify-between gap-2">
                               <div>
@@ -1784,17 +1906,13 @@ export default function DashboardHome() {
       ) : (
         <div className="space-y-4">
           {[...licenses].sort((a, b) => {
-            // Check if EA is online for each license
             const aTradeData = allTradeData[a.license_key];
             const bTradeData = allTradeData[b.license_key];
-            const aOnline = aTradeData && aTradeData.last_update && 
-              (Math.abs(new Date().getTime() - new Date(aTradeData.last_update).getTime()) / 1000) < 15;
-            const bOnline = bTradeData && bTradeData.last_update && 
-              (Math.abs(new Date().getTime() - new Date(bTradeData.last_update).getTime()) / 1000) < 15;
             
-            // Online EAs first
-            if (aOnline && !bOnline) return -1;
-            if (!aOnline && bOnline) return 1;
+            // Primary sort: Highest balance first (stable, no flickering)
+            const aBalance = aTradeData?.account_balance ?? 0;
+            const bBalance = bTradeData?.account_balance ?? 0;
+            if (aBalance !== bBalance) return bBalance - aBalance;
             
             // Then active licenses
             if (a.status === 'active' && b.status !== 'active') return -1;
@@ -1827,15 +1945,35 @@ export default function DashboardHome() {
                 <div className="flex items-center gap-2 sm:gap-3">
                   <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${isConnected ? 'bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50' : 'bg-gray-600'}`}></div>
                   <span className={`px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
-                    lic.status === 'active' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    lic.status === 'active' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
+                    : lic.status === 'suspended' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
                   }`}>
-                    {lic.status?.toUpperCase()}
+                    {lic.status === 'suspended' ? 'DEACTIVATED' : lic.status?.toUpperCase()}
                   </span>
                   <span className="font-bold text-white text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>{lic.plan}</span>
                 </div>
-                <div className="flex items-center gap-1 sm:gap-2 text-cyan-400 group-hover:text-cyan-300 font-semibold text-xs sm:text-sm">
-                  <span>Open</span>
-                  <span className="group-hover:translate-x-1 transition-transform">→</span>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  {(lic.status === 'active' || lic.status === 'suspended') && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleLicense(lic.license_key, lic.status);
+                      }}
+                      disabled={togglingLicense === lic.license_key}
+                      className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all border ${
+                        lic.status === 'active'
+                          ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
+                          : 'bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20'
+                      } ${togglingLicense === lic.license_key ? 'opacity-50 cursor-wait' : ''}`}
+                    >
+                      {togglingLicense === lic.license_key ? '...' : lic.status === 'active' ? 'Deactivate' : 'Activate'}
+                    </button>
+                  )}
+                  <div className="flex items-center gap-1 sm:gap-2 text-cyan-400 group-hover:text-cyan-300 font-semibold text-xs sm:text-sm">
+                    <span>Open</span>
+                    <span className="group-hover:translate-x-1 transition-transform">→</span>
+                  </div>
                 </div>
               </div>
               
@@ -1942,8 +2080,8 @@ export default function DashboardHome() {
                 </div>
               </div>
               
-              {/* Stats Row - 3 cols on mobile, 5 on desktop */}
-              <div className="px-3 sm:px-5 py-3 sm:py-4 grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-4">
+              {/* Stats Row */}
+              <div className="px-3 sm:px-5 py-3 sm:py-4 grid grid-cols-4 gap-2 sm:gap-4">
                 <div className="text-center sm:text-left">
                   <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Balance</p>
                   <p className="text-sm sm:text-lg font-bold text-white">${balance?.toLocaleString() || '-'}</p>
@@ -1958,30 +2096,9 @@ export default function DashboardHome() {
                   <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Pos</p>
                   <p className="text-sm sm:text-lg font-bold text-white">{totalPositions}</p>
                 </div>
-                <div className="text-center sm:text-left hidden sm:block">
-                  <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Status</p>
-                  <p className={`text-sm sm:text-lg font-bold ${isConnected ? 'text-cyan-400' : 'text-gray-600'}`}>
-                    {isConnected ? 'Online' : 'Offline'}
-                  </p>
-                </div>
-                <div className="text-center sm:text-left hidden sm:block">
+                <div className="text-center sm:text-left">
                   <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Expires</p>
                   <p className={`text-sm sm:text-lg font-bold ${getDaysRemaining(lic) <= 7 ? 'text-orange-400' : 'text-yellow-400'}`}>
-                    {getDaysRemaining(lic)} {getDaysRemaining(lic) === 1 ? 'day' : 'days'}
-                  </p>
-                </div>
-              </div>
-              {/* Mobile-only: Status & Expires row */}
-              <div className="sm:hidden px-3 pb-3 grid text-center grid-cols-2 gap-2 border-t border-cyan-500/10 pt-2">
-                <div className="text-center">
-                  <p className="text-[10px] text-gray-500">Status</p>
-                  <p className={`text-sm font-bold ${isConnected ? 'text-cyan-400' : 'text-gray-600'}`}>
-                    {isConnected ? 'Online' : 'Offline'}
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] text-gray-500">Expires</p>
-                  <p className={`text-sm font-bold ${getDaysRemaining(lic) <= 7 ? 'text-orange-400' : 'text-yellow-400'}`}>
                     {getDaysRemaining(lic)} {getDaysRemaining(lic) === 1 ? 'day' : 'days'}
                   </p>
                 </div>

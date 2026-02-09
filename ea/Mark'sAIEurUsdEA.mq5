@@ -2,7 +2,7 @@
 //|                                                 CleanGridEA.mq5   |
 //|                                  Simplified Grid Trading System   |
 //+------------------------------------------------------------------+
-#property copyright "Mark's AI Gold EA - Clean Version"
+#property copyright "Mark's AI EURUSD EA - Clean Version"
 #property version   "2.00"
 #property strict
 
@@ -17,15 +17,16 @@ input bool      UseCachedLicenseInTester = true;
 input int       CachedLicenseMaxAgeHours = 24;
 
 //--- All Settings Hardcoded (Hidden from user)
-#define BuyRangeStart       2001.0
-#define BuyRangeEnd         8801.0
+// EURUSD Range (pip = 0.0001, so 1.18200 to 1.18210 = 1 pip)
+#define BuyRangeStart       1.00000
+#define BuyRangeEnd         1.50000
 #define BuyGapPips          5.0
 #define MaxBuyOrders        5
 #define BuyTakeProfitPips   15
 #define BuyStopLossPips     0.0
 
-#define SellRangeStart      8802.0
-#define SellRangeEnd        2002.0
+#define SellRangeStart      1.50000
+#define SellRangeEnd        1.00000
 #define SellGapPips         6.0
 #define MaxSellOrders       5
 #define SellTakeProfitPips  15
@@ -72,15 +73,16 @@ input int       CachedLicenseMaxAgeHours = 24;
 #define MaxRecoveryOrders       200
 
 #define LotSize         0.15
-#define MagicNumber     999888
-#define OrderComment    "CleanGrid"
+#define MagicNumber     999889
+#define OrderComment    "CleanGridEUR"
 #define ManageAllTrades false
 
 //--- Server URL (Hidden from user)
 string    LicenseServer     = "https://markstrades.com";
 
 //--- Global Variables
-double pip = 1.0;
+// EURUSD pip = 0.0001 (1.18200 to 1.18210 = 1 pip, 1.18220 = 2 pip)
+double pip = 0.0001;
 int currentBuyPositions = 0;      // Filled positions only (for recovery mode)
 int currentSellPositions = 0;     // Filled positions only (for recovery mode)
 int totalBuyOrders = 0;           // Positions + Pending (for grid limit)
@@ -114,7 +116,8 @@ datetime g_LicenseExpiry = 0;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-    pip = 1.0; // For XAUUSD
+    // EURUSD pip calculation: 1.18200 to 1.18210 = 1 pip = 0.0001
+    pip = 0.0001;
     trade.SetExpertMagicNumber(MagicNumber);
     
     // FORCE license to invalid until verified
@@ -244,7 +247,7 @@ void OnTick()
     if(TimeCurrent() - lastDebugLog > 30)
     {
         double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-        AddToLog(StringFormat("DEBUG | Price: %.2f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d", 
+        AddToLog(StringFormat("DEBUG | Price: %.5f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d", 
             currentBid,
             buyInRecovery ? "RECOVERY" : "NORMAL",
             sellInRecovery ? "RECOVERY" : "NORMAL",
@@ -829,7 +832,7 @@ void CleanupInvalidOrders()
         {
             if(trade.OrderDelete(ticket))
             {
-                AddToLog(StringFormat("Deleted invalid %s order #%I64u @ %.2f - %s", 
+                AddToLog(StringFormat("Deleted invalid %s order #%I64u @ %.5f - %s", 
                     (type == ORDER_TYPE_BUY_LIMIT) ? "BUY" : "SELL", 
                     ticket, orderPrice, reason), "CLEANUP");
                 deletedCount++;
@@ -864,7 +867,7 @@ void CleanupInvalidOrders()
             {
                 if(trade.OrderDelete(ticket2))
                 {
-                    AddToLog(StringFormat("Deleted duplicate order #%I64u @ %.2f (duplicate of #%I64u)", 
+                    AddToLog(StringFormat("Deleted duplicate order #%I64u @ %.5f (duplicate of #%I64u)", 
                         ticket2, price2, ticket1), "CLEANUP");
                     deletedCount++;
                 }
@@ -1047,7 +1050,7 @@ void AutoCorrectGridOrders()
             }
             else if(!inBuyRange)
             {
-                AddToLog(StringFormat("BUY Auto-Correct: Price %.2f outside range [%.2f-%.2f]", 
+                AddToLog(StringFormat("BUY Auto-Correct: Price %.5f outside range [%.5f-%.5f]", 
                     currentBid, buyRangeLow, buyRangeHigh), "WORKER");
                 lastBuyCorrection = TimeCurrent();
             }
@@ -1111,7 +1114,7 @@ void AutoCorrectGridOrders()
             }
             else if(!inSellRange)
             {
-                AddToLog(StringFormat("SELL Auto-Correct: Price %.2f outside range [%.2f-%.2f]", 
+                AddToLog(StringFormat("SELL Auto-Correct: Price %.5f outside range [%.5f-%.5f]", 
                     currentAsk, sellRangeLow, sellRangeHigh), "WORKER");
                 lastSellCorrection = TimeCurrent();
             }
@@ -1202,12 +1205,12 @@ void ManageNormalGrid(bool isBuy)
     // Check if current price is within trading range
     if(currentPrice < rangeLow || currentPrice > rangeHigh)
     {
-        AddToLog(StringFormat("%s Grid: Price %.2f outside range [%.2f - %.2f]", 
+        AddToLog(StringFormat("%s Grid: Price %.5f outside range [%.5f - %.5f]", 
             isBuy ? "BUY" : "SELL", currentPrice, rangeLow, rangeHigh), "GRID");
         return;
     }
     
-    AddToLog(StringFormat("%s Grid: Price %.2f in range, managing grid...", 
+    AddToLog(StringFormat("%s Grid: Price %.5f in range, managing grid...", 
         isBuy ? "BUY" : "SELL", currentPrice), "GRID");
     
     // ===== STEP 1: Collect ONLY NORMAL positions for this side =====
@@ -1334,7 +1337,7 @@ void ManageNormalGrid(bool isBuy)
             if(nextLevel < currentPrice)
                 startLevel = nextLevel;
             
-            AddToLog(StringFormat("BUY Grid: Lowest pos=%.2f | Next level=%.2f | Current=%.2f", 
+            AddToLog(StringFormat("BUY Grid: Lowest pos=%.5f | Next level=%.5f | Current=%.5f", 
                 lowestPos, nextLevel, currentPrice), "GRID");
         }
         
@@ -1364,7 +1367,7 @@ void ManageNormalGrid(bool isBuy)
             if(nextLevel > currentPrice)
                 startLevel = nextLevel;
             
-            AddToLog(StringFormat("SELL Grid: Highest pos=%.2f | Next level=%.2f | Current=%.2f", 
+            AddToLog(StringFormat("SELL Grid: Highest pos=%.5f | Next level=%.5f | Current=%.5f", 
                 highestPos, nextLevel, currentPrice), "GRID");
         }
         
@@ -1458,7 +1461,7 @@ void ManageNormalGrid(bool isBuy)
                 
                 if(trade.OrderModify(existingOrderTickets[closestOrderIdx], targetPrice, sl, tp, ORDER_TIME_GTC, 0))
                 {
-                    AddToLog(StringFormat("%s order #%I64u modified: %.2f -> %.2f (%.1f pips)", 
+                    AddToLog(StringFormat("%s order #%I64u modified: %.5f -> %.5f (%.1f pips)", 
                         isBuy ? "BUY" : "SELL", existingOrderTickets[closestOrderIdx], 
                         existingOrderPrices[closestOrderIdx], targetPrice, closestDistance/pip), "MODIFY");
                     targetOccupied[i] = true;
@@ -1562,7 +1565,7 @@ void ManageNormalGrid(bool isBuy)
             sl = (BuyStopLossPips > 0) ? NormalizeDouble(targetPrice - (BuyStopLossPips * pip), _Digits) : 0;
             if(trade.BuyLimit(lotToUse, targetPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
-                AddToLog(StringFormat("BUY LIMIT @ %.2f | Lot: %.2f", targetPrice, lotToUse), "OPEN_BUY");
+                AddToLog(StringFormat("BUY LIMIT @ %.5f | Lot: %.2f", targetPrice, lotToUse), "OPEN_BUY");
                 ordersPlaced++;
             }
         }
@@ -1572,7 +1575,7 @@ void ManageNormalGrid(bool isBuy)
             sl = (SellStopLossPips > 0) ? NormalizeDouble(targetPrice + (SellStopLossPips * pip), _Digits) : 0;
             if(trade.SellLimit(lotToUse, targetPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
-                AddToLog(StringFormat("SELL LIMIT @ %.2f | Lot: %.2f", targetPrice, lotToUse), "OPEN_SELL");
+                AddToLog(StringFormat("SELL LIMIT @ %.5f | Lot: %.2f", targetPrice, lotToUse), "OPEN_SELL");
                 ordersPlaced++;
             }
         }
@@ -1806,7 +1809,7 @@ void ManageRecoveryGrid(bool isBuy)
         double extremeLot = closestLot;
         
         // Debug log
-        AddToLog(StringFormat("%s Recovery: TopLoss=%.2f | Closest=%.2f | Target=%.2f | Current=%.2f", 
+        AddToLog(StringFormat("%s Recovery: TopLoss=%.5f | Closest=%.5f | Target=%.5f | Current=%.5f", 
             isBuy ? "BUY" : "SELL", topDistancePrice, closestPrice, recoveryPrice, currentPrice), "RECOVERY");
         
         // ===== DUPLICATE CHECK for recovery order =====
@@ -1831,7 +1834,7 @@ void ManageRecoveryGrid(bool isBuy)
             if(MathAbs(orderPrice - recoveryPrice) < gapPrice * 0.5)
             {
                 duplicateExists = true;
-                AddToLog(StringFormat("%s Recovery order already exists @ %.2f", isBuy ? "BUY" : "SELL", orderPrice), "RECOVERY");
+                AddToLog(StringFormat("%s Recovery order already exists @ %.5f", isBuy ? "BUY" : "SELL", orderPrice), "RECOVERY");
                 break;
             }
         }
@@ -1853,7 +1856,7 @@ void ManageRecoveryGrid(bool isBuy)
                 if(MathAbs(posPrice - recoveryPrice) < gapPrice * 0.5)
                 {
                     duplicateExists = true;
-                    AddToLog(StringFormat("%s Recovery skipped - position exists @ %.2f", isBuy ? "BUY" : "SELL", posPrice), "RECOVERY");
+                    AddToLog(StringFormat("%s Recovery skipped - position exists @ %.5f", isBuy ? "BUY" : "SELL", posPrice), "RECOVERY");
                     break;
                 }
             }
@@ -1881,14 +1884,14 @@ void ManageRecoveryGrid(bool isBuy)
         recoveryLot = MathMax(minLot, MathMin(effectiveMaxLot, recoveryLot));
         
         // Place recovery order
-        AddToLog(StringFormat("Attempting to place %s recovery order | Price: %.2f | Lot: %.2f | TP: %.2f", 
+        AddToLog(StringFormat("Attempting to place %s recovery order | Price: %.5f | Lot: %.2f | TP: %.5f", 
             isBuy ? "BUY" : "SELL", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
             
         if(isBuy)
         {
             if(trade.BuyLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_BUY"))
             {
-                AddToLog(StringFormat("✅ Recovery BUY placed @ %.2f | Lot: %.2f | TP: %.2f", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
+                AddToLog(StringFormat("✅ Recovery BUY placed @ %.5f | Lot: %.2f | TP: %.5f", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
             }
             else
             {
@@ -1900,7 +1903,7 @@ void ManageRecoveryGrid(bool isBuy)
         {
             if(trade.SellLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_SELL"))
             {
-                AddToLog(StringFormat("✅ Recovery SELL placed @ %.2f | Lot: %.2f | TP: %.2f", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
+                AddToLog(StringFormat("✅ Recovery SELL placed @ %.5f | Lot: %.2f | TP: %.5f", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
             }
             else
             {
@@ -2370,7 +2373,7 @@ void UpdateInfoPanel()
     }
     else
     {
-        modeText = "=== MARK'S AI 3.0 PILOT RUNNING ... ===";
+        modeText = "=== MARK'S AI EURUSD 3.0 RUNNING ... ===";
         modeColor = clrLime;
     }
     
@@ -2549,7 +2552,7 @@ void UpdateInfoPanel()
     ObjectSetString(0, "EA_PriceHeader", OBJPROP_FONT, "Arial Bold");
     yPos += 16;
     
-    string priceInfo = StringFormat("Bid: %.2f | Ask: %.2f | Spread: %.1f",
+    string priceInfo = StringFormat("Bid: %.5f | Ask: %.5f | Spread: %.1f",
         SymbolInfoDouble(_Symbol, SYMBOL_BID),
         SymbolInfoDouble(_Symbol, SYMBOL_ASK),
         (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / pip);
