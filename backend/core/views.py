@@ -1241,13 +1241,19 @@ def get_trade_data(request):
     
     # Get trade data
     try:
-        if not mt5_account:
-            mt5_account = license.mt5_account or ''
-        trade_data = TradeData.objects.get(license=license, mt5_account=mt5_account)
+        if mt5_account:
+            trade_data = TradeData.objects.filter(license=license, mt5_account=mt5_account).first()
+        else:
+            trade_data = None
+        # Fallback: find any trade data for this license
+        if not trade_data:
+            trade_data = TradeData.objects.filter(license=license).order_by('-last_update').first()
+        if not trade_data:
+            raise TradeData.DoesNotExist
         return JsonResponse({
             'success': True,
             'data': {
-                'mt5_account': mt5_account,
+                'mt5_account': trade_data.mt5_account or mt5_account or '',
                 'account_balance': float(trade_data.account_balance),
                 'account_equity': float(trade_data.account_equity),
                 'account_profit': float(trade_data.account_profit),
