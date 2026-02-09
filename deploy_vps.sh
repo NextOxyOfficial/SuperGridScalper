@@ -56,8 +56,8 @@ if [ -d "media/site" ]; then
 fi
 echo -e "${GREEN}✓ Media permissions set${NC}"
 
-# Restart Backend
-sudo systemctl restart markstrades-backend
+# Restart Backend via PM2
+pm2 restart backend --update-env 2>/dev/null || pm2 start $PROJECT_DIR/ecosystem.config.js --only backend
 echo -e "${GREEN}✓ Backend restarted${NC}"
 
 # Step 3: Frontend updates
@@ -74,9 +74,12 @@ fi
 npm run build
 echo -e "${GREEN}✓ Frontend built successfully${NC}"
 
-# Restart Frontend
-sudo systemctl restart markstrades-frontend
+# Restart Frontend via PM2
+pm2 restart frontend --update-env 2>/dev/null || pm2 start $PROJECT_DIR/ecosystem.config.js --only frontend
 echo -e "${GREEN}✓ Frontend restarted${NC}"
+
+# Save PM2 state
+pm2 save
 
 # Step 4: Nginx configuration
 echo -e "\n${YELLOW}Step 4: Checking Nginx configuration...${NC}"
@@ -194,19 +197,8 @@ echo -e "${GREEN}✓ Purchase requests updated${NC}"
 # Step 6: Verify services
 echo -e "\n${YELLOW}Step 6: Verifying services...${NC}"
 
-# Check Backend
-if systemctl is-active --quiet markstrades-backend; then
-    echo -e "${GREEN}✓ Backend is running${NC}"
-else
-    echo -e "${RED}✗ Backend is not running${NC}"
-fi
-
-# Check Frontend
-if systemctl is-active --quiet markstrades-frontend; then
-    echo -e "${GREEN}✓ Frontend is running${NC}"
-else
-    echo -e "${RED}✗ Frontend is not running${NC}"
-fi
+# Check PM2 status
+pm2 status
 
 # Check Nginx
 if systemctl is-active --quiet nginx; then
