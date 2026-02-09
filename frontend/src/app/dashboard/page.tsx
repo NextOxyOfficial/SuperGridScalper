@@ -8,7 +8,7 @@ import ExnessBroker from '@/components/ExnessBroker';
 import QRCode from 'qrcode';
 
 const POLLING_INTERVAL = 2000; // Faster polling for real-time updates
-const EA_CONNECTED_TIMEOUT_SECONDS = 30; // Allow up to 30s between heartbeats before marking disconnected
+const EA_CONNECTED_TIMEOUT_SECONDS = 120; // Allow up to 2min between heartbeats before marking disconnected
 
 export default function DashboardHome() {
   const { user, licenses, selectedLicense, selectLicense, clearSelectedLicense, settings, API_URL, refreshLicenses } = useDashboard();
@@ -22,6 +22,7 @@ export default function DashboardHome() {
   const [eaConnected, setEaConnected] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const tradeDataRef = useRef<any>(null);
   
   // Purchase state
   const [plans, setPlans] = useState<any[]>([]);
@@ -269,26 +270,40 @@ export default function DashboardHome() {
       const res = await fetch(`${API_URL}/trade-data/?license_key=${licenseKey}`);
       const data = await res.json();
       if (data.success && data.data) {
+        const prevData = tradeDataRef.current;
         setTradeData(data.data);
+        tradeDataRef.current = data.data;
         setLastUpdate(new Date());
-        // Check if EA is connected
+        
+        // Check if EA is connected - multiple strategies
+        let connected = false;
+        
+        // Strategy 1: Check last_update timestamp
         if (data.data.last_update) {
           const lastUpdated = new Date(data.data.last_update);
           const now = new Date();
           const diffSeconds = Math.abs(now.getTime() - lastUpdated.getTime()) / 1000;
-          console.log('EA Connection Check:', { 
-            lastUpdated: lastUpdated.toISOString(), 
-            now: now.toISOString(), 
-            diffSeconds, 
-            connected: diffSeconds < EA_CONNECTED_TIMEOUT_SECONDS 
-          });
-          setEaConnected(diffSeconds < EA_CONNECTED_TIMEOUT_SECONDS);
-        } else {
-          // If we have recent data with symbol, assume connected
-          const hasRecentData = data.data.symbol && (data.data.account_balance > 0 || data.data.total_buy_positions > 0 || data.data.total_sell_positions > 0);
-          console.log('EA Connection Fallback:', { hasRecentData, symbol: data.data.symbol });
-          setEaConnected(hasRecentData);
+          connected = diffSeconds < EA_CONNECTED_TIMEOUT_SECONDS;
         }
+        
+        // Strategy 2: If data has changed since last poll, EA is definitely connected
+        if (!connected && prevData) {
+          const dataChanged = 
+            data.data.account_balance !== prevData.account_balance ||
+            data.data.account_equity !== prevData.account_equity ||
+            data.data.account_profit !== prevData.account_profit ||
+            data.data.total_buy_positions !== prevData.total_buy_positions ||
+            data.data.total_sell_positions !== prevData.total_sell_positions;
+          if (dataChanged) connected = true;
+        }
+        
+        // Strategy 3: If we have active positions/balance, assume connected
+        if (!connected) {
+          const hasActivity = data.data.symbol && (data.data.account_balance > 0 || data.data.total_buy_positions > 0 || data.data.total_sell_positions > 0);
+          if (hasActivity) connected = true;
+        }
+        
+        setEaConnected(connected);
       } else {
         setEaConnected(false);
       }
