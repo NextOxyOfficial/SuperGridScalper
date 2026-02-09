@@ -226,19 +226,20 @@ export default function DashboardHome() {
   const fetchAllLicensesTradeData = async () => {
     if (!licenses || licenses.length === 0) return;
     
-    const dataMap: {[key: string]: any} = {};
+    const updates: {[key: string]: any} = {};
     await Promise.all(licenses.map(async (lic) => {
       try {
         const res = await fetch(`${API_URL}/trade-data/?license_key=${lic.license_key}`);
         const data = await res.json();
         if (data.success && data.data) {
-          dataMap[lic.license_key] = data.data;
+          updates[lic.license_key] = data.data;
         }
       } catch (e) {
-        console.error('Failed to fetch trade data for', lic.license_key);
+        // Keep previous data on failure - don't clear it
       }
     }));
-    setAllTradeData(dataMap);
+    // Merge with previous data so nothing flickers
+    setAllTradeData(prev => ({ ...prev, ...updates }));
   };
 
   // Polling for trade data when license is selected
@@ -1930,7 +1931,7 @@ export default function DashboardHome() {
             const currentPrice = licTradeData?.current_price;
             const totalPositions = (licTradeData?.total_buy_positions || 0) + (licTradeData?.total_sell_positions || 0);
             const isConnected = licTradeData && licTradeData.last_update && 
-              (Math.abs(new Date().getTime() - new Date(licTradeData.last_update).getTime()) / 1000) < 15;
+              (Math.abs(new Date().getTime() - new Date(licTradeData.last_update).getTime()) / 1000) < 60;
             const tradingMode = licTradeData?.trading_mode;
             const isRecoveryMode = tradingMode?.toLowerCase().includes('recovery');
             
@@ -1977,8 +1978,8 @@ export default function DashboardHome() {
                 </div>
               </div>
               
-              {/* Trading Mode Row - Only show when connected AND tradingMode exists */}
-              {isConnected && tradingMode && (
+              {/* Trading Mode Row - Show when tradingMode data exists (stable, no flicker) */}
+              {tradingMode && (
                 <div className="px-3 sm:px-5 py-2 border-b border-cyan-500/10">
                   <span className={`inline-flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold border ${
                     isRecoveryMode 
