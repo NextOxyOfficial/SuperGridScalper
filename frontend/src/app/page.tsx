@@ -485,110 +485,201 @@ export default function Home() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/5 rounded-full blur-[150px]" />
       {/* Register Modal */}
       {showRegisterModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#12121a] border border-cyan-500/20 rounded-2xl max-w-md w-full p-4 sm:p-6 relative shadow-2xl shadow-cyan-500/10">
-            <button
-              onClick={() => {
-                setShowRegisterModal(false)
-                setError('')
-                clearAuthParam()
-              }}
-              className="absolute top-3 sm:top-4 right-3 sm:right-4 text-gray-500 hover:text-cyan-400 transition-colors"
-            >
-              <X className="w-5 h-5 sm:w-6 sm:h-6" />
-            </button>
-
-            {/* Header with Icon */}
-            <div className="flex items-center gap-3 mb-4 sm:mb-6">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-cyan-400 to-yellow-400 rounded-xl flex items-center justify-center">
-                <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="relative max-w-md w-full">
+            {/* Outer glow ring */}
+            <div className="absolute -inset-[1px] bg-gradient-to-r from-cyan-500/50 via-cyan-400/20 to-cyan-500/50 rounded-2xl blur-sm" />
+            <div className="absolute -inset-[1px] bg-gradient-to-b from-cyan-400/30 via-transparent to-cyan-500/30 rounded-2xl" />
+            
+            <div className="relative bg-[#0a0a12] border border-cyan-500/30 rounded-2xl p-5 sm:p-7 overflow-hidden">
+              {/* Animated scan line */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent animate-[scan_3s_ease-in-out_infinite]" />
               </div>
-              <div>
-                <h3 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Create Account</h3>
-                <p className="text-gray-500 text-xs sm:text-sm">Register to get started</p>
+              <style jsx>{`@keyframes scan { 0%, 100% { top: -2%; } 50% { top: 102%; } }`}</style>
+
+              {/* Corner accents */}
+              <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-400/60 rounded-tl-2xl" />
+              <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-cyan-400/60 rounded-tr-2xl" />
+              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-cyan-400/60 rounded-bl-2xl" />
+              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-cyan-400/60 rounded-br-2xl" />
+
+              {/* Background circuit pattern */}
+              <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, #06b6d4 1px, transparent 1px), radial-gradient(circle at 75% 75%, #06b6d4 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+
+              {/* Close button */}
+              <button
+                onClick={() => {
+                  setShowRegisterModal(false)
+                  setError('')
+                  clearAuthParam()
+                }}
+                className="absolute top-3 right-3 sm:top-4 sm:right-4 w-8 h-8 flex items-center justify-center rounded-lg border border-gray-700/50 text-gray-500 hover:text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all z-10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* Header */}
+              <div className="text-center mb-5 sm:mb-7 relative">
+                <div className="relative inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 mb-3">
+                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/20 to-cyan-400/10 rounded-2xl rotate-45" />
+                  <div className="absolute inset-[2px] bg-[#0a0a12] rounded-[14px] rotate-45" />
+                  <div className="absolute inset-[3px] bg-gradient-to-br from-cyan-500/10 to-transparent rounded-[13px] rotate-45" />
+                  <Cpu className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-400 relative z-10" />
+                </div>
+                <h3 className="text-xl sm:text-2xl font-bold text-white tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  INITIALIZE
+                </h3>
+                <div className="flex items-center justify-center gap-2 mt-1.5">
+                  <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-cyan-500/50" />
+                  <p className="text-cyan-500/70 text-[10px] sm:text-xs tracking-[0.2em] uppercase">New Operator Access</p>
+                  <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-cyan-500/50" />
+                </div>
+              </div>
+
+              <form onSubmit={handleRegister} className="space-y-3 sm:space-y-3.5 relative">
+                {/* Name field */}
+                <div className="group">
+                  <label className="flex items-center gap-1.5 text-gray-500 text-[10px] sm:text-xs mb-1.5 uppercase tracking-wider">
+                    <Bot className="w-3 h-3 text-cyan-500/50" />
+                    Operator Name
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-[#06060a] border border-cyan-500/15 rounded-xl text-white placeholder-gray-700 focus:outline-none focus:border-cyan-400/60 focus:shadow-[0_0_15px_rgba(6,182,212,0.1)] text-sm sm:text-base transition-all"
+                      placeholder="Enter your name"
+                      required
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500/30 group-focus-within:text-cyan-400/60 transition-colors">
+                      <Bot className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Email field */}
+                <div className="group">
+                  <label className="flex items-center gap-1.5 text-gray-500 text-[10px] sm:text-xs mb-1.5 uppercase tracking-wider">
+                    <Target className="w-3 h-3 text-cyan-500/50" />
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-[#06060a] border border-cyan-500/15 rounded-xl text-white placeholder-gray-700 focus:outline-none focus:border-cyan-400/60 focus:shadow-[0_0_15px_rgba(6,182,212,0.1)] text-sm sm:text-base transition-all"
+                      placeholder="your@email.com"
+                      required
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500/30 group-focus-within:text-cyan-400/60 transition-colors">
+                      <Target className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Password field */}
+                <div className="group">
+                  <label className="flex items-center gap-1.5 text-gray-500 text-[10px] sm:text-xs mb-1.5 uppercase tracking-wider">
+                    <Shield className="w-3 h-3 text-cyan-500/50" />
+                    Access Key
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-[#06060a] border border-cyan-500/15 rounded-xl text-white placeholder-gray-700 focus:outline-none focus:border-cyan-400/60 focus:shadow-[0_0_15px_rgba(6,182,212,0.1)] text-sm sm:text-base transition-all"
+                      placeholder="Min 6 characters"
+                      minLength={6}
+                      required
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500/30 group-focus-within:text-cyan-400/60 transition-colors">
+                      <Shield className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Confirm Password field */}
+                <div className="group">
+                  <label className="flex items-center gap-1.5 text-gray-500 text-[10px] sm:text-xs mb-1.5 uppercase tracking-wider">
+                    <CheckCircle className="w-3 h-3 text-cyan-500/50" />
+                    Confirm Access Key
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-[#06060a] border border-cyan-500/15 rounded-xl text-white placeholder-gray-700 focus:outline-none focus:border-cyan-400/60 focus:shadow-[0_0_15px_rgba(6,182,212,0.1)] text-sm sm:text-base transition-all"
+                      placeholder="Re-enter access key"
+                      minLength={6}
+                      required
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500/30 group-focus-within:text-cyan-400/60 transition-colors">
+                      <CheckCircle className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-xl px-3 py-2.5 text-red-400 text-xs sm:text-sm">
+                    <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse flex-shrink-0" />
+                    {error}
+                  </div>
+                )}
+
+                {/* Submit button */}
+                <div className="pt-1">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="relative w-full py-3 sm:py-3.5 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 text-black rounded-xl font-bold text-sm sm:text-base transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25 overflow-hidden group"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                        INITIALIZING...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4" />
+                        ACTIVATE ACCOUNT
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {/* Footer */}
+              <div className="mt-5 pt-4 border-t border-cyan-500/10">
+                <p className="text-gray-600 text-[10px] sm:text-xs text-center">
+                  Already registered?{' '}
+                  <button 
+                    onClick={() => { setShowRegisterModal(false); setShowLoginModal(true); setError(''); }}
+                    className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors"
+                  >
+                    Access Terminal
+                  </button>
+                </p>
+              </div>
+
+              {/* Status bar */}
+              <div className="flex items-center justify-between mt-3 px-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                  <span className="text-green-400/60 text-[9px] uppercase tracking-wider">System Online</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Activity className="w-3 h-3 text-cyan-500/30" />
+                  <span className="text-cyan-500/30 text-[9px] uppercase tracking-wider">Secure Connection</span>
+                </div>
               </div>
             </div>
-
-            <form onSubmit={handleRegister} className="space-y-3 sm:space-y-4">
-              <div>
-                <label className="block text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">Name</label>
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 text-sm sm:text-base transition-all"
-                  placeholder="Your name"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 text-sm sm:text-base transition-all"
-                  placeholder="your@email.com"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 text-sm sm:text-base transition-all"
-                  placeholder="Min 6 characters"
-                  minLength={6}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">Confirm Password</label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[#0a0a0f] border border-cyan-500/30 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 text-sm sm:text-base transition-all"
-                  placeholder="Confirm password"
-                  minLength={6}
-                  required
-                />
-              </div>
-
-              {error && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-2.5 sm:p-3 text-red-400 text-xs sm:text-sm">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 disabled:opacity-50 text-black rounded-xl font-bold text-sm sm:text-base transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25"
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>CREATE ACCOUNT</>
-                )}
-              </button>
-            </form>
-
-            <p className="text-gray-500 text-xs sm:text-sm mt-4 text-center">
-              Already have an account?{' '}
-              <button 
-                onClick={() => { setShowRegisterModal(false); setShowLoginModal(true); setError(''); }}
-                className="text-cyan-400 hover:text-cyan-300 font-medium"
-              >
-                Login here
-              </button>
-            </p>
           </div>
         </div>
       )}

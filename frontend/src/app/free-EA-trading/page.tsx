@@ -258,8 +258,8 @@ export default function FreeTradingPage() {
           {/* Stats */}
           <div className="mt-8 sm:mt-12 grid grid-cols-3 gap-3 sm:gap-4">
             <div className="bg-gradient-to-br from-green-500/10 to-transparent border border-green-500/20 rounded-xl p-4 sm:p-6 text-center">
-              <p className="text-2xl sm:text-4xl font-bold text-green-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>70-250%</p>
-              <p className="text-gray-400 text-[10px] sm:text-xs">Expected Annual Profit</p>
+              <p className="text-2xl sm:text-4xl font-bold text-green-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>5%-250%</p>
+              <p className="text-gray-400 text-[10px] sm:text-xs">Expected Daily Profit</p>
             </div>
             <div className="bg-gradient-to-br from-cyan-500/10 to-transparent border border-cyan-500/20 rounded-xl p-4 sm:p-6 text-center">
               <p className="text-2xl sm:text-4xl font-bold text-cyan-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>24/5</p>
@@ -368,7 +368,7 @@ export default function FreeTradingPage() {
               },
               {
                 q: 'What is the expected profit?',
-                a: 'Our AI trading bot targets 70-250% annual profit on gold trading. Results vary based on market conditions and your deposit amount. Past performance does not guarantee future results.',
+                a: 'Our AI trading bot targets 5%-250% Daily profit on gold trading. Results vary based on market conditions and your deposit amount. Past performance does not guarantee future results.',
               },
               {
                 q: 'Can I use this on multiple accounts?',
