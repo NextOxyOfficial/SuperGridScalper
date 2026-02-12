@@ -1,11 +1,13 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
+from django import forms
 from django.conf import settings as django_settings
 from django.core.mail import send_mail
 from django.utils.html import format_html
 from django.utils import timezone
 from decimal import Decimal
+from django.db.models import F
 from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest, SMTPSettings, EmailPreference
 
 
@@ -257,6 +259,29 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                         self.message_user(request, f'Approval email sent to {obj.user.email}')
                 except Exception as e:
                     print(f'[ADMIN] Failed to send approval email: {e}')
+                
+                # Track referral commission
+                try:
+                    attribution = ReferralAttribution.objects.select_related('referral').filter(referred_user=obj.user).first()
+                    if attribution and attribution.referral and attribution.referral.is_active and attribution.referral.referrer_id != obj.user.id:
+                        referral = attribution.referral
+                        if not ReferralTransaction.objects.filter(purchase_request=obj).exists():
+                            commission_amount = (obj.amount_usd * referral.commission_percent) / Decimal('100')
+                            ReferralTransaction.objects.create(
+                                referral=referral,
+                                referred_user=obj.user,
+                                purchase_request=obj,
+                                purchase_amount=obj.amount_usd,
+                                commission_amount=commission_amount,
+                                status='pending'
+                            )
+                            Referral.objects.filter(pk=referral.pk).update(
+                                purchases=F('purchases') + 1,
+                                total_earnings=F('total_earnings') + commission_amount,
+                                pending_earnings=F('pending_earnings') + commission_amount,
+                            )
+                except Exception:
+                    pass
                     
             except Exception as e:
                 self.message_user(request, f'Failed to create license: {e}', level='error')
@@ -429,10 +454,11 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                             commission_amount=commission_amount,
                             status='pending'
                         )
-                        referral.purchases += 1
-                        referral.total_earnings += commission_amount
-                        referral.pending_earnings += commission_amount
-                        referral.save()
+                        Referral.objects.filter(pk=referral.pk).update(
+                            purchases=F('purchases') + 1,
+                            total_earnings=F('total_earnings') + commission_amount,
+                            pending_earnings=F('pending_earnings') + commission_amount,
+                        )
             except Exception:
                 pass
 
@@ -816,13 +842,28 @@ class TradeDataAdmin(admin.ModelAdmin):
         return False
 
 
+class EAProductForm(forms.ModelForm):
+    notify_all_users = forms.BooleanField(
+        required=False,
+        initial=False,
+        label='📧 Notify all users about this update',
+        help_text='Check this to send an update notification email to ALL registered users when saving.'
+    )
+    
+    class Meta:
+        model = EAProduct
+        fields = '__all__'
+
+
 @admin.register(EAProduct)
 class EAProductAdmin(admin.ModelAdmin):
-    list_display = ['name', 'subtitle', 'investment_range', 'expected_profit', 'risk_level', 'is_popular', 'is_active', 'display_order']
+    form = EAProductForm
+    list_display = ['name', 'subtitle', 'version_display', 'investment_range', 'expected_profit', 'risk_level', 'is_popular', 'is_active', 'display_order']
     list_filter = ['is_active', 'is_popular', 'risk_level', 'color']
     search_fields = ['name', 'subtitle', 'description']
     list_editable = ['is_popular', 'is_active', 'display_order']
     ordering = ['display_order', 'min_investment']
+    readonly_fields = ['last_update_notified_at']
     
     fieldsets = (
         ('📦 Basic Info', {
@@ -843,16 +884,89 @@ class EAProductAdmin(admin.ModelAdmin):
         }),
         ('📁 EA File', {
             'fields': ('ea_file', 'file_name', 'external_download_url'),
-            'description': 'Upload the .ex5 file for download'
+            'description': 'Upload the .ex5 file for download. If external URL is set, it takes priority.'
+        }),
+        ('🔄 Version & Updates', {
+            'fields': (('version', 'last_update_notified_at'), 'changelog', 'notify_all_users'),
+            'description': 'Update version info and optionally notify all users via email.'
         }),
         ('⚙️ Status', {
             'fields': ('is_active',)
         }),
     )
     
+    def version_display(self, obj):
+        return f"v{obj.version}"
+    version_display.short_description = 'Version'
+    
     def investment_range(self, obj):
         return f"${obj.min_investment:,.0f} - ${obj.max_investment:,.0f}"
     investment_range.short_description = 'Investment'
+    
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        
+        # If notify checkbox was checked, send update email to all users
+        if form.cleaned_data.get('notify_all_users'):
+            from django.utils import timezone
+            from django.contrib.auth.models import User
+            from core.utils import render_email_template, get_email_from_address, add_email_headers, should_send_email
+            from django.core.mail import EmailMultiAlternatives
+            
+            obj.last_update_notified_at = timezone.now()
+            obj.save(update_fields=['last_update_notified_at'])
+            
+            base_url = 'https://markstrades.com'
+            changelog_html = ''
+            if obj.changelog:
+                items = [line.strip() for line in obj.changelog.strip().split('\n') if line.strip()]
+                if items:
+                    changelog_html = '<ul style="color: #d1d5db; line-height: 1.8; font-size: 13px; padding-left: 20px; margin: 10px 0;">'
+                    for item in items:
+                        changelog_html += f'<li>{item}</li>'
+                    changelog_html += '</ul>'
+            
+            subject = f'🔄 EA Update Available - {obj.name} v{obj.version}'
+            html = render_email_template(
+                subject=subject,
+                heading=f'🔄 New EA Update: v{obj.version}',
+                message=f"""
+                    <p>A new version of <strong>{obj.name}</strong> is now available!</p>
+                    
+                    <div style="background-color: rgba(6, 182, 212, 0.1); border-left: 3px solid #06b6d4; padding: 14px; margin: 16px 0; border-radius: 4px;">
+                        <p style="margin: 0 0 6px 0; color: #06b6d4; font-weight: 600; font-size: 13px;">Update Details:</p>
+                        <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>EA:</strong> {obj.name}</p>
+                        <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>Version:</strong> v{obj.version}</p>
+                    </div>
+                    
+                    {f'<p style="color: #d1d5db; font-size: 13px; margin-top: 12px;"><strong>What\'s new:</strong></p>{changelog_html}' if changelog_html else ''}
+                    
+                    <p style="margin-top: 16px;"><strong style="color: #f59e0b;">⚠️ Important:</strong> Please download the new version and restart your EA to get the latest features and fixes.</p>
+                """,
+                cta_text='DOWNLOAD UPDATE',
+                cta_url=f'{base_url}/ea-store',
+                footer_note='Keep your EA up to date for the best trading performance.',
+                preheader=f'{obj.name} v{obj.version} is now available. Download and update your EA!',
+            )
+            
+            from_email = get_email_from_address()
+            users = User.objects.filter(is_active=True).values_list('email', flat=True)
+            sent_count = 0
+            for email in users:
+                if not email:
+                    continue
+                try:
+                    if not should_send_email(email, 'transactional'):
+                        continue
+                    msg = EmailMultiAlternatives(subject, f'{obj.name} v{obj.version} update available', from_email, [email])
+                    msg.attach_alternative(html, "text/html")
+                    msg = add_email_headers(msg, 'transactional')
+                    msg.send(fail_silently=True)
+                    sent_count += 1
+                except Exception:
+                    pass
+            
+            self.message_user(request, f'✅ Update notification sent to {sent_count} users!')
 
 
 # ==================== REFERRAL SYSTEM ADMIN ====================

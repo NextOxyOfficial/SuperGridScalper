@@ -44,6 +44,9 @@ interface EAProduct {
   file_name: string;
   has_file: boolean;
   download_url: string | null;
+  version?: string;
+  changelog?: string;
+  updated_at?: string;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
@@ -169,6 +172,7 @@ export default function PublicEAStorePage() {
                     <p className={`text-[10px] sm:text-xs ${colors.text} mb-0.5 sm:mb-1`}>{ea.subtitle}</p>
                     <h3 className="text-base sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                       {ea.name}
+                      {ea.version && <span className="ml-2 text-[10px] sm:text-xs text-gray-500 font-normal">v{ea.version}</span>}
                     </h3>
                   </div>
                   <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br ${colors.bg} rounded-xl flex items-center justify-center border ${colors.border}`}>

@@ -849,7 +849,7 @@ export default function DashboardHome() {
                         <div className="space-y-4">
                           <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3">
                             <div className="flex items-center justify-between">
-                              <div><p className="text-cyan-400 font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSelectedPlan.name}</p><p className="text-gray-400 text-xs">+{extendSelectedPlan.duration_days} days extension</p></div>
+                              <div><p className="text-cyan-400 font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSelectedPlan.name}</p><p className="text-gray-400 text-xs">Add {extendSelectedPlan.duration_days} days to your license</p></div>
                               <div className="text-right"><p className="text-white font-bold text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>${extendSelectedPlan.price}</p><button onClick={() => setExtendStep(1)} className="text-cyan-400 text-xs hover:underline">Change plan</button></div>
                             </div>
                           </div>
@@ -1043,7 +1043,7 @@ export default function DashboardHome() {
               <div 
                 ref={logContainerRef}
                 className="overflow-y-auto overflow-x-auto p-2 font-mono text-xs leading-relaxed"
-                style={{ scrollbarWidth: 'thin', height: '220px' }}
+                style={{ height: '220px' }}
               >
                 {(() => {
                   const relevantTypes = ['OPEN', 'OPEN_BUY', 'OPEN_SELL', 'CLOSE', 'CLOSE_BUY', 'CLOSE_SELL', 
@@ -1525,7 +1525,7 @@ export default function DashboardHome() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-cyan-400 font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSelectedPlan.name}</p>
-                          <p className="text-gray-400 text-xs">+{extendSelectedPlan.duration_days} days extension</p>
+                          <p className="text-gray-400 text-xs">Add {extendSelectedPlan.duration_days} days to your license</p>
                         </div>
                         <div className="text-right">
                           <p className="text-white font-bold text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>${extendSelectedPlan.price}</p>
@@ -2079,15 +2079,58 @@ export default function DashboardHome() {
         <ExnessBroker variant="compact" />
       </div>
       
-      <div className="flex justify-between items-center mb-3 mt-6 sm:mb-4">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <h3 className="text-sm sm:text-lg font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>YOUR LICENSES</h3>
-          <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-cyan-400 bg-cyan-500/10 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-cyan-500/30">
-            <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
-            Live
-          </span>
+      <div className="mt-6 mb-3 sm:mb-4">
+        <div className="flex justify-between items-center mb-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <h3 className="text-sm sm:text-lg font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>YOUR LICENSES</h3>
+            <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-cyan-400 bg-cyan-500/10 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-cyan-500/30">
+              <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
+              Live
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">{licenses.length} license(s)</span>
+            <button
+              onClick={async () => {
+                await refreshLicenses();
+                await fetchAllLicensesTradeData();
+              }}
+              className="p-1.5 sm:p-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-cyan-300 transition-all"
+              title="Refresh all data"
+            >
+              <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+          </div>
         </div>
-        <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">{licenses.length} license(s)</span>
+        {/* Portfolio Summary */}
+        {licenses.length > 0 && (() => {
+          const currentKeys = new Set(licenses.map(l => l.license_key));
+          const relevantData = Object.entries(allTradeData).filter(([k]) => currentKeys.has(k)).map(([, v]) => v);
+          const totalBalance = relevantData.reduce((sum: number, td: any) => sum + (td?.account_balance || 0), 0);
+          const totalProfit = relevantData.reduce((sum: number, td: any) => sum + (td?.account_profit || 0), 0);
+          const totalPositions = relevantData.reduce((sum: number, td: any) => sum + (td?.total_buy_positions || 0) + (td?.total_sell_positions || 0), 0);
+          const hasData = relevantData.length > 0;
+          return hasData ? (
+            <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
+              <div className="grid grid-cols-3 gap-3 sm:gap-6">
+                <div className="text-center">
+                  <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5">Total Balance</p>
+                  <p className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5">Total P/L</p>
+                  <p className={`text-sm sm:text-lg font-bold ${totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    {totalProfit >= 0 ? '+' : ''}{totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5">Total Positions</p>
+                  <p className="text-sm sm:text-lg font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>{totalPositions}</p>
+                </div>
+              </div>
+            </div>
+          ) : null;
+        })()}
       </div>
       
       {pendingActivationCards.length > 0 ? (
@@ -2145,17 +2188,19 @@ export default function DashboardHome() {
           {[...licenses].sort((a, b) => {
             const aTradeData = allTradeData[a.license_key];
             const bTradeData = allTradeData[b.license_key];
-            
-            // Primary sort: Highest balance first (stable, no flickering)
             const aBalance = aTradeData?.account_balance ?? 0;
             const bBalance = bTradeData?.account_balance ?? 0;
+            const aActive = a.status === 'active';
+            const bActive = b.status === 'active';
+            
+            // Primary: Active licenses on top, deactivated/expired below
+            if (aActive && !bActive) return -1;
+            if (!aActive && bActive) return 1;
+            
+            // Secondary: Within same group, sort by balance high→low
             if (aBalance !== bBalance) return bBalance - aBalance;
             
-            // Then active licenses
-            if (a.status === 'active' && b.status !== 'active') return -1;
-            if (a.status !== 'active' && b.status === 'active') return 1;
-            
-            // Then by expiry date
+            // Tertiary: by expiry date
             const aExpiry = new Date(a.expires_at || 0).getTime();
             const bExpiry = new Date(b.expires_at || 0).getTime();
             return bExpiry - aExpiry;
@@ -2173,7 +2218,7 @@ export default function DashboardHome() {
             
             return (
             <div 
-              key={idx}
+              key={lic.license_key}
               onClick={() => handleSelectLicense(lic)}
               className="bg-[#12121a] rounded-xl cursor-pointer hover:shadow-lg hover:shadow-cyan-500/10 transition-all border border-cyan-500/20 hover:border-cyan-400/50 group overflow-hidden"
             >

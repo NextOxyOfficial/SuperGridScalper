@@ -27,6 +27,8 @@ urlpatterns = [
     path('action-log/', views.add_action_log, name='add_action_log'),
     path('action-logs/', views.get_action_logs, name='get_action_logs'),
     path('ea-products/', views.get_ea_products, name='get_ea_products'),
+    path('ea-download/<int:product_id>/', views.download_ea_file, name='download_ea_file'),
+    path('ea-update-status/', views.get_ea_update_status, name='get_ea_update_status'),
     
     # Referral System
     path('referral/create/', views.create_referral, name='create_referral'),

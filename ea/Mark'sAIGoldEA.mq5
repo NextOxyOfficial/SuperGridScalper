@@ -31,7 +31,7 @@ input int       CachedLicenseMaxAgeHours = 24;
 #define SellTakeProfitPips  15
 #define SellStopLossPips    0.0
 
-#define BuyRecoveryGapPips   5
+#define BuyRecoveryGapPips   6
 #define SellRecoveryGapPips  6
 
 // ===== TRAILING STOP SETTINGS (Normal Mode) =====
@@ -62,8 +62,8 @@ input int       CachedLicenseMaxAgeHours = 24;
 // Recovery mode activates when positions >= MaxOrders
 
 #define EnableRecovery          true   // Recovery mode enable/disable
-#define RecoveryTakeProfitPips  2.25  // Recovery mode এ TP (average price থেকে) - NOT USED for breakeven
-#define RecoveryBreakevenPips   2.25  // Breakeven close এ profit pips (long-distance + profitable positions)
+#define RecoveryTakeProfitPips  2.50  // Recovery mode এ TP (average price থেকে) - NOT USED for breakeven
+#define RecoveryBreakevenPips   2.50  // Breakeven close এ profit pips (long-distance + profitable positions)
 #define RecoveryTrailingStartPips 3.0  // Recovery mode এ trailing শুরু threshold
 #define RecoveryInitialSLPips   4.5    // Recovery mode এ initial SL
 #define RecoveryTrailingRatio   0.5    // Recovery mode এ trailing ratio
@@ -216,18 +216,20 @@ void OnTick()
     // STRICT LICENSE CHECK - If license invalid, expired, suspended or deleted
     if(!g_LicenseValid)
     {
-        // Close all pending orders immediately when license is invalid
+        // Close all pending orders and open positions when license is invalid
         static datetime lastCleanup = 0;
         if(TimeCurrent() - lastCleanup > 10) // Only cleanup every 10 seconds
         {
             lastCleanup = TimeCurrent();
             CloseAllPendingOrders();
+            CloseAllOpenPositions();
         }
         
         // Show big warning on chart
         Comment("⛔ LICENSE INVALID ⛔\n\n" +
                 "Status: " + g_LicenseMessage + "\n\n" +
                 "❌ ALL TRADING DISABLED\n" +
+                "❌ ALL POSITIONS CLOSED\n" +
                 "❌ NEW ORDERS BLOCKED\n\n" +
                 "Please renew at: www.markstrades.com");
         return; // Stop all trading completely
@@ -2805,6 +2807,30 @@ void CloseAllPendingOrders()
         if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
         
         trade.OrderDelete(ticket);
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Close All Open Positions (when license deactivated/expired)       |
+//+------------------------------------------------------------------+
+void CloseAllOpenPositions()
+{
+    int totalPositions = PositionsTotal();
+    for(int i = totalPositions - 1; i >= 0; i--)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        if(!trade.PositionClose(ticket))
+        {
+            AddToLog(StringFormat("Failed to close position #%I64u: %s", ticket, trade.ResultComment()), "ERROR");
+        }
+        else
+        {
+            AddToLog(StringFormat("Closed position #%I64u (license invalid)", ticket), "LICENSE");
+        }
     }
 }
 

@@ -150,6 +150,23 @@ def can_send_email_to_user(user, email_type='transactional'):
         return True
 
 
+def get_email_logo_url():
+    """Get the site favicon/logo URL for emails from SiteSettings"""
+    try:
+        from core.models import SiteSettings
+        s = SiteSettings.get_settings()
+        if s.favicon:
+            # Use HTTPS version of the URL
+            url = f"https://markstrades.com{s.favicon.url}"
+            return url
+        if s.logo:
+            url = f"https://markstrades.com{s.logo.url}"
+            return url
+    except Exception:
+        pass
+    return 'https://markstrades.com/media/site/letter-m_1.png'
+
+
 def render_email_template(subject, heading, message, cta_text=None, cta_url=None, footer_note=None, preheader=None, unsubscribe_url=None):
     """
     Render professional HTML email template matching website design
@@ -178,10 +195,10 @@ def render_email_template(subject, heading, message, cta_text=None, cta_url=None
     cta_html = ""
     if cta_text and cta_url:
         cta_html = f"""
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
             <tr>
                 <td align="center">
-                    <a href="{cta_url}" style="display: inline-block; background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: #000000; font-weight: bold; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; letter-spacing: 0.5px;">
+                    <a href="{cta_url}" class="cta-button" style="display: inline-block; background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: #000000; font-weight: bold; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; letter-spacing: 0.5px;">
                         {cta_text}
                     </a>
                 </td>
@@ -198,98 +215,108 @@ def render_email_template(subject, heading, message, cta_text=None, cta_url=None
         </p>
         """
     
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="x-apple-disable-message-reformatting">
-        <title>{subject}</title>
-        <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&display=swap" rel="stylesheet">
-        <!--[if mso]>
-        <style type="text/css">
-            body, table, td {{font-family: Arial, Helvetica, sans-serif !important;}}
-        </style>
-        <![endif]-->
-    </head>
-    <body style="margin: 0; padding: 0; background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        <!-- Preheader text (hidden but shows in inbox preview) -->
-        <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">
-            {preheader}
-        </div>
-        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; padding: 40px 20px;">
-            <tr>
-                <td align="center">
-                    <table width="600" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #12121a; border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 16px; overflow: hidden;">
-                        
-                        <!-- Header -->
-                        <tr>
-                            <td style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(6, 182, 212, 0.08) 100%); padding: 32px 40px; border-bottom: 1px solid rgba(6, 182, 212, 0.3);">
-                                <table width="100%" cellpadding="0" cellspacing="0">
-                                    <tr>
-                                        <td width="48" style="vertical-align: middle; padding-right: 16px;">
-                                            <img src="https://markstrades.com/media/site/letter-m.png" alt="Mark's AI Logo" width="48" height="48" style="display: block; width: 48px; height: 48px;">
-                                        </td>
-                                        <td style="vertical-align: middle;">
-                                            <h1 style="margin: 0; font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 24px; font-weight: 700; color: #06b6d4; letter-spacing: 1px;">
-                                                Mark's AI 3.0
-                                            </h1>
-                                            <p style="margin: 8px 0 0 0; font-size: 13px; color: #6b7280; letter-spacing: 0.5px;">
-                                                AI powered automated trading EA
-                                            </p>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                        
-                        <!-- Content -->
-                        <tr>
-                            <td style="padding: 40px;">
-                                <h2 style="margin: 0 0 24px 0; font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 20px; font-weight: 600; color: #ffffff; letter-spacing: 0.5px;">
-                                    {heading}
-                                </h2>
-                                
-                                <div style="color: #d1d5db; font-size: 15px; line-height: 1.7;">
-                                    {message}
-                                </div>
-                                
-                                {cta_html}
-                            </td>
-                        </tr>
-                        
-                        <!-- Footer -->
-                        <tr>
-                            <td style="background-color: rgba(6, 182, 212, 0.08); padding: 32px 40px; border-top: 1px solid rgba(6, 182, 212, 0.2);">
-                                <p style="margin: 0; color: #9ca3af; font-size: 13px; line-height: 1.6;">
-                                    <strong style="color: #06b6d4;">Need Help?</strong><br>
-                                    Reply to this email or contact our support team at 
-                                    <a href="mailto:support@markstrades.com" style="color: #06b6d4; text-decoration: none;">support@markstrades.com</a>
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="x-apple-disable-message-reformatting">
+    <title>{subject}</title>
+    <!--[if mso]>
+    <style type="text/css">
+        body, table, td {{font-family: Arial, Helvetica, sans-serif !important;}}
+    </style>
+    <![endif]-->
+    <style type="text/css">
+        body {{ margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
+        table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
+        img {{ border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }}
+        @media only screen and (max-width: 620px) {{
+            .email-wrapper {{ padding: 8px !important; }}
+            .email-container {{ border-radius: 12px !important; }}
+            .email-header {{ padding: 20px 16px !important; }}
+            .email-content {{ padding: 24px 16px !important; }}
+            .email-footer {{ padding: 20px 16px !important; }}
+            .email-heading {{ font-size: 18px !important; }}
+            .email-body {{ font-size: 14px !important; }}
+            .cta-button {{ padding: 12px 24px !important; font-size: 13px !important; }}
+            .info-box {{ padding: 12px !important; }}
+            .info-box p {{ font-size: 13px !important; }}
+        }}
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0a0a0f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; width: 100%;">
+    <!-- Preheader text (hidden but shows in inbox preview) -->
+    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">{preheader}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0f;">
+        <tr>
+            <td align="center" class="email-wrapper" style="padding: 16px 8px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="email-container" style="max-width: 560px; background-color: #12121a; border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 16px; overflow: hidden;">
+                    
+                    <!-- Header -->
+                    <tr>
+                        <td class="email-header" style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(6, 182, 212, 0.05) 100%); padding: 24px 28px; border-bottom: 1px solid rgba(6, 182, 212, 0.25);">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td width="40" style="vertical-align: middle; padding-right: 12px;">
+                                        <img src="{get_email_logo_url()}" alt="M" width="40" height="40" style="display: block; width: 40px; height: 40px; border-radius: 8px;">
+                                    </td>
+                                    <td style="vertical-align: middle;">
+                                        <h1 style="margin: 0; font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 20px; font-weight: 700; color: #06b6d4; letter-spacing: 0.5px;">
+                                            Mark's AI 3.0
+                                        </h1>
+                                        <p style="margin: 4px 0 0 0; font-size: 12px; color: #6b7280; letter-spacing: 0.3px;">
+                                            AI Powered Trading Automation
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td class="email-content" style="padding: 28px;">
+                            <h2 class="email-heading" style="margin: 0 0 20px 0; font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 18px; font-weight: 600; color: #ffffff; letter-spacing: 0.3px;">
+                                {heading}
+                            </h2>
+                            
+                            <div class="email-body" style="color: #d1d5db; font-size: 14px; line-height: 1.7;">
+                                {message}
+                            </div>
+                            
+                            {cta_html}
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td class="email-footer" style="background-color: rgba(6, 182, 212, 0.05); padding: 24px 28px; border-top: 1px solid rgba(6, 182, 212, 0.15);">
+                            <p style="margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.6;">
+                                <strong style="color: #06b6d4;">Need Help?</strong><br>
+                                Contact us at 
+                                <a href="mailto:support@markstrades.com" style="color: #06b6d4; text-decoration: none;">support@markstrades.com</a>
+                            </p>
+                            
+                            {footer_note_html}
+                            
+                            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(107, 114, 128, 0.15);">
+                                <p style="margin: 0 0 8px 0; color: #4b5563; font-size: 11px; line-height: 1.5; text-align: center;">
+                                    &copy; 2025-2026 MarksTrades. All rights reserved.
                                 </p>
-                                
-                                {footer_note_html}
-                                
-                                <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid rgba(107, 114, 128, 0.2);">
-                                    <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 12px; line-height: 1.5;">
-                                        © 2025-2026 MarksTrades. All rights reserved.<br>
-                                        This is an automated message. Please do not reply directly to this email.
-                                    </p>
-                                    <p style="margin: 0; color: #6b7280; font-size: 11px; text-align: center;">
-                                        Don't want to receive these emails? 
-                                        <a href="{unsubscribe_url}" style="color: #06b6d4; text-decoration: underline;">Unsubscribe</a>
-                                    </p>
-                                </div>
-                            </td>
-                        </tr>
-                        
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </body>
-    </html>
-    """
+                                <p style="margin: 0; color: #4b5563; font-size: 11px; text-align: center;">
+                                    <a href="{unsubscribe_url}" style="color: #06b6d4; text-decoration: underline;">Unsubscribe</a>
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
     
     return html

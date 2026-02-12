@@ -367,6 +367,11 @@ class EAProduct(models.Model):
 
     external_download_url = models.URLField(blank=True, help_text="External download link (if set, store will redirect here)")
     
+    # Versioning
+    version = models.CharField(max_length=20, default='1.0', help_text="Current version (e.g., 2.0, 3.1)")
+    changelog = models.TextField(blank=True, help_text="What changed in this version")
+    last_update_notified_at = models.DateTimeField(blank=True, null=True, help_text="When users were last notified about an update")
+    
     # Status
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

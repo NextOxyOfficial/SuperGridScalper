@@ -10,7 +10,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from django.db.models import Count
+from django.db.models import Count, F
 from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest
 from decimal import Decimal
 import json
@@ -565,8 +565,7 @@ def register(request):
     if referral_code:
         try:
             referral = Referral.objects.get(referral_code=referral_code)
-            referral.signups += 1
-            referral.save()
+            Referral.objects.filter(pk=referral.pk).update(signups=F('signups') + 1)
 
             try:
                 ReferralAttribution.objects.get_or_create(referral=referral, referred_user=user)
@@ -922,10 +921,11 @@ def subscribe(request):
                 status='pending'
             )
 
-            referral.purchases += 1
-            referral.total_earnings += commission_amount
-            referral.pending_earnings += commission_amount
-            referral.save()
+            Referral.objects.filter(pk=referral.pk).update(
+                purchases=F('purchases') + 1,
+                total_earnings=F('total_earnings') + commission_amount,
+                pending_earnings=F('pending_earnings') + commission_amount,
+            )
     except Exception as e:
         # Don't fail the purchase if referral tracking fails
         print(f"Referral tracking error: {e}")
@@ -1504,7 +1504,14 @@ def get_ea_products(request):
             if not file_name:
                 file_name = f"{p.name.replace(' ', '')}.ex5"
 
-        download_url = (p.external_download_url or '').strip() or None
+        # Determine download URL: external link > uploaded file > none
+        external_url = (p.external_download_url or '').strip() or None
+        if external_url:
+            download_url = external_url
+        elif p.ea_file:
+            download_url = request.build_absolute_uri(f'/api/ea-download/{p.id}/')
+        else:
+            download_url = None
 
         product_list.append({
             'id': p.id,
@@ -1522,11 +1529,69 @@ def get_ea_products(request):
             'file_name': file_name,
             'has_file': bool(download_url),
             'download_url': download_url,
+            'version': p.version,
+            'changelog': p.changelog,
+            'updated_at': p.updated_at.isoformat() if p.updated_at else None,
         })
     
     return JsonResponse({
         'success': True,
         'products': product_list
+    })
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def download_ea_file(request, product_id):
+    """Serve uploaded EA file for download"""
+    try:
+        product = EAProduct.objects.get(id=product_id, is_active=True)
+    except EAProduct.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Product not found'}, status=404)
+    
+    if not product.ea_file:
+        return JsonResponse({'success': False, 'message': 'No file available'}, status=404)
+    
+    # Determine download filename
+    download_name = product.file_name or product.ea_file.name.split('/')[-1]
+    
+    from django.http import FileResponse
+    response = FileResponse(product.ea_file.open('rb'), content_type='application/octet-stream')
+    response['Content-Disposition'] = f'attachment; filename="{download_name}"'
+    return response
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_ea_update_status(request):
+    """Check if there are any recent EA updates (for notification banner)"""
+    from django.utils import timezone
+    import datetime
+    
+    products = EAProduct.objects.filter(is_active=True).order_by('-updated_at')
+    
+    latest = products.first()
+    if not latest:
+        return JsonResponse({'success': True, 'has_update': False})
+    
+    # Consider an update "new" if notified within last 7 days
+    has_recent_update = False
+    update_info = None
+    if latest.last_update_notified_at:
+        cutoff = timezone.now() - datetime.timedelta(days=7)
+        if latest.last_update_notified_at > cutoff:
+            has_recent_update = True
+            update_info = {
+                'product_name': latest.name,
+                'version': latest.version,
+                'changelog': latest.changelog,
+                'updated_at': latest.last_update_notified_at.isoformat(),
+            }
+    
+    return JsonResponse({
+        'success': True,
+        'has_update': has_recent_update,
+        'update': update_info,
     })
 
 
@@ -1625,18 +1690,47 @@ def get_referral_stats(request):
                 'processed_at': p.processed_at.isoformat() if p.processed_at else None,
             })
         
+        # Compute accurate stats from source-of-truth tables
+        from django.db.models import Sum
+        all_transactions = ReferralTransaction.objects.filter(referral=referral)
+        computed_total = all_transactions.aggregate(total=Sum('commission_amount'))['total'] or Decimal('0.00')
+        computed_purchases = all_transactions.count()
+        computed_signups = ReferralAttribution.objects.filter(referral=referral).count()
+        
+        completed_payouts = ReferralPayout.objects.filter(referral=referral, status__in=['completed', 'processing', 'pending'])
+        computed_paid = completed_payouts.filter(status='completed').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        pending_payout_amount = completed_payouts.filter(status__in=['pending', 'processing']).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        computed_pending = computed_total - computed_paid - pending_payout_amount
+        
+        # Reconcile denormalized fields if they've drifted
+        needs_update = (
+            referral.total_earnings != computed_total or
+            referral.purchases != computed_purchases or
+            referral.signups != computed_signups or
+            referral.pending_earnings != computed_pending or
+            referral.paid_earnings != computed_paid
+        )
+        if needs_update:
+            Referral.objects.filter(pk=referral.pk).update(
+                total_earnings=computed_total,
+                pending_earnings=computed_pending,
+                paid_earnings=computed_paid,
+                purchases=computed_purchases,
+                signups=computed_signups,
+            )
+        
         return JsonResponse({
             'success': True,
             'has_referral': True,
             'referral_code': referral.referral_code,
             'commission_percent': float(referral.commission_percent),
             'stats': {
-                'total_earnings': float(referral.total_earnings),
-                'pending_earnings': float(referral.pending_earnings),
-                'paid_earnings': float(referral.paid_earnings),
+                'total_earnings': float(computed_total),
+                'pending_earnings': float(computed_pending),
+                'paid_earnings': float(computed_paid),
                 'clicks': referral.clicks,
-                'signups': referral.signups,
-                'purchases': referral.purchases,
+                'signups': computed_signups,
+                'purchases': computed_purchases,
             },
             'transactions': transaction_list,
             'payouts': payout_list,
@@ -1659,8 +1753,7 @@ def track_referral_click(request):
         
         try:
             referral = Referral.objects.get(referral_code=referral_code)
-            referral.clicks += 1
-            referral.save()
+            Referral.objects.filter(pk=referral.pk).update(clicks=F('clicks') + 1)
             
             return JsonResponse({
                 'success': True,
@@ -1716,9 +1809,14 @@ def request_payout(request):
             status='pending'
         )
         
-        # Update referral earnings
-        referral.pending_earnings -= amount
-        referral.save()
+        # Update referral earnings atomically
+        Referral.objects.filter(pk=referral.pk).update(
+            pending_earnings=F('pending_earnings') - amount,
+            paid_earnings=F('paid_earnings') + amount,
+        )
+        
+        # Refresh from DB to get accurate remaining balance
+        referral.refresh_from_db()
         
         return JsonResponse({
             'success': True,
