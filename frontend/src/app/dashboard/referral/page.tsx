@@ -28,6 +28,7 @@ export default function ReferralPage() {
   const [payoutLoading, setPayoutLoading] = useState(false);
 
   const [payoutTab, setPayoutTab] = useState<'request' | 'history'>('request');
+  const [selectedLanding, setSelectedLanding] = useState<'main' | 'free-ea'>('main');
 
   const PER_PAGE = 10;
 
@@ -131,8 +132,10 @@ export default function ReferralPage() {
   };
 
   const copyReferralLink = () => {
-    const link = `https://markstrades.com?ref=${referralData?.referral_code}`;
-    navigator.clipboard.writeText(link);
+    const base = selectedLanding === 'free-ea'
+      ? `https://markstrades.com/free-EA-trading?ref=${referralData?.referral_code}`
+      : `https://markstrades.com?ref=${referralData?.referral_code}`;
+    navigator.clipboard.writeText(base);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -157,6 +160,9 @@ export default function ReferralPage() {
         setPayoutAmount('');
         setPaymentDetails('');
         fetchReferralData();
+        setPayoutPage(1);
+        fetchPayouts(1);
+        setPayoutTab('history');
       } else {
         alert(response.data.message);
       }
@@ -204,8 +210,22 @@ export default function ReferralPage() {
     );
   }
 
+  const landingPages = {
+    'main': {
+      label: 'Main Website',
+      description: 'Homepage with pricing & features',
+      url: `https://markstrades.com?ref=${referralData?.referral_code}`,
+    },
+    'free-ea': {
+      label: 'Free EA Trading',
+      description: 'Free license promo landing page',
+      url: `https://markstrades.com/free-EA-trading?ref=${referralData?.referral_code}`,
+    },
+  };
+
+  const activeLink = landingPages[selectedLanding].url;
+
   const stats = referralData.stats;
-  const referralLink = `https://markstrades.com?ref=${referralData.referral_code}`;
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white p-3 sm:p-4">
@@ -251,13 +271,48 @@ export default function ReferralPage() {
           </div>
         </div>
 
-        {/* Referral Link */}
+        {/* Referral Link with Landing Page Selector */}
         <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-3 sm:p-4">
           <h2 className="text-sm sm:text-base font-bold mb-2 sm:mb-3 text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Your Referral Link</h2>
+          
+          {/* Landing Page Selector */}
+          <h3 className="text-xs sm:text-sm font-bold text-gray-300 mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your Landing Page</h3>
+          <div className="flex gap-1.5 sm:gap-2 mb-3">
+            {(Object.keys(landingPages) as Array<'main' | 'free-ea'>).map((key) => {
+              const lp = landingPages[key];
+              const isActive = selectedLanding === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setSelectedLanding(key)}
+                  className={`flex-1 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg border-2 text-left transition-all ${
+                    isActive
+                      ? key === 'free-ea'
+                        ? 'border-green-400 bg-green-500/10 shadow-md shadow-green-500/10'
+                        : 'border-cyan-400 bg-cyan-500/10 shadow-md shadow-cyan-500/10'
+                      : 'border-gray-700 bg-[#0a0a0f] hover:border-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className={`text-[10px] sm:text-xs font-bold ${
+                      isActive
+                        ? key === 'free-ea' ? 'text-green-400' : 'text-cyan-400'
+                        : 'text-gray-400'
+                    }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>{lp.label}</span>
+                    {key === 'free-ea' && (
+                      <span className="text-[8px] sm:text-[9px] font-bold text-green-200 bg-green-500/25 px-1 py-0.5 rounded-full border border-green-400/40 animate-pulse">FREE</span>
+                    )}
+                  </div>
+                  <p className={`text-[9px] sm:text-[10px] ${isActive ? 'text-gray-300' : 'text-gray-600'}`}>{lp.description}</p>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
-              value={referralLink}
+              value={activeLink}
               readOnly
               className="flex-1 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-cyan-500/50"
             />
@@ -273,6 +328,51 @@ export default function ReferralPage() {
           <p className="text-gray-500 text-[10px] sm:text-xs mt-2">
             Code: <span className="text-cyan-400 font-mono font-bold">{referralData.referral_code}</span>
           </p>
+        </div>
+
+        {/* Free Exness Promo Banner */}
+        <div className="bg-gradient-to-r from-[#0d1117] via-[#12121a] to-[#0d1117] border-2 border-green-500/30 rounded-xl overflow-hidden">
+          <div className="relative">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 via-emerald-400 to-green-500" />
+            <div className="p-3 sm:p-5">
+              <div className="flex items-start gap-3 sm:gap-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-green-500/30 to-emerald-500/20 rounded-xl flex items-center justify-center border border-green-500/30 flex-shrink-0">
+                  <Gift className="w-5 h-5 sm:w-6 sm:h-6 text-green-400" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>FREE LICENSE FOR REFERRALS</h3>
+                    <span className="text-[9px] sm:text-[10px] font-bold text-green-300 bg-green-500/20 px-1.5 py-0.5 rounded-full border border-green-400/40 animate-pulse">$0</span>
+                  </div>
+                  <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed mb-3">
+                    Anyone who opens an <span className="text-yellow-400 font-semibold">Exness Standard Cent</span> account through your referral link gets a <span className="text-green-400 font-bold">FREE license</span>! 
+                    Share this with your audience — they get free AI trading, and you earn commissions on their future purchases.
+                  </p>
+                  <div className="bg-[#0a0a0f] rounded-lg p-2.5 sm:p-3 border border-green-500/10">
+                    <p className="text-green-400 font-semibold text-[10px] sm:text-xs mb-1.5">How your referrals get a free license:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 sm:gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3.5 h-3.5 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[8px] font-bold flex-shrink-0">1</span>
+                        <p className="text-gray-400 text-[10px] sm:text-xs">Click your referral link & sign up</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3.5 h-3.5 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[8px] font-bold flex-shrink-0">2</span>
+                        <p className="text-gray-400 text-[10px] sm:text-xs">Open Exness account via our link</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3.5 h-3.5 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[8px] font-bold flex-shrink-0">3</span>
+                        <p className="text-gray-400 text-[10px] sm:text-xs">Claim free license in dashboard</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3.5 h-3.5 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[8px] font-bold flex-shrink-0">4</span>
+                        <p className="text-gray-400 text-[10px] sm:text-xs">Contact support to verify & activate</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Request Payout / Payout History Tabbed Section */}

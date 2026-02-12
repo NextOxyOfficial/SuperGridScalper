@@ -200,30 +200,27 @@ export default function ContactPage() {
             </div>
           </a>
 
-          {/* Telegram Chinese */}
-          <a
-            href={telegramCnUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group bg-[#0a0a0f]/50 border border-yellow-500/30 rounded-2xl p-5 sm:p-6 hover:border-yellow-400 hover:bg-[#0a0a0f]/80 transition-all"
+          {/* Telegram Chinese - Temporarily Unavailable */}
+          <div
+            className="bg-[#0a0a0f]/50 border border-yellow-500/20 rounded-2xl p-5 sm:p-6 opacity-50 cursor-not-allowed"
           >
             <div className="flex items-start gap-3 sm:gap-4 mb-3 sm:mb-4">
-              <div className="w-11 h-11 sm:w-12 sm:h-12 bg-yellow-500/10 rounded-xl flex items-center justify-center group-hover:bg-yellow-500/20 transition-colors flex-shrink-0">
-                <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" />
+              <div className="w-11 h-11 sm:w-12 sm:h-12 bg-yellow-500/5 rounded-xl flex items-center justify-center flex-shrink-0">
+                <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400/50" />
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] sm:text-xs font-bold text-yellow-300/70">🇨🇳 中文</span>
+                  <span className="text-[10px] sm:text-xs font-bold text-yellow-300/50">🇨🇳 中文</span>
+                  <span className="text-[8px] sm:text-[9px] font-bold text-red-300 bg-red-500/20 px-1.5 py-0.5 rounded-full border border-red-400/30">UNAVAILABLE</span>
                 </div>
-                <h3 className="text-white font-bold text-base sm:text-lg mb-1">Telegram 支持</h3>
-                <p className="text-yellow-400 text-xs sm:text-sm font-medium">{telegramCnHandle}</p>
+                <h3 className="text-gray-500 font-bold text-base sm:text-lg mb-1">Telegram 支持</h3>
+                <p className="text-gray-600 text-xs sm:text-sm font-medium">{telegramCnHandle}</p>
               </div>
             </div>
-            <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400">
-              <span>即时响应</span>
-              <ArrowRight className="w-4 h-4 text-yellow-400/50 group-hover:text-yellow-400 group-hover:translate-x-1 transition-all" />
+            <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600">
+              <span>Temporarily unavailable</span>
             </div>
-          </a>
+          </div>
 
           {/* Email */}
           <a

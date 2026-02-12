@@ -703,7 +703,7 @@ class LicensePurchaseRequest(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='purchase_requests')
     plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT)
     mt5_account = models.CharField(max_length=50, blank=True, null=True)
-    network = models.ForeignKey(PaymentNetwork, on_delete=models.PROTECT)
+    network = models.ForeignKey(PaymentNetwork, on_delete=models.PROTECT, null=True, blank=True)
     amount_usd = models.DecimalField(max_digits=10, decimal_places=2)
     txid = models.CharField(max_length=255, blank=True)
     proof = models.FileField(upload_to='payment_proofs/', blank=True, null=True)

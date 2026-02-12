@@ -354,6 +354,7 @@ export default function Home() {
     if (ref) {
       setReferralCode(ref)
       localStorage.setItem('referral_code', ref)
+      document.cookie = `referral_code=${ref}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`
       // Track the referral click in backend
       axios.post(`${API_URL}/referral/track-click/`, { referral_code: ref }).catch(() => {})
     } else {
@@ -804,6 +805,27 @@ export default function Home() {
                   <div className="text-gray-500 text-[9px] sm:text-xs md:text-sm">Traders</div>
                 </div>
               </div>
+              {/* Free EA Promo Banner */}
+              <Link
+                href="/free-EA-trading"
+                className="mt-3 sm:mt-4 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-3.5 bg-gradient-to-r from-green-500/10 via-emerald-500/5 to-green-500/10 border-2 border-green-500/30 rounded-xl sm:rounded-2xl hover:border-green-400/60 hover:shadow-lg hover:shadow-green-500/10 transition-all group/promo"
+              >
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 bg-green-500/20 rounded-lg flex items-center justify-center border border-green-500/30 flex-shrink-0">
+                    <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="text-[10px] sm:text-xs md:text-sm font-bold text-green-300" style={{ fontFamily: 'Orbitron, sans-serif' }}>GET FREE EA SUBSCRIPTION</span>
+                      <span className="text-[8px] sm:text-[9px] font-bold text-green-200 bg-green-500/25 px-1.5 py-0.5 rounded-full border border-green-400/40 animate-pulse">$0</span>
+                    </div>
+                    <p className="text-[9px] sm:text-[10px] md:text-xs text-gray-400 mt-0.5">Open an Exness account under our referral link & trade for free!</p>
+                  </div>
+                </div>
+                <span className="text-[10px] sm:text-xs text-green-400 font-bold whitespace-nowrap group-hover/promo:text-green-300 transition-colors flex items-center gap-1 flex-shrink-0">
+                  How? <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 group-hover/promo:translate-x-0.5 transition-transform" />
+                </span>
+              </Link>
               </div>
             </div>
             

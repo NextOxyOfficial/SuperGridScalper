@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django import forms
 from django.conf import settings as django_settings
 from django.core.mail import send_mail
-from django.utils.html import format_html
+from django.utils.html import format_html, mark_safe
 from django.utils import timezone
 from decimal import Decimal
 from django.db.models import F
@@ -115,7 +115,7 @@ class PaymentNetworkAdmin(admin.ModelAdmin):
 
 @admin.register(LicensePurchaseRequest)
 class LicensePurchaseRequestAdmin(admin.ModelAdmin):
-    list_display = ['created_at', 'request_type_display', 'user', 'plan', 'network', 'amount_usd', 'status', 'mt5_account', 'txid', 'reviewed_at', 'license_link']
+    list_display = ['created_at', 'request_type_display', 'user', 'plan', 'payment_method_display', 'amount_usd', 'status', 'mt5_account', 'txid', 'reviewed_at', 'license_link']
     list_filter = ['status', 'request_type', 'network', 'plan', 'created_at']
     search_fields = ['user__email', 'txid', 'mt5_account']
     readonly_fields = ['created_at', 'updated_at', 'issued_license', 'reviewed_at', 'reviewed_by', 'request_type', 'extend_license']
@@ -123,11 +123,28 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
     radio_fields = {'status': admin.HORIZONTAL}
     actions = ['approve_requests', 'reject_requests']
     
+    def _is_free_claim(self, obj):
+        return '[EXNESS_FREE_CLAIM]' in (obj.user_note or '')
+    
     def request_type_display(self, obj):
+        if self._is_free_claim(obj):
+            return format_html('<span style="color: #10b981; font-weight: bold;">{}</span>', '🎁 FREE')
         if obj.request_type == 'extension':
             return format_html('<span style="color: #f59e0b; font-weight: bold;">{}</span>', '🔄 EXT')
         return format_html('<span style="color: #10b981; font-weight: bold;">{}</span>', '🆕 NEW')
     request_type_display.short_description = 'Type'
+    
+    def payment_method_display(self, obj):
+        if self._is_free_claim(obj):
+            return mark_safe('<span style="color: #10b981; font-weight: bold;">🎁 Free Exness Claim</span>')
+        return obj.network or '-'
+    payment_method_display.short_description = 'Payment Method'
+    
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if obj and self._is_free_claim(obj):
+            fields.extend(['network', 'txid', 'proof', 'amount_usd'])
+        return fields
     
     def license_link(self, obj):
         if obj.issued_license:
@@ -602,56 +619,108 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
             obj.reviewed_at = timezone.now()
             obj.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
 
+            is_free_claim = '[EXNESS_FREE_CLAIM]' in (obj.user_note or '')
+
             try:
                 from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
                 from django.core.mail import EmailMultiAlternatives
                 
                 base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
-                subject = 'Payment Rejected - Action Needed'
 
                 if not can_send_email_to_user(obj.user, 'transactional'):
                     raise Exception('User opted out of transactional emails')
-                
-                text_message = (
-                    f"Hi {obj.user.first_name or 'Trader'},\n\n"
-                    "Unfortunately, your payment could not be verified and has been rejected.\n\n"
-                    f"Request ID: #{obj.id}\n"
-                    f"Plan: {obj.plan.name}\n"
-                    f"Network: {obj.network.name if obj.network else '-'}\n"
-                    f"TXID: {obj.txid or '-'}\n\n"
-                    "You can submit a new payment proof from your dashboard.\n"
-                    f"Open your dashboard: {base}/dashboard\n\n"
-                    "If you believe this is a mistake, please contact support."
-                )
-                
-                html_message = render_email_template(
-                    subject=subject,
-                    heading='Payment Verification Failed',
-                    message=f"""
-                        <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
-                        <p>Unfortunately, your payment could not be verified and has been <strong style="color: #ef4444;">rejected</strong>.</p>
-                        
-                        <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 16px; margin: 20px 0; border-radius: 4px;">
-                            <p style="margin: 0 0 8px 0; color: #ef4444; font-weight: 600;">Request Details:</p>
-                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.id}</p>
-                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
-                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Network:</strong> {obj.network.name if obj.network else '-'}</p>
-                            <p style="margin: 4px 0; color: #d1d5db;"><strong>TXID:</strong> {obj.txid or '-'}</p>
-                        </div>
-                        
-                        <p><strong>What to do next:</strong></p>
-                        <ul style="color: #d1d5db; line-height: 1.7;">
-                            <li>Double-check your payment transaction</li>
-                            <li>Submit a new payment proof from your dashboard</li>
-                            <li>Contact support if you believe this is a mistake</li>
-                        </ul>
-                    """,
-                    cta_text='SUBMIT NEW PROOF',
-                    cta_url=f'{base}/dashboard',
-                    footer_note='If you believe this is a mistake, please contact our support team immediately.',
-                    preheader=f'Payment verification failed for request #{obj.id}. Please review and resubmit.',
-                    unsubscribe_url=get_unsubscribe_url(obj.user)
-                )
+
+                if is_free_claim:
+                    # Special rejection email for free Exness claims
+                    subject = 'Free License Claim Rejected — Account Not Under Our Referral'
+                    text_message = (
+                        f"Hi {obj.user.first_name or 'Trader'},\n\n"
+                        "Unfortunately, we could not verify that your Exness account was created through our referral link. "
+                        "Your free license claim has been rejected.\n\n"
+                        f"Request ID: #{obj.request_number or obj.id}\n"
+                        f"MT5 Account: {obj.mt5_account or '-'}\n\n"
+                        "To qualify for a free license, your Exness account must be opened through our referral link.\n\n"
+                        "You have two options:\n"
+                        "1. Open a NEW Exness account through our referral link and submit a new claim\n"
+                        "2. Purchase a subscription from your dashboard\n\n"
+                        f"Open your dashboard: {base}/dashboard\n"
+                        f"Open Exness with our link: https://one.exnessonelink.com/a/ustbuprn\n\n"
+                        "If you believe this is a mistake, please contact support."
+                    )
+                    html_message = render_email_template(
+                        subject=subject,
+                        heading='Free License Claim Rejected',
+                        message=f"""
+                            <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                            <p>Unfortunately, we could not verify that your Exness account was created through our referral link. 
+                            Your free license claim has been <strong style="color: #ef4444;">rejected</strong>.</p>
+                            
+                            <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                <p style="margin: 0 0 8px 0; color: #ef4444; font-weight: 600;">Claim Details:</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.request_number or obj.id}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>MT5 Account:</strong> {obj.mt5_account or '-'}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Reason:</strong> <span style="color: #f87171;">Exness account not found under our referral</span></p>
+                            </div>
+                            
+                            <p><strong style="color: #22c55e;">What you can do:</strong></p>
+                            <ul style="color: #d1d5db; line-height: 1.8;">
+                                <li><strong>Option 1:</strong> Open a <strong style="color: #eab308;">new Exness account</strong> through 
+                                <a href="https://one.exnessonelink.com/a/ustbuprn" style="color: #06b6d4; text-decoration: underline;">our referral link</a> 
+                                and submit a new free claim</li>
+                                <li><strong>Option 2:</strong> <strong style="color: #06b6d4;">Purchase a subscription</strong> from your dashboard to get instant access</li>
+                            </ul>
+                            
+                            <p style="color: #9ca3af; font-size: 13px;">To qualify for a free license, your Exness account must be created through our referral link. 
+                            We verify this through the Exness partner dashboard.</p>
+                        """,
+                        cta_text='GO TO DASHBOARD',
+                        cta_url=f'{base}/dashboard',
+                        footer_note='If you believe this is a mistake, please contact our support team.',
+                        preheader=f'Your free license claim was rejected. Your Exness account is not under our referral.',
+                        unsubscribe_url=get_unsubscribe_url(obj.user)
+                    )
+                else:
+                    # Standard payment rejection email
+                    subject = 'Payment Rejected - Action Needed'
+                    text_message = (
+                        f"Hi {obj.user.first_name or 'Trader'},\n\n"
+                        "Unfortunately, your payment could not be verified and has been rejected.\n\n"
+                        f"Request ID: #{obj.id}\n"
+                        f"Plan: {obj.plan.name}\n"
+                        f"Network: {obj.network.name if obj.network else '-'}\n"
+                        f"TXID: {obj.txid or '-'}\n\n"
+                        "You can submit a new payment proof from your dashboard.\n"
+                        f"Open your dashboard: {base}/dashboard\n\n"
+                        "If you believe this is a mistake, please contact support."
+                    )
+                    html_message = render_email_template(
+                        subject=subject,
+                        heading='Payment Verification Failed',
+                        message=f"""
+                            <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                            <p>Unfortunately, your payment could not be verified and has been <strong style="color: #ef4444;">rejected</strong>.</p>
+                            
+                            <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                <p style="margin: 0 0 8px 0; color: #ef4444; font-weight: 600;">Request Details:</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.id}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Network:</strong> {obj.network.name if obj.network else '-'}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>TXID:</strong> {obj.txid or '-'}</p>
+                            </div>
+                            
+                            <p><strong>What to do next:</strong></p>
+                            <ul style="color: #d1d5db; line-height: 1.7;">
+                                <li>Double-check your payment transaction</li>
+                                <li>Submit a new payment proof from your dashboard</li>
+                                <li>Contact support if you believe this is a mistake</li>
+                            </ul>
+                        """,
+                        cta_text='SUBMIT NEW PROOF',
+                        cta_url=f'{base}/dashboard',
+                        footer_note='If you believe this is a mistake, please contact our support team immediately.',
+                        preheader=f'Payment verification failed for request #{obj.id}. Please review and resubmit.',
+                        unsubscribe_url=get_unsubscribe_url(obj.user)
+                    )
                 
                 msg = EmailMultiAlternatives(subject, text_message, get_email_from_address(), [obj.user.email])
                 msg.attach_alternative(html_message, "text/html")
@@ -665,7 +734,7 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
 
 @admin.register(License)
 class LicenseAdmin(admin.ModelAdmin):
-    list_display = ['license_key_display', 'user', 'plan', 'status_display', 'mt5_account', 'investment_display', 'trade_status', 'days_remaining_display', 'expires_at']
+    list_display = ['license_key_display', 'user', 'plan', 'status_display', 'mt5_account', 'balance_display', 'equity_display', 'pl_display', 'positions_display', 'trade_status', 'days_remaining_display', 'expires_at']
     list_filter = ['status', 'plan']
     search_fields = ['license_key', 'user__email', 'mt5_account', 'user__username']
     readonly_fields = ['license_key', 'activated_at', 'verification_count', 'last_verified', 'created_at', 'updated_at']
@@ -698,28 +767,57 @@ class LicenseAdmin(admin.ModelAdmin):
         )
     status_display.short_description = 'Status'
 
-    def investment_display(self, obj):
-        """Show account balance from trade data instead of investment amount"""
+    def balance_display(self, obj):
         try:
             td = obj.trade_data
-            return f"${td.account_balance:,.0f}"
+            return format_html('<strong>${:,.2f}</strong>', td.account_balance)
         except:
             return "-"
-    investment_display.short_description = 'Balance'
+    balance_display.short_description = 'Balance'
+
+    def equity_display(self, obj):
+        try:
+            td = obj.trade_data
+            return format_html('${:,.2f}', td.account_equity)
+        except:
+            return "-"
+    equity_display.short_description = 'Equity'
+
+    def pl_display(self, obj):
+        try:
+            td = obj.trade_data
+            profit = td.account_profit
+            color = '#10b981' if profit >= 0 else '#ef4444'
+            sign = '+' if profit >= 0 else ''
+            return format_html('<span style="color: {}; font-weight: bold;">{}{}</span>', color, sign, f"${profit:,.2f}")
+        except:
+            return "-"
+    pl_display.short_description = 'P/L'
+
+    def positions_display(self, obj):
+        try:
+            td = obj.trade_data
+            total = td.total_buy_positions + td.total_sell_positions
+            if total == 0:
+                return mark_safe('<span style="color: gray;">0</span>')
+            return format_html(
+                '<span style="color: #10b981;">{} B</span> / <span style="color: #ef4444;">{} S</span>',
+                td.total_buy_positions, td.total_sell_positions
+            )
+        except:
+            return "-"
+    positions_display.short_description = 'Positions'
 
     def trade_status(self, obj):
         try:
             td = obj.trade_data
-            profit = td.account_profit
-            color = 'green' if profit >= 0 else 'red'
-            profit_str = f"{profit:,.2f}"
-            return format_html(
-                '<span style="color: {};">${}</span> <small>({}B/{}S)</small>',
-                color, profit_str, td.total_buy_positions, td.total_sell_positions
-            )
+            if not td.last_update:
+                return mark_safe('<span style="color: gray;">No data</span>')
+            from django.utils.timesince import timesince
+            return format_html('<span style="color: #6b7280; font-size: 11px;">{} ago</span>', timesince(td.last_update))
         except:
-            return format_html('<span style="color: gray;">{}</span>', 'No data')
-    trade_status.short_description = 'Trading'
+            return mark_safe('<span style="color: gray;">No data</span>')
+    trade_status.short_description = 'Last Update'
 
     def days_remaining_display(self, obj):
         days = obj.days_remaining()

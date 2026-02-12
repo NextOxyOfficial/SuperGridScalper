@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock, Pencil } from 'lucide-react';
+import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock, Pencil, Gift } from 'lucide-react';
 import { useDashboard } from './context';
 import axios from 'axios';
 import ExnessBroker from '@/components/ExnessBroker';
@@ -38,7 +38,8 @@ export default function DashboardHome() {
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState<any>(null);
   const [message, setMessage] = useState({ type: '', text: '' });
-  const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1);
+  const [purchaseStep, setPurchaseStep] = useState<1 | 2 | 3>(1);
+  const [purchaseMethod, setPurchaseMethod] = useState<'free' | 'crypto' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshCooldown, setRefreshCooldown] = useState(0);
   const [refreshedMsg, setRefreshedMsg] = useState(false);
@@ -54,7 +55,8 @@ export default function DashboardHome() {
 
   // Extend license modal state
   const [showExtendModal, setShowExtendModal] = useState(false);
-  const [extendStep, setExtendStep] = useState<1 | 2 | 3>(1); // 1=select plan, 2=payment, 3=success
+  const [extendStep, setExtendStep] = useState<1 | 2 | 3 | 4>(1); // 1=select plan, 2=choose method, 3=payment/free, 4=success
+  const [extendMethod, setExtendMethod] = useState<'free' | 'crypto' | null>(null);
   const [extendSelectedPlan, setExtendSelectedPlan] = useState<any>(null);
   const [extendNetworkId, setExtendNetworkId] = useState<string>('');
   const [extendTxid, setExtendTxid] = useState('');
@@ -67,10 +69,22 @@ export default function DashboardHome() {
   // License toggle state
   const [togglingLicense, setTogglingLicense] = useState<string | null>(null);
 
+  // Deactivation modal state
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [deactivatePassword, setDeactivatePassword] = useState('');
+  const [deactivateError, setDeactivateError] = useState('');
+  const [deactivateCooldown, setDeactivateCooldown] = useState(0);
+
   // Nickname editing state
   const [editingNickname, setEditingNickname] = useState<string | null>(null);
   const [nicknameValue, setNicknameValue] = useState('');
   const [savingNickname, setSavingNickname] = useState(false);
+
+  // Free Exness claim state
+  const [freeExnessMt5, setFreeExnessMt5] = useState('');
+  const [freeExnessUid, setFreeExnessUid] = useState('');
+  const [claimingFree, setClaimingFree] = useState(false);
+  const [freeClaimResult, setFreeClaimResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const nicknameInputRef = useRef<HTMLInputElement>(null);
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
@@ -390,7 +404,8 @@ export default function DashboardHome() {
   const handleExtendSelectPlan = (plan: any) => {
     setExtendSelectedPlan(plan);
     setExtendStep(2);
-    // Set default network
+    setExtendMethod(null);
+    // Set default network for crypto
     if (paymentNetworks.length > 0 && !extendNetworkId) {
       setExtendNetworkId(String(paymentNetworks[0].id));
     }
@@ -429,7 +444,7 @@ export default function DashboardHome() {
       const data = await res.json();
       if (data.success) {
         setExtendSuccess(data.request);
-        setExtendStep(3);
+        setExtendStep(4);
         // Add to purchase requests list
         setPurchaseRequests((prev) => [
           {
@@ -466,6 +481,7 @@ export default function DashboardHome() {
   const resetExtendModal = () => {
     setShowExtendModal(false);
     setExtendStep(1);
+    setExtendMethod(null);
     setExtendSelectedPlan(null);
     setExtendNetworkId('');
     setExtendTxid('');
@@ -476,37 +492,68 @@ export default function DashboardHome() {
     setExtendQrCode('');
   };
 
-  const handleToggleLicense = async (licenseKey: string, currentStatus: string) => {
+  const handleToggleLicense = async (licenseKey: string, currentStatus: string, password?: string) => {
     const action = currentStatus === 'active' ? 'deactivate' : 'activate';
-    const confirmMsg = action === 'deactivate' 
-      ? 'Are you sure you want to deactivate this license? The EA will stop trading.' 
-      : 'Are you sure you want to activate this license?';
-    if (!confirm(confirmMsg)) return;
+
+    // For deactivation, show the modal instead of proceeding directly
+    if (action === 'deactivate' && !password) {
+      if (deactivateCooldown > 0) return;
+      setDeactivatePassword('');
+      setDeactivateError('');
+      setShowDeactivateModal(true);
+      // Start 5-second cooldown
+      setDeactivateCooldown(5);
+      const cd = setInterval(() => {
+        setDeactivateCooldown((prev) => {
+          if (prev <= 1) { clearInterval(cd); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+      return;
+    }
+
+    // For activation, simple confirm
+    if (action === 'activate') {
+      if (!confirm('Are you sure you want to activate this license?')) return;
+    }
 
     setTogglingLicense(licenseKey);
     try {
+      const body: any = {
+        license_key: licenseKey,
+        email: user?.email || user?.username,
+        action
+      };
+      if (action === 'deactivate' && password) {
+        body.password = password;
+      }
       const res = await fetch(`${API_URL}/toggle-license/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          license_key: licenseKey,
-          email: user?.email || user?.username,
-          action
-        })
+        body: JSON.stringify(body)
       });
       const data = await res.json();
       if (data.success) {
-        // Refresh licenses from server
+        setShowDeactivateModal(false);
+        setDeactivatePassword('');
+        setDeactivateError('');
         await refreshLicenses();
-        // If this is the selected license, update it
         if (selectedLicense?.license_key === licenseKey) {
           selectLicense({ ...selectedLicense, status: data.license.status });
         }
       } else {
-        alert(data.message || 'Failed to toggle license');
+        if (action === 'deactivate') {
+          setDeactivateError(data.message || 'Failed to deactivate license');
+        } else {
+          alert(data.message || 'Failed to toggle license');
+        }
       }
     } catch (e) {
-      alert('Failed to toggle license. Please try again.');
+      if (action === 'deactivate') {
+        setDeactivateError('Failed to deactivate license. Please try again.');
+      } else {
+        alert('Failed to toggle license. Please try again.');
+      }
     } finally {
       setTogglingLicense(null);
     }
@@ -516,7 +563,7 @@ export default function DashboardHome() {
     selectLicense(lic);
   };
 
-  const canGoToStep2 = !!selectedPlan && !!mt5Account.trim();
+  const canGoToStep2 = !!selectedPlan;
 
   const resetPurchaseForm = () => {
     setSelectedPlan(null);
@@ -526,6 +573,51 @@ export default function DashboardHome() {
     setProofFile(null);
     setMessage({ type: '', text: '' });
     setPurchaseStep(1);
+    setPurchaseMethod(null);
+  };
+
+  const handleFreeExnessClaim = async () => {
+    if (!freeExnessMt5.trim()) {
+      setFreeClaimResult({ type: 'error', text: 'Please enter your Exness MT5 account number' });
+      return;
+    }
+    setClaimingFree(true);
+    setFreeClaimResult(null);
+    try {
+      const res = await fetch(`${API_URL}/claim-free-exness/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user?.email || (user as any)?.username || '',
+          mt5_account: freeExnessMt5.trim(),
+          exness_uid: freeExnessUid.trim(),
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFreeClaimResult({ type: 'success', text: data.message });
+        // Optimistically add to purchaseRequests so pending check works immediately
+        const newReq = {
+          id: data.request?.id || Date.now(),
+          request_number: data.request?.request_number || '',
+          status: 'pending',
+          user_note: '[EXNESS_FREE_CLAIM]',
+          mt5_account: freeExnessMt5.trim(),
+          created_at: new Date().toISOString(),
+          ...(data.request || {}),
+        };
+        setPurchaseRequests((prev: any[]) => [newReq, ...prev]);
+        setFreeExnessMt5('');
+        setFreeExnessUid('');
+        fetchPurchaseRequests();
+      } else {
+        setFreeClaimResult({ type: 'error', text: data.message || 'Failed to submit claim' });
+      }
+    } catch (e) {
+      setFreeClaimResult({ type: 'error', text: 'Connection error. Please try again.' });
+    } finally {
+      setClaimingFree(false);
+    }
   };
 
   const renderActivationProgress = (req: any) => {
@@ -816,7 +908,7 @@ export default function DashboardHome() {
                       <div className="flex items-center gap-3">
                         <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
                         <h2 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                          {extendStep === 1 ? 'Extend License' : extendStep === 2 ? 'Payment Details' : 'Request Submitted'}
+                          {extendStep === 1 ? 'Extend License' : extendStep === 2 ? 'Choose Method' : extendStep === 3 ? (extendMethod === 'free' ? 'Free Claim' : 'Payment Details') : 'Request Submitted'}
                         </h2>
                       </div>
                       <button onClick={resetExtendModal} className="text-gray-400 hover:text-white transition-colors">
@@ -824,12 +916,12 @@ export default function DashboardHome() {
                       </button>
                     </div>
                     <div className="flex items-center gap-2 mb-4 sm:mb-6">
-                      {[1, 2, 3].map((s) => (
+                      {[1, 2, 3, 4].map((s) => (
                         <div key={s} className="flex items-center gap-2 flex-1">
                           <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                             s <= extendStep ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-gray-500'
                           }`}>{s}</div>
-                          {s < 3 && <div className={`flex-1 h-0.5 rounded ${s < extendStep ? 'bg-cyan-500' : 'bg-gray-700'}`} />}
+                          {s < 4 && <div className={`flex-1 h-0.5 rounded ${s < extendStep ? 'bg-cyan-500' : 'bg-gray-700'}`} />}
                         </div>
                       ))}
                     </div>
@@ -851,14 +943,75 @@ export default function DashboardHome() {
                         ))}
                       </div>
                     )}
-                    {extendStep === 2 && extendSelectedPlan && (() => {
+                    {/* Step 2: Choose Method */}
+                    {extendStep === 2 && extendSelectedPlan && (
+                      <div className="space-y-4">
+                        <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div><p className="text-cyan-400 font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSelectedPlan.name}</p><p className="text-gray-400 text-xs">Add {extendSelectedPlan.duration_days} days to your license</p></div>
+                            <div className="text-right"><p className="text-white font-bold text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>${extendSelectedPlan.price}</p><button onClick={() => setExtendStep(1)} className="text-cyan-400 text-xs hover:underline">Change plan</button></div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {(() => {
+                            const existingFreeClaim = (purchaseRequests || []).find(
+                              (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status !== 'rejected'
+                            );
+                            const isApproved = existingFreeClaim?.status === 'approved';
+                            return (
+                              <button
+                                onClick={() => { setExtendMethod('free'); setExtendStep(3); }}
+                                disabled={!!existingFreeClaim}
+                                className={`relative overflow-hidden rounded-xl border-2 p-4 sm:p-5 text-left transition-all ${
+                                  existingFreeClaim
+                                    ? isApproved ? 'border-green-500/30 bg-green-500/5 cursor-not-allowed' : 'border-yellow-500/30 bg-yellow-500/5 cursor-not-allowed'
+                                    : 'border-green-500/30 bg-gradient-to-br from-green-500/5 to-emerald-500/5 hover:border-green-400/60 hover:shadow-lg hover:shadow-green-500/10 cursor-pointer'
+                                }`}
+                              >
+                                <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 via-emerald-400 to-green-500" />
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Gift className="w-5 h-5 text-green-400" />
+                                  <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>GET IT FREE</span>
+                                  {existingFreeClaim ? (
+                                    isApproved ? (
+                                      <span className="text-[8px] sm:text-[9px] font-bold text-green-300 bg-green-500/20 px-1.5 py-0.5 rounded-full border border-green-400/40">APPROVED</span>
+                                    ) : (
+                                      <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
+                                    )
+                                  ) : (
+                                    <span className="text-[8px] sm:text-[9px] font-bold text-green-200 bg-green-500/25 px-1.5 py-0.5 rounded-full border border-green-400/40 animate-pulse">$0</span>
+                                  )}
+                                </div>
+                                <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">
+                                  {existingFreeClaim ? (isApproved ? 'Your free claim has been approved!' : 'You already have a pending free claim.') : 'Open an Exness account under our referral link & get a free license!'}
+                                </p>
+                              </button>
+                            );
+                          })()}
+                          <button
+                            onClick={() => { setExtendMethod('crypto'); setExtendStep(3); }}
+                            className="relative overflow-hidden rounded-xl border-2 border-cyan-500/30 bg-gradient-to-br from-cyan-500/5 to-cyan-500/5 p-4 sm:p-5 text-left hover:border-cyan-400/60 hover:shadow-lg hover:shadow-cyan-500/10 transition-all cursor-pointer"
+                          >
+                            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 via-cyan-400 to-cyan-500" />
+                            <div className="flex items-center gap-2 mb-2">
+                              <Wallet className="w-5 h-5 text-cyan-400" />
+                              <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>PAY WITH CRYPTO</span>
+                              <span className="text-[8px] sm:text-[9px] font-bold text-cyan-200 bg-cyan-500/20 px-1.5 py-0.5 rounded-full border border-cyan-400/40">${extendSelectedPlan?.price}</span>
+                            </div>
+                            <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">Pay with USDT and get your license extended after admin approval.</p>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {/* Step 3: Crypto Payment */}
+                    {extendStep === 3 && extendMethod === 'crypto' && extendSelectedPlan && (() => {
                       const extendNetwork = paymentNetworks.find((n: any) => String(n.id) === String(extendNetworkId));
                       return (
                         <div className="space-y-4">
                           <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3">
                             <div className="flex items-center justify-between">
                               <div><p className="text-cyan-400 font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSelectedPlan.name}</p><p className="text-gray-400 text-xs">Add {extendSelectedPlan.duration_days} days to your license</p></div>
-                              <div className="text-right"><p className="text-white font-bold text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>${extendSelectedPlan.price}</p><button onClick={() => setExtendStep(1)} className="text-cyan-400 text-xs hover:underline">Change plan</button></div>
+                              <div className="text-right"><p className="text-white font-bold text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>${extendSelectedPlan.price}</p><button onClick={() => setExtendStep(2)} className="text-cyan-400 text-xs hover:underline">Change method</button></div>
                             </div>
                           </div>
                           <div><label className="text-gray-400 text-xs mb-1.5 block">Payment Network</label><div className="flex flex-wrap gap-2">{paymentNetworks.map((n: any) => (<button key={n.id} type="button" onClick={() => setExtendNetworkId(String(n.id))} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${String(n.id) === String(extendNetworkId) ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50' : 'bg-white/5 text-gray-400 border-gray-700 hover:border-gray-500'}`}>{n.name} ({n.token_symbol})</button>))}</div></div>
@@ -876,7 +1029,94 @@ export default function DashboardHome() {
                         </div>
                       );
                     })()}
-                    {extendStep === 3 && (
+                    {/* Step 3: Free Claim */}
+                    {extendStep === 3 && extendMethod === 'free' && (
+                      <div className="space-y-4">
+                        <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Gift className="w-4 h-4 text-green-400" />
+                              <p className="text-green-400 font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSelectedPlan?.name}</p>
+                              <span className="text-green-400 text-sm font-bold">FREE</span>
+                            </div>
+                            <button onClick={() => setExtendStep(2)} className="text-cyan-400 text-xs hover:underline">Change method</button>
+                          </div>
+                        </div>
+                        {(() => {
+                          const pendingFreeClaim = (purchaseRequests || []).find(
+                            (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status !== 'rejected'
+                          );
+                          if (pendingFreeClaim) {
+                            const isPending = pendingFreeClaim.status === 'pending';
+                            return (
+                              <div className={isPending ? 'bg-yellow-500/5 border border-yellow-500/30 rounded-lg p-4' : 'bg-green-500/5 border border-green-500/30 rounded-lg p-4'}>
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className={isPending ? 'w-2 h-2 bg-yellow-400 rounded-full animate-pulse' : 'w-2 h-2 bg-green-400 rounded-full animate-pulse'} />
+                                  <span className={isPending ? 'text-yellow-400 text-xs sm:text-sm font-bold' : 'text-green-400 text-xs sm:text-sm font-bold'} style={{ fontFamily: 'Orbitron, sans-serif' }}>{isPending ? 'Pending Verification' : 'Approved'}</span>
+                                </div>
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between bg-[#0a0a0f] rounded-lg px-3 py-2 border border-gray-800">
+                                    <span className="text-gray-500 text-[10px] sm:text-xs">Request ID</span>
+                                    <span className="text-white text-xs sm:text-sm font-mono">#{pendingFreeClaim.request_number || pendingFreeClaim.id}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between bg-[#0a0a0f] rounded-lg px-3 py-2 border border-gray-800">
+                                    <span className="text-gray-500 text-[10px] sm:text-xs">MT5 Account</span>
+                                    <span className="text-white text-xs sm:text-sm font-mono">{pendingFreeClaim.mt5_account || '-'}</span>
+                                  </div>
+                                </div>
+                                <p className="text-gray-400 text-[10px] sm:text-xs mt-3 leading-relaxed">
+                                  {isPending ? 'Your claim is being reviewed. Contact support to speed up verification.' : 'Your free license has been approved!'}
+                                </p>
+                              </div>
+                            );
+                          }
+                          return (
+                            <>
+                              <div className="bg-[#0a0a0f] rounded-lg p-3 border border-green-500/10">
+                                <h5 className="text-green-400 font-semibold text-xs mb-2">How it works:</h5>
+                                <div className="space-y-1.5">
+                                  <div className="flex items-start gap-2">
+                                    <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">1</span>
+                                    <p className="text-gray-400 text-[10px] sm:text-xs">Open an Exness account using our referral link</p>
+                                  </div>
+                                  <div className="flex items-start gap-2">
+                                    <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">2</span>
+                                    <p className="text-gray-400 text-[10px] sm:text-xs">Create a <span className="text-yellow-400 font-semibold">Standard Cent</span> MT5 account</p>
+                                  </div>
+                                  <div className="flex items-start gap-2">
+                                    <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">3</span>
+                                    <p className="text-gray-400 text-[10px] sm:text-xs">Enter your MT5 account number below and submit</p>
+                                  </div>
+                                  <div className="flex items-start gap-2">
+                                    <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">4</span>
+                                    <p className="text-gray-400 text-[10px] sm:text-xs">Contact support to verify — license activated for free!</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Exness MT5 Account Number *</label>
+                                  <input type="text" value={freeExnessMt5} onChange={(e) => setFreeExnessMt5(e.target.value)} placeholder="e.g. 12345678" className="w-full px-3 py-2 bg-[#0a0a0f] border border-green-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-400" />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Exness UID (optional)</label>
+                                  <input type="text" value={freeExnessUid} onChange={(e) => setFreeExnessUid(e.target.value)} placeholder="Your Exness partner UID" className="w-full px-3 py-2 bg-[#0a0a0f] border border-green-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-400" />
+                                </div>
+                              </div>
+                              {freeClaimResult && (
+                                <div className={`px-3 py-2 rounded-lg text-xs ${freeClaimResult.type === 'success' ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-red-500/10 border border-red-500/30 text-red-300'}`}>
+                                  {freeClaimResult.text}
+                                </div>
+                              )}
+                              <button onClick={handleFreeExnessClaim} disabled={claimingFree || !freeExnessMt5.trim()} className="w-full bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-400 hover:to-emerald-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-green-500/20 disabled:shadow-none" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                                {claimingFree ? 'SUBMITTING...' : 'CLAIM FREE LICENSE'}
+                              </button>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+                    {extendStep === 4 && (
                       <div className="text-center space-y-4">
                         <div className="w-16 h-16 mx-auto bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 rounded-full flex items-center justify-center"><CheckCircle className="w-8 h-8 text-emerald-400" /></div>
                         <div><h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extension Request Submitted!</h3><p className="text-gray-400 text-sm">Your payment is being reviewed. Once approved, your license will be automatically extended.</p></div>
@@ -1377,11 +1617,11 @@ export default function DashboardHome() {
                       </button>
                       <button
                         onClick={() => handleToggleLicense(selectedLicense.license_key, selectedLicense.status)}
-                        disabled={togglingLicense === selectedLicense.license_key}
-                        className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg transition-all whitespace-nowrap font-bold border bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20 ${togglingLicense === selectedLicense.license_key ? 'opacity-50 cursor-wait' : ''}`}
+                        disabled={togglingLicense === selectedLicense.license_key || deactivateCooldown > 0}
+                        className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg transition-all whitespace-nowrap font-bold border bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20 ${(togglingLicense === selectedLicense.license_key || deactivateCooldown > 0) ? 'opacity-50 cursor-wait' : ''}`}
                       >
                         <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                        <span>{togglingLicense === selectedLicense.license_key ? '...' : 'Deactivate'}</span>
+                        <span>{togglingLicense === selectedLicense.license_key ? '...' : deactivateCooldown > 0 ? `${deactivateCooldown}s` : 'Deactivate'}</span>
                       </button>
                     </div>
                   </div>
@@ -1473,7 +1713,7 @@ export default function DashboardHome() {
                 <div className="flex items-center gap-3">
                   <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
                   <h2 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                    {extendStep === 1 ? 'Extend License' : extendStep === 2 ? 'Payment Details' : 'Request Submitted'}
+                    {extendStep === 1 ? 'Extend License' : extendStep === 2 ? 'Choose Method' : extendStep === 3 ? (extendMethod === 'free' ? 'Free Claim' : 'Payment Details') : 'Request Submitted'}
                   </h2>
                 </div>
                 <button onClick={resetExtendModal} className="text-gray-400 hover:text-white transition-colors">
@@ -1483,12 +1723,12 @@ export default function DashboardHome() {
 
               {/* Step Indicator */}
               <div className="flex items-center gap-2 mb-4 sm:mb-6">
-                {[1, 2, 3].map((s) => (
+                {[1, 2, 3, 4].map((s) => (
                   <div key={s} className="flex items-center gap-2 flex-1">
                     <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                       s <= extendStep ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-gray-500'
                     }`}>{s}</div>
-                    {s < 3 && <div className={`flex-1 h-0.5 rounded ${s < extendStep ? 'bg-cyan-500' : 'bg-gray-700'}`} />}
+                    {s < 4 && <div className={`flex-1 h-0.5 rounded ${s < extendStep ? 'bg-cyan-500' : 'bg-gray-700'}`} />}
                   </div>
                 ))}
               </div>
@@ -1523,12 +1763,78 @@ export default function DashboardHome() {
                 </div>
               )}
 
-              {/* Step 2: Payment Details */}
-              {extendStep === 2 && extendSelectedPlan && (() => {
+              {/* Step 2: Choose Method */}
+              {extendStep === 2 && extendSelectedPlan && (
+                <div className="space-y-4">
+                  <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-cyan-400 font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSelectedPlan.name}</p>
+                        <p className="text-gray-400 text-xs">Add {extendSelectedPlan.duration_days} days to your license</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-white font-bold text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>${extendSelectedPlan.price}</p>
+                        <button onClick={() => setExtendStep(1)} className="text-cyan-400 text-xs hover:underline">Change plan</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {(() => {
+                      const existingFreeClaim = (purchaseRequests || []).find(
+                        (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status !== 'rejected'
+                      );
+                      const isApproved = existingFreeClaim?.status === 'approved';
+                      return (
+                        <button
+                          onClick={() => { setExtendMethod('free'); setExtendStep(3); }}
+                          disabled={!!existingFreeClaim}
+                          className={`relative overflow-hidden rounded-xl border-2 p-4 sm:p-5 text-left transition-all ${
+                            existingFreeClaim
+                              ? isApproved ? 'border-green-500/30 bg-green-500/5 cursor-not-allowed' : 'border-yellow-500/30 bg-yellow-500/5 cursor-not-allowed'
+                              : 'border-green-500/30 bg-gradient-to-br from-green-500/5 to-emerald-500/5 hover:border-green-400/60 hover:shadow-lg hover:shadow-green-500/10 cursor-pointer'
+                          }`}
+                        >
+                          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 via-emerald-400 to-green-500" />
+                          <div className="flex items-center gap-2 mb-2">
+                            <Gift className="w-5 h-5 text-green-400" />
+                            <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>GET IT FREE</span>
+                            {existingFreeClaim ? (
+                              isApproved ? (
+                                <span className="text-[8px] sm:text-[9px] font-bold text-green-300 bg-green-500/20 px-1.5 py-0.5 rounded-full border border-green-400/40">APPROVED</span>
+                              ) : (
+                                <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
+                              )
+                            ) : (
+                              <span className="text-[8px] sm:text-[9px] font-bold text-green-200 bg-green-500/25 px-1.5 py-0.5 rounded-full border border-green-400/40 animate-pulse">$0</span>
+                            )}
+                          </div>
+                          <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">
+                            {existingFreeClaim ? (isApproved ? 'Your free claim has been approved!' : 'You already have a pending free claim.') : 'Open an Exness account under our referral link & get a free license!'}
+                          </p>
+                        </button>
+                      );
+                    })()}
+                    <button
+                      onClick={() => { setExtendMethod('crypto'); setExtendStep(3); }}
+                      className="relative overflow-hidden rounded-xl border-2 border-cyan-500/30 bg-gradient-to-br from-cyan-500/5 to-cyan-500/5 p-4 sm:p-5 text-left hover:border-cyan-400/60 hover:shadow-lg hover:shadow-cyan-500/10 transition-all cursor-pointer"
+                    >
+                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 via-cyan-400 to-cyan-500" />
+                      <div className="flex items-center gap-2 mb-2">
+                        <Wallet className="w-5 h-5 text-cyan-400" />
+                        <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>PAY WITH CRYPTO</span>
+                        <span className="text-[8px] sm:text-[9px] font-bold text-cyan-200 bg-cyan-500/20 px-1.5 py-0.5 rounded-full border border-cyan-400/40">${extendSelectedPlan?.price}</span>
+                      </div>
+                      <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">Pay with USDT and get your license extended after admin approval.</p>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Crypto Payment */}
+              {extendStep === 3 && extendMethod === 'crypto' && extendSelectedPlan && (() => {
                 const extendNetwork = paymentNetworks.find((n: any) => String(n.id) === String(extendNetworkId));
                 return (
                   <div className="space-y-4">
-                    {/* Plan Summary */}
                     <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3">
                       <div className="flex items-center justify-between">
                         <div>
@@ -1537,66 +1843,32 @@ export default function DashboardHome() {
                         </div>
                         <div className="text-right">
                           <p className="text-white font-bold text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>${extendSelectedPlan.price}</p>
-                          <button onClick={() => setExtendStep(1)} className="text-cyan-400 text-xs hover:underline">Change plan</button>
+                          <button onClick={() => setExtendStep(2)} className="text-cyan-400 text-xs hover:underline">Change method</button>
                         </div>
                       </div>
                     </div>
-
-                    {/* Payment Network */}
                     <div>
                       <label className="text-gray-400 text-xs mb-1.5 block">Payment Network</label>
                       <div className="flex flex-wrap gap-2">
                         {paymentNetworks.map((n: any) => (
-                          <button
-                            key={n.id}
-                            type="button"
-                            onClick={() => setExtendNetworkId(String(n.id))}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                              String(n.id) === String(extendNetworkId)
-                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                                : 'bg-white/5 text-gray-400 border-gray-700 hover:border-gray-500'
-                            }`}
-                          >
-                            {n.name} ({n.token_symbol})
-                          </button>
+                          <button key={n.id} type="button" onClick={() => setExtendNetworkId(String(n.id))} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${String(n.id) === String(extendNetworkId) ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50' : 'bg-white/5 text-gray-400 border-gray-700 hover:border-gray-500'}`}>{n.name} ({n.token_symbol})</button>
                         ))}
                       </div>
                     </div>
-
-                    {/* Wallet Address + QR */}
                     {extendNetwork?.wallet_address && (
                       <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3">
                         <p className="text-gray-400 text-xs mb-2">Send exactly <span className="text-cyan-400 font-bold">${extendSelectedPlan.price}</span> in <span className="text-cyan-400 font-bold">{extendNetwork.token_symbol}</span> to:</p>
                         <div className="flex items-center gap-2 bg-black/50 rounded p-2">
                           <code className="text-cyan-400 text-xs break-all flex-1">{extendNetwork.wallet_address}</code>
-                          <button
-                            onClick={() => navigator.clipboard.writeText(extendNetwork.wallet_address)}
-                            className="p-1.5 rounded hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-400 transition-all flex-shrink-0"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
+                          <button onClick={() => navigator.clipboard.writeText(extendNetwork.wallet_address)} className="p-1.5 rounded hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-400 transition-all flex-shrink-0"><Copy className="w-3.5 h-3.5" /></button>
                         </div>
-                        {extendQrCode && (
-                          <div className="flex justify-center mt-3">
-                            <img src={extendQrCode} alt="QR Code" className="w-32 h-32 rounded-lg border border-cyan-500/20" />
-                          </div>
-                        )}
+                        {extendQrCode && <div className="flex justify-center mt-3"><img src={extendQrCode} alt="QR Code" className="w-32 h-32 rounded-lg border border-cyan-500/20" /></div>}
                       </div>
                     )}
-
-                    {/* TXID */}
                     <div>
                       <label className="text-gray-400 text-xs mb-1.5 block">Transaction ID (TXID)</label>
-                      <input
-                        type="text"
-                        value={extendTxid}
-                        onChange={(e) => setExtendTxid(e.target.value)}
-                        placeholder="Paste your transaction hash..."
-                        className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none"
-                      />
+                      <input type="text" value={extendTxid} onChange={(e) => setExtendTxid(e.target.value)} placeholder="Paste your transaction hash..." className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none" />
                     </div>
-
-                    {/* Payment Proof Upload */}
                     <div>
                       <label className="text-gray-400 text-xs mb-1.5 block">Payment Proof (Screenshot) *</label>
                       <label className="flex items-center justify-center gap-2 w-full bg-[#0a0a0f] border border-dashed border-cyan-500/30 rounded-lg px-3 py-3 cursor-pointer hover:border-cyan-500/50 transition-all">
@@ -1605,34 +1877,107 @@ export default function DashboardHome() {
                         <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setExtendProofFile(e.target.files?.[0] || null)} />
                       </label>
                     </div>
-
-                    {/* Note */}
                     <div>
                       <label className="text-gray-400 text-xs mb-1.5 block">Note (optional)</label>
-                      <textarea
-                        value={extendNote}
-                        onChange={(e) => setExtendNote(e.target.value)}
-                        placeholder="Any additional info..."
-                        rows={2}
-                        className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none resize-none"
-                      />
+                      <textarea value={extendNote} onChange={(e) => setExtendNote(e.target.value)} placeholder="Any additional info..." rows={2} className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none resize-none" />
                     </div>
-
-                    {/* Submit */}
-                    <button
-                      onClick={handleExtendSubmit}
-                      disabled={extendSubmitting || !extendProofFile || !extendNetworkId}
-                      className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none flex items-center justify-center gap-2"
-                      style={{ fontFamily: 'Orbitron, sans-serif' }}
-                    >
+                    <button onClick={handleExtendSubmit} disabled={extendSubmitting || !extendProofFile || !extendNetworkId} className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none flex items-center justify-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                       {extendSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <><Upload className="w-4 h-4" /> Submit Extension Request</>}
                     </button>
                   </div>
                 );
               })()}
 
-              {/* Step 3: Success */}
-              {extendStep === 3 && (
+              {/* Step 3: Free Claim */}
+              {extendStep === 3 && extendMethod === 'free' && (
+                <div className="space-y-4">
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Gift className="w-4 h-4 text-green-400" />
+                        <p className="text-green-400 font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSelectedPlan?.name}</p>
+                        <span className="text-green-400 text-sm font-bold">FREE</span>
+                      </div>
+                      <button onClick={() => setExtendStep(2)} className="text-cyan-400 text-xs hover:underline">Change method</button>
+                    </div>
+                  </div>
+                  {(() => {
+                    const pendingFreeClaim = (purchaseRequests || []).find(
+                      (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status !== 'rejected'
+                    );
+                    if (pendingFreeClaim) {
+                      const isPending = pendingFreeClaim.status === 'pending';
+                      return (
+                        <div className={isPending ? 'bg-yellow-500/5 border border-yellow-500/30 rounded-lg p-4' : 'bg-green-500/5 border border-green-500/30 rounded-lg p-4'}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className={isPending ? 'w-2 h-2 bg-yellow-400 rounded-full animate-pulse' : 'w-2 h-2 bg-green-400 rounded-full animate-pulse'} />
+                            <span className={isPending ? 'text-yellow-400 text-xs sm:text-sm font-bold' : 'text-green-400 text-xs sm:text-sm font-bold'} style={{ fontFamily: 'Orbitron, sans-serif' }}>{isPending ? 'Pending Verification' : 'Approved'}</span>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between bg-[#0a0a0f] rounded-lg px-3 py-2 border border-gray-800">
+                              <span className="text-gray-500 text-[10px] sm:text-xs">Request ID</span>
+                              <span className="text-white text-xs sm:text-sm font-mono">#{pendingFreeClaim.request_number || pendingFreeClaim.id}</span>
+                            </div>
+                            <div className="flex items-center justify-between bg-[#0a0a0f] rounded-lg px-3 py-2 border border-gray-800">
+                              <span className="text-gray-500 text-[10px] sm:text-xs">MT5 Account</span>
+                              <span className="text-white text-xs sm:text-sm font-mono">{pendingFreeClaim.mt5_account || '-'}</span>
+                            </div>
+                          </div>
+                          <p className="text-gray-400 text-[10px] sm:text-xs mt-3 leading-relaxed">
+                            {isPending ? 'Your claim is being reviewed. Contact support to speed up verification.' : 'Your free license has been approved!'}
+                          </p>
+                        </div>
+                      );
+                    }
+                    return (
+                      <>
+                        <div className="bg-[#0a0a0f] rounded-lg p-3 border border-green-500/10">
+                          <h5 className="text-green-400 font-semibold text-xs mb-2">How it works:</h5>
+                          <div className="space-y-1.5">
+                            <div className="flex items-start gap-2">
+                              <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">1</span>
+                              <p className="text-gray-400 text-[10px] sm:text-xs">Open an Exness account using our referral link</p>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">2</span>
+                              <p className="text-gray-400 text-[10px] sm:text-xs">Create a <span className="text-yellow-400 font-semibold">Standard Cent</span> MT5 account</p>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">3</span>
+                              <p className="text-gray-400 text-[10px] sm:text-xs">Enter your MT5 account number below and submit</p>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">4</span>
+                              <p className="text-gray-400 text-[10px] sm:text-xs">Contact support to verify — license activated for free!</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Exness MT5 Account Number *</label>
+                            <input type="text" value={freeExnessMt5} onChange={(e) => setFreeExnessMt5(e.target.value)} placeholder="e.g. 12345678" className="w-full px-3 py-2 bg-[#0a0a0f] border border-green-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-400" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Exness UID (optional)</label>
+                            <input type="text" value={freeExnessUid} onChange={(e) => setFreeExnessUid(e.target.value)} placeholder="Your Exness partner UID" className="w-full px-3 py-2 bg-[#0a0a0f] border border-green-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-400" />
+                          </div>
+                        </div>
+                        {freeClaimResult && (
+                          <div className={`px-3 py-2 rounded-lg text-xs ${freeClaimResult.type === 'success' ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-red-500/10 border border-red-500/30 text-red-300'}`}>
+                            {freeClaimResult.text}
+                          </div>
+                        )}
+                        <button onClick={handleFreeExnessClaim} disabled={claimingFree || !freeExnessMt5.trim()} className="w-full bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-400 hover:to-emerald-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-green-500/20 disabled:shadow-none" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {claimingFree ? 'SUBMITTING...' : 'CLAIM FREE LICENSE'}
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Step 4: Success */}
+              {extendStep === 4 && (
                 <div className="text-center space-y-4">
                   <div className="w-16 h-16 mx-auto bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 rounded-full flex items-center justify-center">
                     <CheckCircle className="w-8 h-8 text-emerald-400" />
@@ -1658,6 +2003,119 @@ export default function DashboardHome() {
               )}
             </div>
           </div>
+        )}
+
+        {/* Deactivation Confirmation Modal (inside license details view) */}
+        {showDeactivateModal && selectedLicense && (
+          <>
+            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" onClick={() => setShowDeactivateModal(false)} />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="bg-gradient-to-b from-[#12121a] to-[#0a0a0f] border border-red-500/30 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl shadow-red-500/10" onClick={(e) => e.stopPropagation()}>
+                <div className="px-5 py-4 border-b border-red-500/20 bg-red-500/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center border border-red-500/30">
+                      <X className="w-5 h-5 text-red-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>DEACTIVATE LICENSE</h3>
+                      <p className="text-gray-500 text-[10px] sm:text-xs">This action will stop all trading</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-5 py-4 space-y-4">
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 sm:p-4">
+                    <div className="flex items-start gap-2">
+                      <span className="text-red-400 text-lg mt-0.5">⚠️</span>
+                      <div>
+                        <p className="text-red-300 text-xs sm:text-sm font-semibold mb-1">Warning: All orders will be closed!</p>
+                        <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">
+                          Deactivating this license will immediately stop the EA. All <span className="text-yellow-400 font-semibold">open positions</span> and <span className="text-yellow-400 font-semibold">pending orders</span> will be closed by the EA on next tick. This may result in realized losses.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  {tradeData && ((tradeData.open_positions?.length || 0) > 0 || (tradeData.total_pending_orders || 0) > 0) && (
+                    <div className="bg-[#0a0a0f] border border-yellow-500/20 rounded-xl p-3 sm:p-4">
+                      <p className="text-yellow-400 text-xs font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>ACTIVE ORDERS</p>
+                      <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                          <p className="text-[10px] text-gray-500">Open</p>
+                          <p className="text-sm font-bold text-cyan-400">{(tradeData.total_buy_positions || 0) + (tradeData.total_sell_positions || 0)}</p>
+                        </div>
+                        <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                          <p className="text-[10px] text-gray-500">Pending</p>
+                          <p className="text-sm font-bold text-yellow-400">{tradeData.total_pending_orders || 0}</p>
+                        </div>
+                        <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                          <p className="text-[10px] text-gray-500">P/L</p>
+                          <p className={`text-sm font-bold ${(tradeData.account_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {(tradeData.account_profit || 0) >= 0 ? '+' : ''}${tradeData.account_profit?.toFixed(2) || '0'}
+                          </p>
+                        </div>
+                      </div>
+                      {tradeData.open_positions && tradeData.open_positions.length > 0 && (
+                        <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
+                          {tradeData.open_positions.map((pos: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between bg-[#12121a] rounded-lg px-2.5 py-1.5 border border-gray-800 text-[10px] sm:text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                  pos.type?.toLowerCase().includes('buy') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                }`}>
+                                  {pos.type?.toLowerCase().includes('buy') ? 'BUY' : 'SELL'}
+                                </span>
+                                <span className="text-gray-400">{pos.lots || pos.volume} lots</span>
+                              </div>
+                              <span className={`font-mono font-bold ${(pos.profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {(pos.profit || 0) >= 0 ? '+' : ''}${pos.profit?.toFixed(2) || '0'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs sm:text-sm text-gray-400 mb-1.5 font-medium">Enter your password to confirm</label>
+                    <input
+                      type="password"
+                      value={deactivatePassword}
+                      onChange={(e) => { setDeactivatePassword(e.target.value); setDeactivateError(''); }}
+                      placeholder="Your account password"
+                      className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-red-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-500/30"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && deactivatePassword.trim()) {
+                          handleToggleLicense(selectedLicense.license_key, selectedLicense.status, deactivatePassword);
+                        }
+                      }}
+                      autoFocus
+                    />
+                  </div>
+                  {deactivateError && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-red-300 text-xs">
+                      {deactivateError}
+                    </div>
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => { setShowDeactivateModal(false); setDeactivatePassword(''); setDeactivateError(''); }}
+                      className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs sm:text-sm font-bold transition-all border border-gray-700"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      CANCEL
+                    </button>
+                    <button
+                      onClick={() => handleToggleLicense(selectedLicense.license_key, selectedLicense.status, deactivatePassword)}
+                      disabled={!deactivatePassword.trim() || togglingLicense === selectedLicense.license_key}
+                      className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-white rounded-lg text-xs sm:text-sm font-bold transition-all shadow-lg shadow-red-500/20 disabled:shadow-none"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      {togglingLicense === selectedLicense.license_key ? 'DEACTIVATING...' : 'DEACTIVATE'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
     );
@@ -1788,7 +2246,7 @@ export default function DashboardHome() {
             <div className="pt-4">
               <div className="mb-4 bg-[#0a0a0f] border border-cyan-500/10 rounded-xl p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Step {purchaseStep} / 2</p>
+                  <p className="text-xs font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Step {purchaseStep} / 3</p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1801,53 +2259,43 @@ export default function DashboardHome() {
                     </button>
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-600 mt-1">Step 1: Plan & MT5 • Step 2: Payment Details</p>
+                <p className="text-[10px] text-gray-600 mt-1">Step 1: Select Plan • Step 2: Choose Method • Step 3: Complete</p>
               </div>
 
-              {plans.length === 0 ? (
-                <div className="text-center py-4">
-                  <p className="text-gray-500 text-sm">Loading plans...</p>
-                  <button 
-                    onClick={fetchPlans}
-                    className="mt-2 text-cyan-400 text-sm hover:underline"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-4">
-                  {plans.map((plan) => (
-                    <div
-                      key={plan.id}
-                      onClick={() => setSelectedPlan(plan)}
-                      className={`p-2 sm:p-3 rounded-lg border-2 cursor-pointer transition-all text-center ${
-                        selectedPlan?.id === plan.id
-                          ? 'border-cyan-400 bg-cyan-500/10 shadow-lg shadow-cyan-500/20'
-                          : 'border-gray-700 hover:border-cyan-500/50 bg-[#0a0a0f]'
-                      }`}
+              {purchaseStep === 1 && (
+                plans.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-gray-500 text-sm">Loading plans...</p>
+                    <button 
+                      onClick={fetchPlans}
+                      className="mt-2 text-cyan-400 text-sm hover:underline"
                     >
-                      <h4 className="font-semibold text-white text-[10px] sm:text-sm truncate" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h4>
-                      <p className="text-sm sm:text-xl font-bold text-cyan-400 my-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</p>
-                      <p className="text-[9px] sm:text-xs text-gray-500">{plan.duration_days} days</p>
-                    </div>
-                  ))}
-                </div>
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-4">
+                    {plans.map((plan) => (
+                      <div
+                        key={plan.id}
+                        onClick={() => setSelectedPlan(plan)}
+                        className={`p-2 sm:p-3 rounded-lg border-2 cursor-pointer transition-all text-center ${
+                          selectedPlan?.id === plan.id
+                            ? 'border-cyan-400 bg-cyan-500/10 shadow-lg shadow-cyan-500/20'
+                            : 'border-gray-700 hover:border-cyan-500/50 bg-[#0a0a0f]'
+                        }`}
+                      >
+                        <h4 className="font-semibold text-white text-[10px] sm:text-sm truncate" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h4>
+                        <p className="text-sm sm:text-xl font-bold text-cyan-400 my-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</p>
+                        <p className="text-[9px] sm:text-xs text-gray-500">{plan.duration_days} days</p>
+                      </div>
+                    ))}
+                  </div>
+                )
               )}
               
               {plans.length > 0 && purchaseStep === 1 ? (
                 <>
-                  <div className="mb-3">
-                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">MT5 Account Number</label>
-                    <input
-                      type="text"
-                      value={mt5Account}
-                      onChange={(e) => setMt5Account(e.target.value)}
-                      placeholder="Enter MT5 account"
-                      className="w-full px-3 py-2 sm:py-2.5 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white placeholder-gray-600"
-                    />
-                    <p className="text-[10px] sm:text-xs text-gray-600 mt-1">License will be bound to this account only</p>
-                  </div>
-
                   <button
                     type="button"
                     onClick={() => setPurchaseStep(2)}
@@ -1855,22 +2303,113 @@ export default function DashboardHome() {
                     className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
-                    NEXT: PAYMENT DETAILS
+                    NEXT: CHOOSE METHOD
                   </button>
                 </>
               ) : null}
 
+              {/* Step 2: Choose Method */}
               {plans.length > 0 && purchaseStep === 2 ? (
+                <>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <button type="button" onClick={() => setPurchaseStep(1)} className="text-cyan-300 hover:text-cyan-200 text-xs font-medium">← Back</button>
+                    <p className="text-[10px] text-gray-600">Choose how you want to get your license</p>
+                  </div>
+
+                  {/* Selected Plan Summary */}
+                  <div className="mb-4 bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500 text-[10px] sm:text-xs">Plan:</span>
+                      <span className="text-white text-xs sm:text-sm font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>{selectedPlan?.name}</span>
+                      <span className="text-cyan-400 text-xs sm:text-sm font-bold">${selectedPlan?.price}</span>
+                    </div>
+                    <span className="text-gray-500 text-[10px] sm:text-xs">{selectedPlan?.duration_days} days</span>
+                  </div>
+
+                  {/* Method Selection Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                    {/* Free Option */}
+                    {(() => {
+                      const existingFreeClaim = (purchaseRequests || []).find(
+                        (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status !== 'rejected'
+                      );
+                      const isApproved = existingFreeClaim?.status === 'approved';
+                      return (
+                        <button
+                          onClick={() => { setPurchaseMethod('free'); setPurchaseStep(3); }}
+                          disabled={!!existingFreeClaim}
+                          className={`relative overflow-hidden rounded-xl border-2 p-4 sm:p-5 text-left transition-all ${
+                            existingFreeClaim
+                              ? isApproved ? 'border-green-500/30 bg-green-500/5 cursor-not-allowed' : 'border-yellow-500/30 bg-yellow-500/5 cursor-not-allowed'
+                              : 'border-green-500/30 bg-gradient-to-br from-green-500/5 to-emerald-500/5 hover:border-green-400/60 hover:shadow-lg hover:shadow-green-500/10 cursor-pointer'
+                          }`}
+                        >
+                          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 via-emerald-400 to-green-500" />
+                          <div className="flex items-center gap-2 mb-2">
+                            <Gift className="w-5 h-5 text-green-400" />
+                            <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>GET IT FREE</span>
+                            {existingFreeClaim ? (
+                              isApproved ? (
+                                <span className="text-[8px] sm:text-[9px] font-bold text-green-300 bg-green-500/20 px-1.5 py-0.5 rounded-full border border-green-400/40">APPROVED</span>
+                              ) : (
+                                <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
+                              )
+                            ) : (
+                              <span className="text-[8px] sm:text-[9px] font-bold text-green-200 bg-green-500/25 px-1.5 py-0.5 rounded-full border border-green-400/40 animate-pulse">$0</span>
+                            )}
+                          </div>
+                          <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">
+                            {existingFreeClaim
+                              ? (isApproved ? 'Your free claim has been approved!' : 'You already have a pending free claim.')
+                              : 'Open an Exness account under our referral link & get a free license!'}
+                          </p>
+                        </button>
+                      );
+                    })()}
+
+                    {/* Crypto Option */}
+                    <button
+                      onClick={() => { setPurchaseMethod('crypto'); setPurchaseStep(3); }}
+                      className="relative overflow-hidden rounded-xl border-2 border-cyan-500/30 bg-gradient-to-br from-cyan-500/5 to-cyan-500/5 p-4 sm:p-5 text-left hover:border-cyan-400/60 hover:shadow-lg hover:shadow-cyan-500/10 transition-all cursor-pointer"
+                    >
+                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 via-cyan-400 to-cyan-500" />
+                      <div className="flex items-center gap-2 mb-2">
+                        <Wallet className="w-5 h-5 text-cyan-400" />
+                        <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>PAY WITH CRYPTO</span>
+                        <span className="text-[8px] sm:text-[9px] font-bold text-cyan-200 bg-cyan-500/20 px-1.5 py-0.5 rounded-full border border-cyan-400/40">${selectedPlan?.price}</span>
+                      </div>
+                      <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">
+                        Pay with USDT and get your license activated after admin approval.
+                      </p>
+                    </button>
+                  </div>
+                </>
+              ) : null}
+
+              {/* Step 3: Complete - Crypto Payment */}
+              {plans.length > 0 && purchaseStep === 3 && purchaseMethod === 'crypto' ? (
                 <>
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <button
                       type="button"
-                      onClick={() => setPurchaseStep(1)}
+                      onClick={() => setPurchaseStep(2)}
                       className="text-cyan-300 hover:text-cyan-200 text-xs font-medium"
                     >
                       ← Back
                     </button>
                     <p className="text-[10px] text-gray-600">Review wallet, upload proof, submit</p>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">MT5 Account Number</label>
+                    <input
+                      type="text"
+                      value={mt5Account}
+                      onChange={(e) => setMt5Account(e.target.value)}
+                      placeholder="Enter MT5 account number"
+                      className="w-full px-3 py-2 sm:py-2.5 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white placeholder-gray-600"
+                    />
+                    <p className="text-[10px] sm:text-xs text-gray-600 mt-1">License will be bound to this account only</p>
                   </div>
 
                   <div className="mb-3">
@@ -2009,6 +2548,126 @@ export default function DashboardHome() {
                   >
                     {purchasing ? 'SUBMITTING...' : 'SUBMIT PAYMENT PROOF'}
                   </button>
+                </>
+              ) : null}
+
+              {/* Step 3: Complete - Free Subscription */}
+              {plans.length > 0 && purchaseStep === 3 && purchaseMethod === 'free' ? (
+                <>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <button type="button" onClick={() => setPurchaseStep(2)} className="text-cyan-300 hover:text-cyan-200 text-xs font-medium">← Back</button>
+                    <p className="text-[10px] text-gray-600">Claim your free license via Exness</p>
+                  </div>
+
+                  {/* Selected Plan Summary */}
+                  <div className="mb-4 bg-[#0a0a0f] border border-green-500/20 rounded-lg px-3 py-2 flex items-center gap-2">
+                    <Gift className="w-4 h-4 text-green-400" />
+                    <span className="text-white text-xs sm:text-sm font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>{selectedPlan?.name}</span>
+                    <span className="text-green-400 text-xs sm:text-sm font-bold">FREE</span>
+                  </div>
+
+                  {(() => {
+                    const pendingFreeClaim = (purchaseRequests || []).find(
+                      (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status !== 'rejected'
+                    );
+                    if (pendingFreeClaim) {
+                      const isPending = pendingFreeClaim.status === 'pending';
+                      return (
+                        <div className={isPending ? 'bg-yellow-500/5 border border-yellow-500/30 rounded-lg p-4' : 'bg-green-500/5 border border-green-500/30 rounded-lg p-4'}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className={isPending ? 'w-2 h-2 bg-yellow-400 rounded-full animate-pulse' : 'w-2 h-2 bg-green-400 rounded-full animate-pulse'} />
+                            <span className={isPending ? 'text-yellow-400 text-xs sm:text-sm font-bold' : 'text-green-400 text-xs sm:text-sm font-bold'} style={{ fontFamily: 'Orbitron, sans-serif' }}>{isPending ? 'Pending Verification' : 'Approved'}</span>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between bg-[#0a0a0f] rounded-lg px-3 py-2 border border-gray-800">
+                              <span className="text-gray-500 text-[10px] sm:text-xs">Request ID</span>
+                              <span className="text-white text-xs sm:text-sm font-mono">#{pendingFreeClaim.request_number || pendingFreeClaim.id}</span>
+                            </div>
+                            <div className="flex items-center justify-between bg-[#0a0a0f] rounded-lg px-3 py-2 border border-gray-800">
+                              <span className="text-gray-500 text-[10px] sm:text-xs">MT5 Account</span>
+                              <span className="text-white text-xs sm:text-sm font-mono">{pendingFreeClaim.mt5_account || '-'}</span>
+                            </div>
+                            <div className="flex items-center justify-between bg-[#0a0a0f] rounded-lg px-3 py-2 border border-gray-800">
+                              <span className="text-gray-500 text-[10px] sm:text-xs">Submitted</span>
+                              <span className="text-gray-300 text-xs sm:text-sm">{new Date(pendingFreeClaim.created_at).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                          <p className="text-gray-400 text-[10px] sm:text-xs mt-3 leading-relaxed">
+                            {pendingFreeClaim.status === 'approved'
+                              ? 'Your free license has been approved! Check your licenses above.'
+                              : 'Your claim is being reviewed. Contact our support team to speed up verification.'}
+                          </p>
+                        </div>
+                      );
+                    }
+                    return (
+                      <>
+                        <div className="bg-[#0a0a0f] rounded-lg p-3 mb-3 border border-green-500/10">
+                          <h5 className="text-green-400 font-semibold text-xs mb-2">How it works:</h5>
+                          <div className="space-y-1.5">
+                            <div className="flex items-start gap-2">
+                              <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">1</span>
+                              <p className="text-gray-400 text-[10px] sm:text-xs">Open an Exness account using our referral link (click the Exness banner above)</p>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">2</span>
+                              <p className="text-gray-400 text-[10px] sm:text-xs">Create a <span className="text-yellow-400 font-semibold">Standard Cent</span> MT5 account</p>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">3</span>
+                              <p className="text-gray-400 text-[10px] sm:text-xs">Enter your Exness MT5 account number below and submit</p>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">4</span>
+                              <p className="text-gray-400 text-[10px] sm:text-xs">Contact our support to verify your account is under our referral — license will be activated for free!</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Exness MT5 Account Number *</label>
+                            <input
+                              type="text"
+                              value={freeExnessMt5}
+                              onChange={(e) => setFreeExnessMt5(e.target.value)}
+                              placeholder="e.g. 12345678"
+                              className="w-full px-3 py-2 bg-[#0a0a0f] border border-green-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Exness UID (optional)</label>
+                            <input
+                              type="text"
+                              value={freeExnessUid}
+                              onChange={(e) => setFreeExnessUid(e.target.value)}
+                              placeholder="Your Exness partner UID"
+                              className="w-full px-3 py-2 bg-[#0a0a0f] border border-green-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-400"
+                            />
+                          </div>
+                        </div>
+
+                        {freeClaimResult && (
+                          <div className={`mt-2 px-3 py-2 rounded-lg text-xs ${
+                            freeClaimResult.type === 'success'
+                              ? 'bg-green-500/10 border border-green-500/30 text-green-300'
+                              : 'bg-red-500/10 border border-red-500/30 text-red-300'
+                          }`}>
+                            {freeClaimResult.text}
+                          </div>
+                        )}
+
+                        <button
+                          onClick={handleFreeExnessClaim}
+                          disabled={claimingFree || !freeExnessMt5.trim()}
+                          className="mt-3 w-full bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-400 hover:to-emerald-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-green-500/20 disabled:shadow-none"
+                          style={{ fontFamily: 'Orbitron, sans-serif' }}
+                        >
+                          {claimingFree ? 'SUBMITTING...' : 'CLAIM FREE LICENSE'}
+                        </button>
+                      </>
+                    );
+                  })()}
                 </>
               ) : null}
 
@@ -2330,16 +2989,19 @@ export default function DashboardHome() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (lic.status === 'active') {
+                          selectLicense(lic);
+                        }
                         handleToggleLicense(lic.license_key, lic.status);
                       }}
-                      disabled={togglingLicense === lic.license_key}
+                      disabled={togglingLicense === lic.license_key || (lic.status === 'active' && deactivateCooldown > 0)}
                       className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all border ${
                         lic.status === 'active'
                           ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
                           : 'bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20'
-                      } ${togglingLicense === lic.license_key ? 'opacity-50 cursor-wait' : ''}`}
+                      } ${(togglingLicense === lic.license_key || (lic.status === 'active' && deactivateCooldown > 0)) ? 'opacity-50 cursor-wait' : ''}`}
                     >
-                      {togglingLicense === lic.license_key ? '...' : lic.status === 'active' ? 'Deactivate' : 'Activate'}
+                      {togglingLicense === lic.license_key ? '...' : lic.status === 'active' ? (deactivateCooldown > 0 ? `${deactivateCooldown}s` : 'Deactivate') : 'Activate'}
                     </button>
                   )}
                   <div className="flex items-center gap-1 sm:gap-2 text-cyan-400 group-hover:text-cyan-300 font-semibold text-xs sm:text-sm">
@@ -2498,6 +3160,132 @@ export default function DashboardHome() {
       )}
 
       {/* Extend modal is handled in the license details view */}
+
+      {/* Deactivation Confirmation Modal */}
+      {showDeactivateModal && selectedLicense && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" onClick={() => setShowDeactivateModal(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-gradient-to-b from-[#12121a] to-[#0a0a0f] border border-red-500/30 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl shadow-red-500/10" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-red-500/20 bg-red-500/5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center border border-red-500/30">
+                    <X className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>DEACTIVATE LICENSE</h3>
+                    <p className="text-gray-500 text-[10px] sm:text-xs">This action will stop all trading</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-5 py-4 space-y-4">
+                {/* Warning */}
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 sm:p-4">
+                  <div className="flex items-start gap-2">
+                    <span className="text-red-400 text-lg mt-0.5">⚠️</span>
+                    <div>
+                      <p className="text-red-300 text-xs sm:text-sm font-semibold mb-1">Warning: All orders will be closed!</p>
+                      <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">
+                        Deactivating this license will immediately stop the EA. All <span className="text-yellow-400 font-semibold">open positions</span> and <span className="text-yellow-400 font-semibold">pending orders</span> will be closed by the EA on next tick. This may result in realized losses.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Open Positions Summary */}
+                {tradeData && ((tradeData.open_positions?.length || 0) > 0 || (tradeData.total_pending_orders || 0) > 0) && (
+                  <div className="bg-[#0a0a0f] border border-yellow-500/20 rounded-xl p-3 sm:p-4">
+                    <p className="text-yellow-400 text-xs font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>ACTIVE ORDERS</p>
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                        <p className="text-[10px] text-gray-500">Open</p>
+                        <p className="text-sm font-bold text-cyan-400">{(tradeData.total_buy_positions || 0) + (tradeData.total_sell_positions || 0)}</p>
+                      </div>
+                      <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                        <p className="text-[10px] text-gray-500">Pending</p>
+                        <p className="text-sm font-bold text-yellow-400">{tradeData.total_pending_orders || 0}</p>
+                      </div>
+                      <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                        <p className="text-[10px] text-gray-500">P/L</p>
+                        <p className={`text-sm font-bold ${(tradeData.account_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {(tradeData.account_profit || 0) >= 0 ? '+' : ''}${tradeData.account_profit?.toFixed(2) || '0'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Open Positions List */}
+                    {tradeData.open_positions && tradeData.open_positions.length > 0 && (
+                      <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
+                        {tradeData.open_positions.map((pos: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between bg-[#12121a] rounded-lg px-2.5 py-1.5 border border-gray-800 text-[10px] sm:text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                pos.type?.toLowerCase().includes('buy') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                              }`}>
+                                {pos.type?.toLowerCase().includes('buy') ? 'BUY' : 'SELL'}
+                              </span>
+                              <span className="text-gray-400">{pos.lots || pos.volume} lots</span>
+                            </div>
+                            <span className={`font-mono font-bold ${(pos.profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {(pos.profit || 0) >= 0 ? '+' : ''}${pos.profit?.toFixed(2) || '0'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Password Input */}
+                <div>
+                  <label className="block text-xs sm:text-sm text-gray-400 mb-1.5 font-medium">Enter your password to confirm</label>
+                  <input
+                    type="password"
+                    value={deactivatePassword}
+                    onChange={(e) => { setDeactivatePassword(e.target.value); setDeactivateError(''); }}
+                    placeholder="Your account password"
+                    className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-red-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-500/30"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && deactivatePassword.trim()) {
+                        handleToggleLicense(selectedLicense.license_key, selectedLicense.status, deactivatePassword);
+                      }
+                    }}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Error */}
+                {deactivateError && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-red-300 text-xs">
+                    {deactivateError}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setShowDeactivateModal(false); setDeactivatePassword(''); setDeactivateError(''); }}
+                    className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs sm:text-sm font-bold transition-all border border-gray-700"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    CANCEL
+                  </button>
+                  <button
+                    onClick={() => handleToggleLicense(selectedLicense.license_key, selectedLicense.status, deactivatePassword)}
+                    disabled={!deactivatePassword.trim() || togglingLicense === selectedLicense.license_key}
+                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-white rounded-lg text-xs sm:text-sm font-bold transition-all shadow-lg shadow-red-500/20 disabled:shadow-none"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    {togglingLicense === selectedLicense.license_key ? 'DEACTIVATING...' : 'DEACTIVATE'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

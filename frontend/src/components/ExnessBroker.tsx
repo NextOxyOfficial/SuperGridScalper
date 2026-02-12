@@ -1,7 +1,8 @@
 'use client';
 
 import Image from 'next/image';
-import { ExternalLink, CheckCircle, Shield, Zap, DollarSign, Wallet } from 'lucide-react';
+import Link from 'next/link';
+import { ExternalLink, CheckCircle, Shield, Zap, DollarSign, Wallet, Gift } from 'lucide-react';
 
 const EXNESS_REFERRAL_LINK = 'https://one.exnessonelink.com/a/ustbuprn';
 
@@ -68,6 +69,24 @@ export default function ExnessBroker({ variant = 'full' }: ExnessBrokerProps) {
               </div>
             </div>
           </div>
+        </div>
+        
+        {/* Free EA Promo Bar */}
+        <div className="relative border-t border-green-500/30 bg-gradient-to-r from-green-500/10 via-emerald-500/5 to-green-500/10">
+          <Link
+            href="/free-EA-trading"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3 hover:bg-green-500/10 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-400" />
+              <span className="text-[10px] sm:text-xs text-green-300 font-semibold">Get FREE EA Subscription — Open account under our link!</span>
+              <span className="text-[8px] sm:text-[9px] font-bold text-green-200 bg-green-500/25 px-1.5 py-0.5 rounded-full border border-green-400/40 animate-pulse">$0</span>
+            </div>
+            <span className="text-[10px] sm:text-xs text-green-400 font-bold whitespace-nowrap hover:text-green-300 transition-colors flex items-center gap-1">
+              See Details <ExternalLink className="w-3 h-3" />
+            </span>
+          </Link>
         </div>
       </div>
     );

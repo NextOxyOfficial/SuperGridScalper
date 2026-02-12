@@ -35,6 +35,7 @@ urlpatterns = [
     path('referral/stats/', views.get_referral_stats, name='get_referral_stats'),
     path('referral/track-click/', views.track_referral_click, name='track_referral_click'),
     path('referral/request-payout/', views.request_payout, name='request_payout'),
+    path('claim-free-exness/', views.claim_free_exness_license, name='claim_free_exness_license'),
     path('referral/transactions/', views.get_referral_transactions, name='get_referral_transactions'),
     path('referral/payouts/', views.get_referral_payouts, name='get_referral_payouts'),
     

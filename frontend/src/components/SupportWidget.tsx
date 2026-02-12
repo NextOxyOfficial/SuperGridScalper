@@ -1,9 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { MessageCircle, X, Mail, Headphones, Sparkles } from 'lucide-react';
 import { useSiteSettings } from '@/context/SiteSettingsContext';
+
+const SUPPORT_MESSAGES = [
+  "Hi! I'm your support center! 👋",
+  "Need help? Tap me! 💬",
+  "24/7 support available! ⚡",
+  "Questions? I'm here for you! 🤝",
+  "Get instant help via Telegram! 📱",
+  "Free license help? Ask me! 🎁",
+];
 
 const TELEGRAM_EN_URL = 'https://t.me/MarksAISupportEnglish';
 const TELEGRAM_EN_HANDLE = '@MarksAISupportEnglish';
@@ -13,7 +22,23 @@ const SUPPORT_EMAIL = 'support@markstrades.com';
 
 export default function SupportWidget() {
   const [open, setOpen] = useState(false);
+  const [msgIndex, setMsgIndex] = useState(() => Math.floor(Math.random() * SUPPORT_MESSAGES.length));
+  const [showTooltip, setShowTooltip] = useState(false);
   const settings = useSiteSettings();
+
+  useEffect(() => {
+    // Show tooltip after 2 seconds
+    const showTimer = setTimeout(() => setShowTooltip(true), 2000);
+    return () => clearTimeout(showTimer);
+  }, []);
+
+  useEffect(() => {
+    if (!showTooltip || open) return;
+    const interval = setInterval(() => {
+      setMsgIndex((prev) => (prev + 1) % SUPPORT_MESSAGES.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [showTooltip, open]);
 
   const telegramEnUrl = settings.telegram_en_url || TELEGRAM_EN_URL;
   const telegramEnHandle = settings.telegram_en || TELEGRAM_EN_HANDLE;
@@ -43,6 +68,22 @@ export default function SupportWidget() {
           <Sparkles className="w-3 h-3 text-black" />
         </span>
       </button>
+
+      {/* Floating Tooltip - Rotating Messages */}
+      {showTooltip && !open && (
+        <div
+          onClick={() => setOpen(true)}
+          className="fixed z-40 bottom-7 right-[4.5rem] sm:bottom-10 sm:right-[5.5rem] cursor-pointer animate-fade-in"
+        >
+          <div className="relative bg-gradient-to-r from-[#12121a] to-[#0d1117] border border-cyan-500/30 rounded-xl px-3.5 py-2 shadow-xl shadow-cyan-500/10 max-w-[200px] sm:max-w-[220px]">
+            <p className="text-[10px] sm:text-xs text-cyan-300 font-medium leading-relaxed whitespace-nowrap transition-all duration-300">
+              {SUPPORT_MESSAGES[msgIndex]}
+            </p>
+            {/* Arrow pointing right */}
+            <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3 h-3 bg-[#0d1117] border-r border-b border-cyan-500/30 rotate-[-45deg]" />
+          </div>
+        </div>
+      )}
 
       {/* Backdrop */}
       {open && (
@@ -83,7 +124,7 @@ export default function SupportWidget() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-6 space-y-4">
             <p className="text-sm text-gray-400 leading-relaxed">
-              Get instant help via Telegram in English or Chinese. For billing inquiries, email us directly.
+              Get instant help via Telegram in English. For billing inquiries, email us directly. Chinese support is temporarily unavailable.
             </p>
 
             {/* Telegram English */}
@@ -107,26 +148,24 @@ export default function SupportWidget() {
               </div>
             </a>
 
-            {/* Telegram Chinese */}
-            <a
-              href={telegramCnUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block bg-gradient-to-br from-[#0d1420] to-[#0a0f18] border border-yellow-500/30 rounded-2xl p-4 hover:border-yellow-400/60 hover:shadow-xl hover:shadow-yellow-500/10 transition-all duration-300 group hover:-translate-y-0.5"
+            {/* Telegram Chinese - Temporarily Unavailable */}
+            <div
+              className="block bg-gradient-to-br from-[#0d1420] to-[#0a0f18] border border-yellow-500/20 rounded-2xl p-4 opacity-50 cursor-not-allowed"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500/20 to-yellow-600/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300 border border-yellow-500/20">
-                  <MessageCircle className="w-6 h-6 text-yellow-400" />
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 flex items-center justify-center border border-yellow-500/10">
+                  <MessageCircle className="w-6 h-6 text-yellow-400/50" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-bold text-yellow-300">🇨🇳 中文客服</span>
+                    <span className="text-xs font-bold text-yellow-300/50">🇨🇳 中文客服</span>
+                    <span className="text-[8px] font-bold text-red-300 bg-red-500/20 px-1.5 py-0.5 rounded-full border border-red-400/30">UNAVAILABLE</span>
                   </div>
-                  <div className="text-base text-white font-semibold">{telegramCnHandle}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">点击打开 Telegram</div>
+                  <div className="text-base text-gray-500 font-semibold">{telegramCnHandle}</div>
+                  <div className="text-xs text-gray-600 mt-0.5">Temporarily unavailable</div>
                 </div>
               </div>
-            </a>
+            </div>
 
             {/* Email Support */}
             <a

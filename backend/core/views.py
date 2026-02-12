@@ -487,7 +487,7 @@ def list_license_purchase_requests(request):
                 'code': pr.network.code,
                 'token_symbol': pr.network.token_symbol,
                 'wallet_address': pr.network.wallet_address,
-            },
+            } if pr.network else None,
             'mt5_account': pr.mt5_account,
             'txid': pr.txid,
             'user_note': pr.user_note,
@@ -1846,6 +1846,149 @@ def request_payout(request):
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def claim_free_exness_license(request):
+    """Claim a free license for users who opened an Exness account through our referral link.
+    Creates a pending purchase request that admin verifies via customer support."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    email = (data.get('email') or '').strip()
+    mt5_account = (data.get('mt5_account') or '').strip()
+    exness_uid = (data.get('exness_uid') or '').strip()
+
+    if not email:
+        return JsonResponse({'success': False, 'message': 'Email is required'}, status=400)
+    if not mt5_account:
+        return JsonResponse({'success': False, 'message': 'MT5 account number is required'}, status=400)
+
+    user = resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'message': 'User not found. Please register first.'}, status=404)
+
+    # Check if user already has a pending or approved free Exness claim
+    existing = LicensePurchaseRequest.objects.filter(
+        user=user,
+        user_note__icontains='[EXNESS_FREE_CLAIM]',
+    ).exclude(status='rejected')
+    if existing.exists():
+        return JsonResponse({
+            'success': False,
+            'message': 'You already have a free Exness license claim. Please wait for admin verification or contact support.'
+        }, status=400)
+
+    # Use the cheapest active plan as the free plan
+    plan = SubscriptionPlan.objects.filter(is_active=True).order_by('price').first()
+    if not plan:
+        return JsonResponse({'success': False, 'message': 'No plans available'}, status=500)
+
+    note_parts = [
+        '[EXNESS_FREE_CLAIM]',
+        f'Exness MT5 Account: {mt5_account}',
+    ]
+    if exness_uid:
+        note_parts.append(f'Exness UID: {exness_uid}')
+    note_parts.append('User claims they opened an Exness account through our referral link. Please verify via Exness partner dashboard.')
+
+    purchase = LicensePurchaseRequest.objects.create(
+        user=user,
+        plan=plan,
+        mt5_account=mt5_account,
+        network=None,
+        amount_usd=Decimal('0.00'),
+        txid='',
+        user_note='\n'.join(note_parts),
+        status='pending',
+    )
+
+    try:
+        from core.utils import send_admin_notification
+        send_admin_notification(
+            subject=f'Admin Alert: Free Exness License Claim (#{purchase.request_number})',
+            heading='Free Exness Referral License Claim',
+            html_body=(
+                f"<p><strong>User:</strong> {user.email}</p>"
+                f"<p><strong>MT5 Account:</strong> {mt5_account}</p>"
+                f"<p><strong>Exness UID:</strong> {exness_uid or '-'}</p>"
+                f"<p><strong>Plan:</strong> {plan.name} (FREE)</p>"
+                f"<p><strong>Status:</strong> PENDING VERIFICATION</p>"
+                f"<p>Please verify this user opened an Exness account through our referral link via the Exness partner dashboard.</p>"
+            ),
+            text_body=(
+                f"Free Exness License Claim\n"
+                f"User: {user.email}\n"
+                f"MT5 Account: {mt5_account}\n"
+                f"Exness UID: {exness_uid or '-'}\n"
+                f"Plan: {plan.name} (FREE)\n"
+                f"Request ID: #{purchase.request_number}\n"
+                f"Status: pending verification"
+            ),
+            preheader=f'Free Exness license claim by {user.email}'
+        )
+    except Exception:
+        pass
+
+    # Send confirmation email to user
+    try:
+        from core.utils import get_email_from_address, render_email_template, can_send_email_to_user, get_unsubscribe_url, add_email_headers
+        from django.core.mail import EmailMultiAlternatives
+
+        if can_send_email_to_user(user, 'transactional'):
+            base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
+            subject = '🎁 Free License Claim Received — Verification in Progress'
+            html_body = render_email_template(
+                subject=subject,
+                heading='Free License Claim Submitted',
+                message=(
+                    f"<p>Hi {user.first_name or user.email.split('@')[0]},</p>"
+                    f"<p>We've received your free license claim! Here are the details:</p>"
+                    f"<div style='background: #0a0a0f; border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; padding: 16px; margin: 16px 0;'>"
+                    f"<p style='margin: 0 0 8px 0;'><strong style='color: #9ca3af;'>Request ID:</strong> <span style='color: #22c55e;'>#{purchase.request_number}</span></p>"
+                    f"<p style='margin: 0 0 8px 0;'><strong style='color: #9ca3af;'>MT5 Account:</strong> <span style='color: #ffffff;'>{mt5_account}</span></p>"
+                    f"<p style='margin: 0 0 8px 0;'><strong style='color: #9ca3af;'>Plan:</strong> <span style='color: #06b6d4;'>{plan.name} (FREE)</span></p>"
+                    f"<p style='margin: 0;'><strong style='color: #9ca3af;'>Status:</strong> <span style='color: #eab308;'>Pending Verification</span></p>"
+                    f"</div>"
+                    f"<p><strong style='color: #22c55e;'>What happens next?</strong></p>"
+                    f"<p>Our team will verify that your Exness account was created through our referral link. "
+                    f"You can speed up the process by contacting our customer support.</p>"
+                    f"<p style='color: #f87171; font-size: 13px;'><strong>Important:</strong> Your Exness account must be under our referral link to qualify for the free license. "
+                    f"If your account is not under our referral, the claim will be rejected and you will need to purchase a subscription.</p>"
+                ),
+                cta_text='Contact Support',
+                cta_url=f'{base}/contact',
+                footer_note='You received this email because you submitted a free license claim on MarksTrades.',
+                preheader=f'Your free license claim #{purchase.request_number} is being verified',
+                unsubscribe_url=get_unsubscribe_url(user),
+            )
+            msg = EmailMultiAlternatives(
+                subject,
+                f"Free license claim #{purchase.request_number} received. MT5: {mt5_account}. Status: Pending verification. Contact support to speed up.",
+                get_email_from_address(),
+                [user.email],
+            )
+            msg.attach_alternative(html_body, 'text/html')
+            msg = add_email_headers(msg, 'transactional', user=user)
+            msg.send(fail_silently=True)
+    except Exception:
+        pass
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Your free license claim has been submitted! Our team will verify your Exness account and activate your license. You can also contact support to speed up verification.',
+        'request': {
+            'id': purchase.id,
+            'request_number': purchase.request_number,
+            'status': purchase.status,
+            'plan': plan.name,
+            'mt5_account': mt5_account,
+            'created_at': purchase.created_at.isoformat(),
+        }
+    })
+
+
+@csrf_exempt
 @require_http_methods(["GET"])
 def get_referral_transactions(request):
     """Paginated referral transactions"""
@@ -2314,6 +2457,12 @@ def toggle_license_status(request):
 
     # Only allow toggling between active and suspended
     if action == 'deactivate':
+        # Require password for deactivation
+        password = data.get('password', '').strip()
+        if not password:
+            return JsonResponse({'success': False, 'message': 'Password is required to deactivate a license'}, status=400)
+        if not user.check_password(password):
+            return JsonResponse({'success': False, 'message': 'Incorrect password. Deactivation denied.'}, status=403)
         if license_obj.status != 'active':
             return JsonResponse({'success': False, 'message': f'Cannot deactivate: license is {license_obj.status}'})
         license_obj.status = 'suspended'
