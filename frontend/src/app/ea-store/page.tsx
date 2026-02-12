@@ -41,6 +41,7 @@ interface EAProduct {
   features: string[];
   color: string;
   is_popular: boolean;
+  is_coming_soon?: boolean;
   file_name: string;
   has_file: boolean;
   download_url: string | null;
@@ -127,10 +128,10 @@ export default function PublicEAStorePage() {
             <Bot className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
             <span className="text-yellow-400 text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA STORE</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
             Choose Your Trading AI Power
           </h1>
-          <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">
+          <p className="text-gray-400 text-sm sm:text-lg max-w-2xl mx-auto px-2">
             Select the EA that matches your investment size and trading style.
           </p>
           
@@ -158,7 +159,7 @@ export default function PublicEAStorePage() {
                 className={`relative bg-gradient-to-br ${colors.bg} border ${colors.border} rounded-xl sm:rounded-2xl p-4 sm:p-6 transition-all hover:shadow-lg ${colors.glow} group`}
               >
                 {/* Popular Badge */}
-                {ea.is_popular && (
+                {ea.is_popular && !ea.is_coming_soon && (
                   <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2">
                     <span className="bg-yellow-500 text-black text-[10px] sm:text-xs font-bold px-2 sm:px-4 py-0.5 sm:py-1 rounded-full flex items-center gap-1">
                       <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> POPULAR
@@ -166,13 +167,22 @@ export default function PublicEAStorePage() {
                   </div>
                 )}
 
+                {/* Coming Soon Badge */}
+                {ea.is_coming_soon && (
+                  <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2">
+                    <span className="bg-gradient-to-r from-purple-500 to-cyan-500 text-white text-[10px] sm:text-xs font-bold px-2 sm:px-4 py-0.5 sm:py-1 rounded-full flex items-center gap-1 animate-pulse">
+                      <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> COMING SOON
+                    </span>
+                  </div>
+                )}
+
                 {/* Header */}
                 <div className="flex items-start justify-between mb-3 sm:mb-4">
                   <div>
-                    <p className={`text-[10px] sm:text-xs ${colors.text} mb-0.5 sm:mb-1`}>{ea.subtitle}</p>
+                    <p className={`text-xs sm:text-sm ${colors.text} mb-0.5 sm:mb-1`}>{ea.subtitle}</p>
                     <h3 className="text-base sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                       {ea.name}
-                      {ea.version && <span className="ml-2 text-[10px] sm:text-xs text-gray-500 font-normal">v{ea.version}</span>}
+                      {ea.version && <span className="ml-2 text-xs text-gray-500 font-normal">v{ea.version}</span>}
                     </h3>
                   </div>
                   <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br ${colors.bg} rounded-xl flex items-center justify-center border ${colors.border}`}>
@@ -187,40 +197,40 @@ export default function PublicEAStorePage() {
                 <div className="grid text-center grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
                   <div className="bg-black/30 rounded-lg p-2 sm:p-3">
                     <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
-                      <DollarSign className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" />
-                      <span className="text-gray-500 text-[10px] sm:text-xs">Investment</span>
+                      <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-400" />
+                      <span className="text-gray-500 text-xs">Investment</span>
                     </div>
                     <p className="text-white font-bold text-xs sm:text-base">${ea.min_investment} - ${ea.max_investment >= 1000 ? `${ea.max_investment/1000}K` : ea.max_investment}</p>
                   </div>
                   <div className="bg-black/30 rounded-lg p-2 sm:p-3">
                     <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
-                      <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-400" />
-                      <span className="text-gray-500 text-[10px] sm:text-xs">Profit</span>
+                      <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+                      <span className="text-gray-500 text-xs">Profit</span>
                     </div>
                     <p className={`font-bold text-xs sm:text-base ${colors.text}`}>{ea.expected_profit}</p>
                   </div>
                   <div className="bg-black/30 rounded-lg p-2 sm:p-3">
                     <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
-                      <Shield className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
-                      <span className="text-gray-500 text-[10px] sm:text-xs">Risk</span>
+                      <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400" />
+                      <span className="text-gray-500 text-xs">Risk</span>
                     </div>
                     <p className="text-white font-medium text-xs sm:text-base">{ea.risk_level}</p>
                   </div>
                   <div className="bg-black/30 rounded-lg p-2 sm:p-3">
                     <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
-                      <Target className="w-3 h-3 sm:w-4 sm:h-4 text-purple-400" />
-                      <span className="text-gray-500 text-[10px] sm:text-xs">Style</span>
+                      <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
+                      <span className="text-gray-500 text-xs">Style</span>
                     </div>
-                    <p className="text-white font-medium text-[10px] sm:text-sm">{ea.trading_style}</p>
+                    <p className="text-white font-medium text-xs sm:text-sm">{ea.trading_style}</p>
                   </div>
                 </div>
 
                 {/* Features - Hidden on mobile, shown on larger screens */}
                 <div className="mb-3 sm:mb-5 hidden sm:block">
-                  <p className="text-gray-500 text-xs mb-2">Features:</p>
+                  <p className="text-gray-500 text-xs sm:text-sm mb-2">Features:</p>
                   <div className="flex flex-wrap gap-1.5 sm:gap-2">
                     {ea.features.slice(0, 3).map((feature, idx) => (
-                      <span key={idx} className="inline-flex items-center gap-1 bg-black/30 text-gray-300 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">
+                      <span key={idx} className="inline-flex items-center gap-1 bg-black/30 text-gray-300 text-xs px-2 py-0.5 sm:py-1 rounded-full">
                         <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-400" />
                         {feature}
                       </span>
@@ -264,7 +274,7 @@ export default function PublicEAStorePage() {
 
         {/* Installation Guide */}
         <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8">
-          <h2 className="text-sm sm:text-xl font-bold text-white mb-3 sm:mb-4 flex items-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+          <h2 className="text-base sm:text-xl font-bold text-white mb-3 sm:mb-4 flex items-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
             <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />
             INSTALLATION GUIDE
           </h2>
@@ -280,8 +290,8 @@ export default function PublicEAStorePage() {
                   <span className="text-cyan-400 font-bold text-xs sm:text-sm">{item.step}</span>
                 </div>
                 <div>
-                  <h4 className="text-white font-semibold text-xs sm:text-base">{item.title}</h4>
-                  <p className="text-gray-500 text-[10px] sm:text-sm">{item.desc}</p>
+                  <h4 className="text-white font-semibold text-sm sm:text-base">{item.title}</h4>
+                  <p className="text-gray-500 text-xs sm:text-sm">{item.desc}</p>
                 </div>
               </div>
             ))}

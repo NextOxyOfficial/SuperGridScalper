@@ -1005,10 +1005,10 @@ class EAProductForm(forms.ModelForm):
 @admin.register(EAProduct)
 class EAProductAdmin(admin.ModelAdmin):
     form = EAProductForm
-    list_display = ['name', 'subtitle', 'version_display', 'investment_range', 'expected_profit', 'risk_level', 'is_popular', 'is_active', 'display_order']
-    list_filter = ['is_active', 'is_popular', 'risk_level', 'color']
+    list_display = ['name', 'subtitle', 'version_display', 'investment_range', 'expected_profit', 'risk_level', 'is_popular', 'is_coming_soon', 'is_active', 'display_order']
+    list_filter = ['is_active', 'is_coming_soon', 'is_popular', 'risk_level', 'color']
     search_fields = ['name', 'subtitle', 'description']
-    list_editable = ['is_popular', 'is_active', 'display_order']
+    list_editable = ['is_popular', 'is_coming_soon', 'is_active', 'display_order']
     ordering = ['display_order', 'min_investment']
     readonly_fields = ['last_update_notified_at']
     
@@ -1038,7 +1038,7 @@ class EAProductAdmin(admin.ModelAdmin):
             'description': 'Update version info and optionally notify all users via email.'
         }),
         ('⚙️ Status', {
-            'fields': ('is_active',)
+            'fields': (('is_active', 'is_coming_soon'),)
         }),
     )
     

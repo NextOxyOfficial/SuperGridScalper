@@ -818,7 +818,7 @@ export default function Home() {
                 </div>
               </form>
 
-              {/* Forgot password */}
+              {/* Forgot access key */}
               <div className="relative z-10 mt-4 text-center">
                 <button
                   type="button"

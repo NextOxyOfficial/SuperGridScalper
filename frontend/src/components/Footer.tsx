@@ -38,8 +38,14 @@ export default function Footer() {
             <SiteLogo size="sm" />
           </div>
           <p className="text-gray-600 text-xs">© {year} {settings.logo_text}. All rights reserved.</p>
-          <p className="text-gray-700 text-[10px] sm:text-xs mt-2">
-            Trading involves risk. Past performance does not guarantee future results.
+        </div>
+
+        {/* Risk Disclaimer */}
+        <div className="mt-4 pt-4 border-t border-gray-800/50">
+          <p className="text-gray-600 text-[10px] sm:text-xs text-center leading-relaxed max-w-3xl mx-auto">
+            <span className="text-gray-500 font-semibold">Risk Disclaimer:</span> Trading forex and CFDs involves significant risk and may not be suitable for all investors. 
+            Past performance does not guarantee future results. You should not invest money that you cannot afford to lose. 
+            The free license offer is subject to verification and may be withdrawn at any time.
           </p>
         </div>
       </div>

@@ -729,23 +729,54 @@ def password_reset_request(request):
         base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
         reset_url = f"{base}/reset-password?uid={uid}&token={token}"
 
-        subject = 'Password Reset Request'
-        message = (
-            'You requested a password reset.\n\n'
-            f"Reset your password using this link:\n{reset_url}\n\n"
-            'If you did not request this, you can safely ignore this email.'
-        )
         try:
-            send_mail(
-                subject,
-                message,
-                getattr(django_settings, 'DEFAULT_FROM_EMAIL', None),
-                [email],
-                fail_silently=False,
+            from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+            from django.core.mail import EmailMultiAlternatives
+
+            subject = 'Access Key Reset Request'
+
+            text_message = (
+                f"Hi {user.first_name or 'Trader'},\n\n"
+                "We received a request to reset your access key.\n\n"
+                f"Reset your access key using this link:\n{reset_url}\n\n"
+                "This link will expire in 24 hours.\n\n"
+                "If you did not request this, you can safely ignore this email. "
+                "Your access key will remain unchanged."
             )
-        except Exception:
-            # Don't leak SMTP errors to client.
-            pass
+
+            if not can_send_email_to_user(user, 'transactional'):
+                raise Exception('User opted out of transactional emails')
+
+            html_message = render_email_template(
+                subject=subject,
+                heading='Access Key Reset',
+                message=f"""
+                    <p>Hi <strong>{user.first_name or 'Trader'}</strong>,</p>
+                    <p>We received a request to reset your access key for your MarksTrades account.</p>
+                    <p>Click the button below to set a new access key:</p>
+                    <div style="background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.2); border-radius: 8px; padding: 12px 16px; margin: 16px 0;">
+                        <p style="margin: 0; color: #facc15; font-size: 12px;">⏱ This link will expire in <strong>24 hours</strong></p>
+                    </div>
+                    <p style="color: #6b7280; font-size: 13px;">If you did not request this reset, you can safely ignore this email. Your access key will remain unchanged.</p>
+                """,
+                cta_text='RESET ACCESS KEY',
+                cta_url=reset_url,
+                footer_note='For security, this link can only be used once. If you need a new link, please request another reset.',
+                preheader='Reset your MarksTrades access key',
+                unsubscribe_url=get_unsubscribe_url(user)
+            )
+
+            msg = EmailMultiAlternatives(
+                subject,
+                text_message,
+                get_email_from_address(),
+                [user.email]
+            )
+            msg.attach_alternative(html_message, "text/html")
+            msg = add_email_headers(msg, 'transactional', user=user)
+            msg.send(fail_silently=False)
+        except Exception as e:
+            print(f"Access key reset email error: {e}")
 
     return JsonResponse({
         'success': True,
@@ -770,7 +801,7 @@ def password_reset_confirm(request):
         return JsonResponse({'success': False, 'message': 'Missing required fields'}, status=400)
 
     if len(new_password) < 6:
-        return JsonResponse({'success': False, 'message': 'Password must be at least 6 characters'}, status=400)
+        return JsonResponse({'success': False, 'message': 'Access key must be at least 6 characters'}, status=400)
 
     try:
         user_id = force_str(urlsafe_base64_decode(uid))
@@ -786,7 +817,7 @@ def password_reset_confirm(request):
 
     return JsonResponse({
         'success': True,
-        'message': 'Password has been reset successfully'
+        'message': 'Access key has been reset successfully'
     })
 
 
@@ -1550,6 +1581,11 @@ def get_ea_products(request):
         else:
             download_url = None
 
+        # If coming soon, hide download info
+        if p.is_coming_soon:
+            download_url = None
+            file_name = None
+
         product_list.append({
             'id': p.id,
             'name': p.name,
@@ -1563,6 +1599,7 @@ def get_ea_products(request):
             'features': p.get_features_list(),
             'color': p.color,
             'is_popular': p.is_popular,
+            'is_coming_soon': p.is_coming_soon,
             'file_name': file_name,
             'has_file': bool(download_url),
             'download_url': download_url,

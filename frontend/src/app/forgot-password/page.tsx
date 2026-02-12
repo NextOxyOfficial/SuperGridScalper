@@ -8,7 +8,7 @@ import Header from '@/components/Header';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
 
-export default function ForgotPasswordPage() {
+export default function ForgotAccessKeyPage() {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -27,7 +27,7 @@ export default function ForgotPasswordPage() {
       });
       const data = await res.json();
       if (!res.ok || !data?.success) {
-        setError(data?.message || 'Failed to request password reset');
+        setError(data?.message || 'Failed to request access key reset');
       } else {
         setSubmitted(true);
       }
@@ -69,9 +69,9 @@ export default function ForgotPasswordPage() {
             </div>
             <div>
               <h1 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                Forgot Password
+                Forgot Access Key
               </h1>
-              <p className="text-gray-500 text-xs sm:text-sm">We’ll email you a reset link</p>
+              <p className="text-gray-500 text-xs sm:text-sm">We'll email you a reset link</p>
             </div>
           </div>
 

@@ -319,10 +319,10 @@ export default function GuidelinePage() {
             <BookOpen className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-400" />
             <span className="text-cyan-400 text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>VIDEO TUTORIALS</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
             EA Guidelines
           </h1>
-          <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">
+          <p className="text-gray-400 text-sm sm:text-lg max-w-2xl mx-auto px-2">
             Learn everything about setting up and managing your trading EA.
           </p>
         </div>
@@ -339,8 +339,8 @@ export default function GuidelinePage() {
               <div className="w-8 h-8 sm:w-10 sm:h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center mb-2 sm:mb-3">
                 <tip.icon className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
               </div>
-              <h3 className="text-white font-semibold text-xs sm:text-base mb-0.5 sm:mb-1">{tip.title}</h3>
-              <p className="text-gray-500 text-[10px] sm:text-sm line-clamp-2">{tip.description}</p>
+              <h3 className="text-white font-semibold text-sm sm:text-base mb-0.5 sm:mb-1">{tip.title}</h3>
+              <p className="text-gray-500 text-xs sm:text-sm line-clamp-2">{tip.description}</p>
             </div>
           ))}
         </div>
@@ -363,10 +363,10 @@ export default function GuidelinePage() {
                       <category.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${colors.text}`} />
                     </div>
                     <div className="text-left">
-                      <h2 className="text-sm sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                      <h2 className="text-base sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                         {category.category}
                       </h2>
-                      <p className="text-gray-500 text-[10px] sm:text-sm">{category.videos.length} videos</p>
+                      <p className="text-gray-500 text-xs sm:text-sm">{category.videos.length} videos</p>
                     </div>
                   </div>
                   {isExpanded ? (
@@ -391,7 +391,7 @@ export default function GuidelinePage() {
                           <div className="w-10 h-10 sm:w-14 sm:h-14 bg-cyan-500/80 rounded-full flex items-center justify-center group-hover:bg-cyan-400 transition">
                             <Play className="w-4 h-4 sm:w-6 sm:h-6 text-black ml-0.5 sm:ml-1" />
                           </div>
-                          <span className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 bg-black/70 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded">
+                          <span className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 bg-black/70 text-white text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded">
                             {video.duration}
                           </span>
                         </div>
@@ -400,7 +400,7 @@ export default function GuidelinePage() {
                           <h3 className="text-white font-semibold text-sm sm:text-base mb-0.5 sm:mb-1 group-hover:text-cyan-400 transition line-clamp-1">
                             {video.title}
                           </h3>
-                          <p className="text-gray-500 text-[10px] sm:text-sm line-clamp-2">{video.description}</p>
+                          <p className="text-gray-500 text-xs sm:text-sm line-clamp-2">{video.description}</p>
                         </div>
                       </div>
                     ))}
@@ -451,23 +451,23 @@ export default function GuidelinePage() {
 
         {/* Bottom CTA */}
         <div className="mt-12 text-center bg-gradient-to-r from-cyan-500/10 to-yellow-500/10 border border-cyan-500/30 rounded-2xl p-8">
-          <h3 className="text-2xl font-bold text-white mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+          <h3 className="text-xl sm:text-2xl font-bold text-white mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
             Ready to Start Trading?
           </h3>
-          <p className="text-gray-400 mb-6 max-w-xl mx-auto">
+          <p className="text-gray-400 text-sm sm:text-base mb-6 max-w-xl mx-auto">
             Download your EA from the store and start automated gold trading today.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link 
               href="/ea-store"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400 text-black px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg shadow-yellow-500/25"
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-cyan-400 text-black px-6 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all transform hover:scale-105 shadow-lg shadow-yellow-500/25"
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              <Store className="w-5 h-5" /> EA STORE <ArrowRight className="w-5 h-5" />
+              <Store className="w-4 h-4" /> EA STORE <ArrowRight className="w-4 h-4" />
             </Link>
             <Link 
               href="/"
-              className="inline-flex items-center gap-2 bg-black/50 hover:bg-black/70 text-cyan-300 px-6 py-3 rounded-xl font-semibold transition-all border border-cyan-500/50 hover:border-cyan-400"
+              className="inline-flex items-center gap-2 bg-black/50 hover:bg-black/70 text-cyan-300 px-6 py-3 rounded-xl font-semibold text-xs sm:text-sm transition-all border border-cyan-500/50 hover:border-cyan-400"
             >
               Back to Home
             </Link>

@@ -393,7 +393,7 @@ export default function FreeTradingPage() {
       <section className="py-16 sm:py-24 border-t border-green-500/10">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
           <div className="bg-gradient-to-br from-green-500/10 via-[#12121a] to-emerald-500/10 border-2 border-green-500/30 rounded-2xl p-8 sm:p-12">
-            <Gift className="w-12 h-12 sm:w-16 sm:h-16 text-green-400 mx-auto mb-4 sm:mb-6" />
+            <Gift className="w-10 h-10 sm:w-12 sm:h-12 text-green-400 mx-auto mb-4 sm:mb-6" />
             <h2 className="text-2xl sm:text-4xl font-bold text-white mb-3 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>
               Ready to Start Trading for Free?
             </h2>
@@ -403,22 +403,22 @@ export default function FreeTradingPage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 onClick={handleOpenExness}
-                className="w-full sm:w-auto bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black px-8 py-4 rounded-xl font-bold text-sm sm:text-base transition-all shadow-lg shadow-yellow-500/20 flex items-center justify-center gap-2"
+                className="w-full sm:w-auto bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black px-6 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-lg shadow-yellow-500/20 flex items-center justify-center gap-2"
                 style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
-                <ExternalLink className="w-5 h-5" />
+                <ExternalLink className="w-4 h-4" />
                 1. OPEN EXNESS ACCOUNT
               </button>
               <button
                 onClick={handleGetStarted}
-                className="w-full sm:w-auto bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-400 hover:to-emerald-300 text-black px-8 py-4 rounded-xl font-bold text-sm sm:text-base transition-all shadow-lg shadow-green-500/30 flex items-center justify-center gap-2"
+                className="w-full sm:w-auto bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-400 hover:to-emerald-300 text-black px-6 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-lg shadow-green-500/30 flex items-center justify-center gap-2"
                 style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
-                <Gift className="w-5 h-5" />
+                <Gift className="w-4 h-4" />
                 2. CLAIM FREE LICENSE
               </button>
             </div>
-            <p className="text-gray-600 text-[10px] sm:text-xs mt-4">
+            <p className="text-gray-600 text-xs mt-4">
               After opening your Exness account, register on our platform and claim your free license from the dashboard.
             </p>
           </div>

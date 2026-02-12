@@ -377,6 +377,7 @@ class EAProduct(models.Model):
     
     # Status
     is_active = models.BooleanField(default=True)
+    is_coming_soon = models.BooleanField(default=False, help_text="Show as 'Coming Soon' in store (visible but not downloadable)")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
