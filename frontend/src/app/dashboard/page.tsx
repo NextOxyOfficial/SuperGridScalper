@@ -2034,46 +2034,67 @@ export default function DashboardHome() {
                       </div>
                     </div>
                   </div>
-                  {tradeData && ((tradeData.open_positions?.length || 0) > 0 || (tradeData.total_pending_orders || 0) > 0) && (
-                    <div className="bg-[#0a0a0f] border border-yellow-500/20 rounded-xl p-3 sm:p-4">
-                      <p className="text-yellow-400 text-xs font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>ACTIVE ORDERS</p>
-                      <div className="grid grid-cols-3 gap-2 mb-3">
-                        <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
-                          <p className="text-[10px] text-gray-500">Open</p>
-                          <p className="text-sm font-bold text-cyan-400">{(tradeData.total_buy_positions || 0) + (tradeData.total_sell_positions || 0)}</p>
-                        </div>
-                        <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
-                          <p className="text-[10px] text-gray-500">Pending</p>
-                          <p className="text-sm font-bold text-yellow-400">{tradeData.total_pending_orders || 0}</p>
-                        </div>
-                        <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
-                          <p className="text-[10px] text-gray-500">P/L</p>
-                          <p className={`text-sm font-bold ${(tradeData.account_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {(tradeData.account_profit || 0) >= 0 ? '+' : ''}${tradeData.account_profit?.toFixed(2) || '0'}
-                          </p>
-                        </div>
-                      </div>
-                      {tradeData.open_positions && tradeData.open_positions.length > 0 && (
-                        <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
-                          {tradeData.open_positions.map((pos: any, idx: number) => (
-                            <div key={idx} className="flex items-center justify-between bg-[#12121a] rounded-lg px-2.5 py-1.5 border border-gray-800 text-[10px] sm:text-xs">
-                              <div className="flex items-center gap-2">
-                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                                  pos.type?.toLowerCase().includes('buy') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                                }`}>
-                                  {pos.type?.toLowerCase().includes('buy') ? 'BUY' : 'SELL'}
-                                </span>
-                                <span className="text-gray-400">{pos.lots || pos.volume} lots</span>
-                              </div>
-                              <span className={`font-mono font-bold ${(pos.profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {(pos.profit || 0) >= 0 ? '+' : ''}${pos.profit?.toFixed(2) || '0'}
-                              </span>
+                  <div className="bg-[#0a0a0f] border border-yellow-500/20 rounded-xl p-3 sm:p-4">
+                    <p className="text-yellow-400 text-xs font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>ACTIVE ORDERS</p>
+                    {!tradeData ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-3 gap-2">
+                          {[1,2,3].map(i => (
+                            <div key={i} className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                              <div className="h-2.5 w-10 bg-gray-700/50 rounded mx-auto mb-1.5 animate-pulse" />
+                              <div className="h-4 w-8 bg-gray-700/50 rounded mx-auto animate-pulse" />
                             </div>
                           ))}
                         </div>
-                      )}
-                    </div>
-                  )}
+                        <div className="flex items-center justify-center gap-2 py-2">
+                          <div className="w-3.5 h-3.5 border-2 border-yellow-500/40 border-t-yellow-400 rounded-full animate-spin" />
+                          <span className="text-gray-500 text-[10px] sm:text-xs">Loading position details...</span>
+                        </div>
+                      </div>
+                    ) : (tradeData.open_positions?.length || 0) > 0 || (tradeData.total_pending_orders || 0) > 0 ? (
+                      <>
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                          <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                            <p className="text-[10px] text-gray-500">Open</p>
+                            <p className="text-sm font-bold text-cyan-400">{(tradeData.total_buy_positions || 0) + (tradeData.total_sell_positions || 0)}</p>
+                          </div>
+                          <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                            <p className="text-[10px] text-gray-500">Pending</p>
+                            <p className="text-sm font-bold text-yellow-400">{tradeData.total_pending_orders || 0}</p>
+                          </div>
+                          <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                            <p className="text-[10px] text-gray-500">P/L</p>
+                            <p className={`text-sm font-bold ${(tradeData.account_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {(tradeData.account_profit || 0) >= 0 ? '+' : ''}${tradeData.account_profit?.toFixed(2) || '0'}
+                            </p>
+                          </div>
+                        </div>
+                        {tradeData.open_positions && tradeData.open_positions.length > 0 && (
+                          <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
+                            {tradeData.open_positions.map((pos: any, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between bg-[#12121a] rounded-lg px-2.5 py-1.5 border border-gray-800 text-[10px] sm:text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                    pos.type?.toLowerCase().includes('buy') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                  }`}>
+                                    {pos.type?.toLowerCase().includes('buy') ? 'BUY' : 'SELL'}
+                                  </span>
+                                  <span className="text-gray-400">{pos.lots || pos.volume} lots</span>
+                                </div>
+                                <span className={`font-mono font-bold ${(pos.profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {(pos.profit || 0) >= 0 ? '+' : ''}${pos.profit?.toFixed(2) || '0'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2 py-2">
+                        <span className="text-gray-500 text-[10px] sm:text-xs">No active orders</span>
+                      </div>
+                    )}
+                  </div>
                   <div>
                     <label className="block text-xs sm:text-sm text-gray-400 mb-1.5 font-medium">Enter your password to confirm</label>
                     <input
@@ -2081,7 +2102,8 @@ export default function DashboardHome() {
                       value={deactivatePassword}
                       onChange={(e) => { setDeactivatePassword(e.target.value); setDeactivateError(''); }}
                       placeholder="Your account password"
-                      className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-red-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-500/30"
+                      className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-red-500/30 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-500/30"
+                      style={{ fontSize: '16px' }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && deactivatePassword.trim()) {
                           handleToggleLicense(selectedLicense.license_key, selectedLicense.status, deactivatePassword);
@@ -3195,48 +3217,67 @@ export default function DashboardHome() {
                 </div>
 
                 {/* Open Positions Summary */}
-                {tradeData && ((tradeData.open_positions?.length || 0) > 0 || (tradeData.total_pending_orders || 0) > 0) && (
-                  <div className="bg-[#0a0a0f] border border-yellow-500/20 rounded-xl p-3 sm:p-4">
-                    <p className="text-yellow-400 text-xs font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>ACTIVE ORDERS</p>
-                    <div className="grid grid-cols-3 gap-2 mb-3">
-                      <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
-                        <p className="text-[10px] text-gray-500">Open</p>
-                        <p className="text-sm font-bold text-cyan-400">{(tradeData.total_buy_positions || 0) + (tradeData.total_sell_positions || 0)}</p>
-                      </div>
-                      <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
-                        <p className="text-[10px] text-gray-500">Pending</p>
-                        <p className="text-sm font-bold text-yellow-400">{tradeData.total_pending_orders || 0}</p>
-                      </div>
-                      <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
-                        <p className="text-[10px] text-gray-500">P/L</p>
-                        <p className={`text-sm font-bold ${(tradeData.account_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {(tradeData.account_profit || 0) >= 0 ? '+' : ''}${tradeData.account_profit?.toFixed(2) || '0'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Open Positions List */}
-                    {tradeData.open_positions && tradeData.open_positions.length > 0 && (
-                      <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
-                        {tradeData.open_positions.map((pos: any, idx: number) => (
-                          <div key={idx} className="flex items-center justify-between bg-[#12121a] rounded-lg px-2.5 py-1.5 border border-gray-800 text-[10px] sm:text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                                pos.type?.toLowerCase().includes('buy') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                              }`}>
-                                {pos.type?.toLowerCase().includes('buy') ? 'BUY' : 'SELL'}
-                              </span>
-                              <span className="text-gray-400">{pos.lots || pos.volume} lots</span>
-                            </div>
-                            <span className={`font-mono font-bold ${(pos.profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {(pos.profit || 0) >= 0 ? '+' : ''}${pos.profit?.toFixed(2) || '0'}
-                            </span>
+                <div className="bg-[#0a0a0f] border border-yellow-500/20 rounded-xl p-3 sm:p-4">
+                  <p className="text-yellow-400 text-xs font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>ACTIVE ORDERS</p>
+                  {!tradeData ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        {[1,2,3].map(i => (
+                          <div key={i} className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                            <div className="h-2.5 w-10 bg-gray-700/50 rounded mx-auto mb-1.5 animate-pulse" />
+                            <div className="h-4 w-8 bg-gray-700/50 rounded mx-auto animate-pulse" />
                           </div>
                         ))}
                       </div>
-                    )}
-                  </div>
-                )}
+                      <div className="flex items-center justify-center gap-2 py-2">
+                        <div className="w-3.5 h-3.5 border-2 border-yellow-500/40 border-t-yellow-400 rounded-full animate-spin" />
+                        <span className="text-gray-500 text-[10px] sm:text-xs">Loading position details...</span>
+                      </div>
+                    </div>
+                  ) : (tradeData.open_positions?.length || 0) > 0 || (tradeData.total_pending_orders || 0) > 0 ? (
+                    <>
+                      <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                          <p className="text-[10px] text-gray-500">Open</p>
+                          <p className="text-sm font-bold text-cyan-400">{(tradeData.total_buy_positions || 0) + (tradeData.total_sell_positions || 0)}</p>
+                        </div>
+                        <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                          <p className="text-[10px] text-gray-500">Pending</p>
+                          <p className="text-sm font-bold text-yellow-400">{tradeData.total_pending_orders || 0}</p>
+                        </div>
+                        <div className="bg-[#12121a] rounded-lg p-2 text-center border border-gray-800">
+                          <p className="text-[10px] text-gray-500">P/L</p>
+                          <p className={`text-sm font-bold ${(tradeData.account_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {(tradeData.account_profit || 0) >= 0 ? '+' : ''}${tradeData.account_profit?.toFixed(2) || '0'}
+                          </p>
+                        </div>
+                      </div>
+                      {tradeData.open_positions && tradeData.open_positions.length > 0 && (
+                        <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
+                          {tradeData.open_positions.map((pos: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between bg-[#12121a] rounded-lg px-2.5 py-1.5 border border-gray-800 text-[10px] sm:text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                  pos.type?.toLowerCase().includes('buy') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                }`}>
+                                  {pos.type?.toLowerCase().includes('buy') ? 'BUY' : 'SELL'}
+                                </span>
+                                <span className="text-gray-400">{pos.lots || pos.volume} lots</span>
+                              </div>
+                              <span className={`font-mono font-bold ${(pos.profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {(pos.profit || 0) >= 0 ? '+' : ''}${pos.profit?.toFixed(2) || '0'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2 py-2">
+                      <span className="text-gray-500 text-[10px] sm:text-xs">No active orders</span>
+                    </div>
+                  )}
+                </div>
 
                 {/* Password Input */}
                 <div>
@@ -3246,7 +3287,8 @@ export default function DashboardHome() {
                     value={deactivatePassword}
                     onChange={(e) => { setDeactivatePassword(e.target.value); setDeactivateError(''); }}
                     placeholder="Your account password"
-                    className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-red-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-500/30"
+                    className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-red-500/30 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-500/30"
+                    style={{ fontSize: '16px' }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && deactivatePassword.trim()) {
                         handleToggleLicense(selectedLicense.license_key, selectedLicense.status, deactivatePassword);

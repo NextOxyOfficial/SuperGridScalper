@@ -81,7 +81,6 @@ export default function ExnessBroker({ variant = 'full' }: ExnessBrokerProps) {
             <div className="flex items-center gap-2">
               <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-400" />
               <span className="text-[10px] sm:text-xs text-green-300 font-semibold">Get FREE EA Subscription — Open account under our link!</span>
-              <span className="text-[8px] sm:text-[9px] font-bold text-green-200 bg-green-500/25 px-1.5 py-0.5 rounded-full border border-green-400/40 animate-pulse">$0</span>
             </div>
             <span className="text-[10px] sm:text-xs text-green-400 font-bold whitespace-nowrap hover:text-green-300 transition-colors flex items-center gap-1">
               See Details <ExternalLink className="w-3 h-3" />
