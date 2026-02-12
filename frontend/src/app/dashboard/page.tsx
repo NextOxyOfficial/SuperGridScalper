@@ -40,6 +40,8 @@ export default function DashboardHome() {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshCooldown, setRefreshCooldown] = useState(0);
+  const [refreshedMsg, setRefreshedMsg] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [walletCopied, setWalletCopied] = useState(false);
 
@@ -2090,15 +2092,40 @@ export default function DashboardHome() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">{licenses.length} license(s)</span>
+            {refreshedMsg && (
+              <span className="text-[10px] sm:text-xs text-green-400 animate-pulse">Refreshed!</span>
+            )}
             <button
               onClick={async () => {
-                await refreshLicenses();
-                await fetchAllLicensesTradeData();
+                if (refreshing || refreshCooldown > 0) return;
+                setRefreshing(true);
+                setRefreshedMsg(false);
+                try {
+                  await refreshLicenses();
+                  await fetchAllLicensesTradeData();
+                  setRefreshedMsg(true);
+                  setTimeout(() => setRefreshedMsg(false), 2000);
+                } finally {
+                  setRefreshing(false);
+                  setRefreshCooldown(5);
+                  const cd = setInterval(() => {
+                    setRefreshCooldown(prev => {
+                      if (prev <= 1) { clearInterval(cd); return 0; }
+                      return prev - 1;
+                    });
+                  }, 1000);
+                }
               }}
-              className="p-1.5 sm:p-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-cyan-300 transition-all"
-              title="Refresh all data"
+              disabled={refreshing || refreshCooldown > 0}
+              className={`p-1.5 sm:p-2 rounded-lg border transition-all flex items-center gap-1.5 ${
+                refreshing || refreshCooldown > 0
+                  ? 'bg-gray-800/50 border-gray-700 text-gray-600 cursor-not-allowed'
+                  : 'bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30 text-cyan-400 hover:text-cyan-300'
+              }`}
+              title={refreshCooldown > 0 ? `Wait ${refreshCooldown}s` : 'Refresh all data'}
             >
-              <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshCooldown > 0 && <span className="text-[10px] sm:text-xs tabular-nums">{refreshCooldown}s</span>}
             </button>
           </div>
         </div>
@@ -2358,6 +2385,22 @@ export default function DashboardHome() {
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] sm:text-xs text-gray-500">MT5:</span>
                     <span className="text-[10px] sm:text-xs font-medium text-gray-400">{lic.mt5_account || '-'}</span>
+                    {lic.mt5_account && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(lic.mt5_account);
+                          const btn = e.currentTarget;
+                          btn.classList.add('copied');
+                          setTimeout(() => btn.classList.remove('copied'), 1500);
+                        }}
+                        className="group p-0.5 rounded hover:bg-cyan-500/20 transition-all text-gray-500 hover:text-cyan-400 [&.copied]:text-green-400 [&.copied]:bg-green-500/20"
+                        title="Copy MT5 account"
+                      >
+                        <Copy className="w-3 h-3 group-[.copied]:hidden" />
+                        <Check className="w-3 h-3 hidden group-[.copied]:block" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

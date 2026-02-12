@@ -128,7 +128,7 @@ export default function PublicEAStorePage() {
             <span className="text-yellow-400 text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA STORE</span>
           </div>
           <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-            Choose Your Trading AI
+            Choose Your Trading AI Power
           </h1>
           <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">
             Select the EA that matches your investment size and trading style.

@@ -31,6 +31,258 @@ interface LicenseResult {
   days_remaining: number
 }
 
+const STEP_DURATION = 4000;
+
+function StepsSlideshow({ router }: { router: any }) {
+  const [activeStep, setActiveStep] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const advanceStep = useCallback((nextIdx: number) => {
+    setIsExiting(true);
+    setTimeout(() => {
+      setActiveStep(nextIdx);
+      setIsExiting(false);
+      setProgress(0);
+    }, 400);
+  }, []);
+
+  const goToStep = useCallback((idx: number) => {
+    if (idx === activeStep) return;
+    advanceStep(idx);
+  }, [activeStep, advanceStep]);
+
+  // Progress bar + auto-advance
+  useEffect(() => {
+    if (isPaused || isExiting) return;
+
+    progressRef.current = setInterval(() => {
+      setProgress(prev => {
+        const next = prev + (50 / STEP_DURATION) * 100;
+        if (next >= 100) {
+          advanceStep((activeStep + 1) % 4);
+          return 100;
+        }
+        return next;
+      });
+    }, 50);
+
+    return () => {
+      if (progressRef.current) clearInterval(progressRef.current);
+    };
+  }, [isPaused, isExiting, activeStep, advanceStep]);
+
+  // Render unique content per step
+  const renderStepContent = () => {
+    switch (activeStep) {
+      case 0: return (
+        /* ── STEP 1: Exness – yellow/orange signature ── */
+        <div className="flex flex-col md:flex-row gap-5 sm:gap-8 items-center">
+          <div className="flex-shrink-0 flex flex-col items-center">
+            <div className="relative">
+              <div className="absolute inset-0 bg-yellow-400/20 rounded-2xl blur-xl" />
+              <div className="relative w-20 h-20 sm:w-28 sm:h-28 bg-gradient-to-br from-[#1a1a2e] to-[#0d0d15] rounded-2xl p-3 sm:p-4 border-2 border-yellow-500/40 shadow-xl shadow-yellow-500/20">
+                <img src="/exness.png" alt="Exness" className="w-full h-full object-contain" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 mt-3">
+              <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+              <span className="text-green-400 text-[10px] sm:text-xs">Trusted Worldwide</span>
+            </div>
+          </div>
+          <div className="flex-1 text-center md:text-left">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-1.5 mb-2">
+              <span className="text-[9px] sm:text-[10px] font-bold text-yellow-300 bg-yellow-500/20 px-2 py-0.5 rounded-full border border-yellow-400/40">⭐ RECOMMENDED BROKER</span>
+              <span className="text-[9px] sm:text-[10px] font-bold text-red-300 bg-red-500/20 px-2 py-0.5 rounded-full border border-red-400/40 animate-pulse">CENT ACCOUNT</span>
+            </div>
+            <h3 className="text-xl sm:text-3xl font-bold text-yellow-400 mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Open Exness Account</h3>
+            <p className="text-gray-300 text-sm sm:text-base leading-relaxed mb-1">Create a <span className="text-yellow-400 font-semibold">Standard Cent Account</span> on Exness — the only broker optimized for our EA.</p>
+            <p className="text-gray-500 text-xs sm:text-sm">Low spreads • Instant deposits • No restrictions on EAs • Start with just $10</p>
+            <a href="https://one.exnesstrack.org/a/sxz9ig3enp" target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold mt-4 transition-all hover:scale-105 shadow-lg shadow-yellow-500/30"
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >OPEN EXNESS ACCOUNT <ArrowRight className="w-4 h-4" /></a>
+          </div>
+        </div>
+      );
+      case 1: return (
+        /* ── STEP 2: Download EA – cyan/blue tech ── */
+        <div className="flex flex-col md:flex-row gap-5 sm:gap-8 items-center">
+          <div className="flex-shrink-0">
+            <div className="relative">
+              <div className="absolute inset-0 bg-cyan-400/15 rounded-2xl blur-xl" />
+              <div className="relative w-20 h-20 sm:w-28 sm:h-28 bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 rounded-2xl border-2 border-cyan-500/40 flex items-center justify-center shadow-xl shadow-cyan-500/20">
+                <span className="text-5xl sm:text-7xl">🤖</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 text-center md:text-left">
+            <h3 className="text-xl sm:text-3xl font-bold text-cyan-400 mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Download AI Trading EA</h3>
+            <p className="text-gray-300 text-sm sm:text-base leading-relaxed mb-1">Get our AI-powered Expert Advisor from the EA Store and install it on your MT5 terminal.</p>
+            <p className="text-gray-500 text-xs sm:text-sm mb-4">Download .ex5 → Copy to MT5 Experts folder → Restart MT5 → Drag onto XAUUSD chart</p>
+            <div className="flex flex-wrap gap-2 justify-center md:justify-start mb-4">
+              {['AI Grid Trading', 'Auto Recovery', 'Trailing Stop', '24/5 Automated'].map(f => (
+                <span key={f} className="text-[10px] sm:text-xs bg-cyan-500/10 text-cyan-300 px-2 sm:px-3 py-1 rounded-full border border-cyan-500/20">{f}</span>
+              ))}
+            </div>
+            <button onClick={() => router.push('/ea-store')}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold transition-all hover:scale-105 shadow-lg shadow-cyan-500/30"
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >VISIT EA STORE <ArrowRight className="w-4 h-4" /></button>
+          </div>
+        </div>
+      );
+      case 2: return (
+        /* ── STEP 3: License – green ── */
+        <div className="flex flex-col md:flex-row gap-5 sm:gap-8 items-center">
+          <div className="flex-shrink-0">
+            <div className="relative">
+              <div className="absolute inset-0 bg-green-400/15 rounded-2xl blur-xl" />
+              <div className="relative w-20 h-20 sm:w-28 sm:h-28 bg-gradient-to-br from-green-500/20 to-green-500/5 rounded-2xl border-2 border-green-500/40 flex items-center justify-center shadow-xl shadow-green-500/20">
+                <span className="text-5xl sm:text-7xl">🔑</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 text-center md:text-left">
+            <h3 className="text-xl sm:text-3xl font-bold text-green-400 mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Purchase License</h3>
+            <p className="text-gray-300 text-sm sm:text-base leading-relaxed mb-1">Choose a subscription plan, complete payment, and get your license key activated instantly.</p>
+            <p className="text-gray-500 text-xs sm:text-sm mb-4">Enter the license key in your EA settings → The AI starts trading automatically for you.</p>
+            <div className="flex flex-wrap gap-3 justify-center md:justify-start mb-4">
+              {[{label:'Weekly', price:'$19'}, {label:'Monthly', price:'$49'}, {label:'Yearly', price:'$299'}].map(p => (
+                <div key={p.label} className="bg-green-500/10 border border-green-500/20 rounded-lg px-3 sm:px-4 py-2 text-center">
+                  <p className="text-green-400 font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>{p.price}</p>
+                  <p className="text-gray-500 text-[10px] sm:text-xs">{p.label}</p>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold transition-all hover:scale-105 shadow-lg shadow-green-500/30"
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >VIEW PLANS <ArrowRight className="w-4 h-4" /></button>
+          </div>
+        </div>
+      );
+      case 3: return (
+        /* ── STEP 4: Withdraw – purple/gold ── */
+        <div className="flex flex-col md:flex-row gap-5 sm:gap-8 items-center">
+          <div className="flex-shrink-0">
+            <div className="relative">
+              <div className="absolute inset-0 bg-purple-400/15 rounded-2xl blur-xl" />
+              <div className="relative w-20 h-20 sm:w-28 sm:h-28 bg-gradient-to-br from-purple-500/20 to-purple-500/5 rounded-2xl border-2 border-purple-500/40 flex items-center justify-center shadow-xl shadow-purple-500/20">
+                <span className="text-5xl sm:text-7xl">💰</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 text-center md:text-left">
+            <h3 className="text-xl sm:text-3xl font-bold text-purple-400 mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Withdraw Profits</h3>
+            <p className="text-gray-300 text-sm sm:text-base leading-relaxed mb-1">Watch your balance grow 24/5 and withdraw your earnings anytime directly from Exness.</p>
+            <p className="text-gray-500 text-xs sm:text-sm mb-4">Monitor live from your dashboard • Instant withdrawals • No hidden fees</p>
+            <div className="flex flex-wrap gap-2 justify-center md:justify-start mb-4">
+              {['📊 Live Dashboard', '⚡ Instant Withdrawal', '🔒 Secure Funds', '📱 Mobile Access'].map(f => (
+                <span key={f} className="text-[10px] sm:text-xs bg-purple-500/10 text-purple-300 px-2 sm:px-3 py-1 rounded-full border border-purple-500/20">{f}</span>
+              ))}
+            </div>
+            <button onClick={() => router.push('/ea-store')}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500 to-purple-400 hover:from-purple-400 hover:to-cyan-400 text-black px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold transition-all hover:scale-105 shadow-lg shadow-purple-500/30"
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >START NOW <ArrowRight className="w-4 h-4" /></button>
+          </div>
+        </div>
+      );
+      default: return null;
+    }
+  };
+
+  const stepColors = ['cyan', 'cyan', 'green', 'purple'];
+  const stepTitles = ['Create Account', 'Download EA', 'Get License', 'Withdraw'];
+
+  return (
+    <div className="mb-12 sm:mb-24 relative" onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
+      <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-yellow-500/5 to-green-500/5 rounded-3xl blur-xl" />
+
+      <div className="relative bg-gradient-to-r from-[#0a0a0f] via-[#12121a] to-[#0a0a0f] border border-cyan-500/20 rounded-2xl sm:rounded-3xl p-4 sm:p-8 md:p-12 overflow-hidden">
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(6,182,212,0.03)_50%,transparent_100%)] animate-pulse" />
+
+        <div className="relative z-10">
+          <div className="text-center mb-6 sm:mb-10">
+            <h2 className="text-xl sm:text-2xl md:text-4xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              Start Earning in <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400">4 Simple Steps</span>
+            </h2>
+            <p className="text-gray-500 text-xs sm:text-base">From account creation to withdrawal — it takes just minutes!</p>
+          </div>
+
+          {/* Step Indicators with Progress */}
+          <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-6 sm:mb-8">
+            {[0,1,2,3].map(idx => {
+              const dotActive = [
+                'bg-yellow-500 text-black shadow-lg shadow-yellow-500/50 scale-110',
+                'bg-cyan-500 text-black shadow-lg shadow-cyan-500/50 scale-110',
+                'bg-green-500 text-black shadow-lg shadow-green-500/50 scale-110',
+                'bg-purple-500 text-black shadow-lg shadow-purple-500/50 scale-110',
+              ];
+              const textActive = ['text-yellow-400', 'text-cyan-400', 'text-green-400', 'text-purple-400'];
+              const barActive = ['bg-yellow-500', 'bg-cyan-500', 'bg-green-500', 'bg-purple-500'];
+              const isActive = idx === activeStep;
+              const isDone = idx < activeStep;
+              return (
+                <button key={idx} onClick={() => goToStep(idx)} className="flex items-center gap-1 sm:gap-1.5 group">
+                  <div className="flex flex-col items-center gap-1">
+                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all duration-300 ${
+                      isActive ? dotActive[idx] : isDone ? 'bg-gray-700 text-gray-400' : 'bg-gray-800/60 text-gray-600'
+                    }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                      {isDone ? '✓' : idx + 1}
+                    </div>
+                    <span className={`text-[9px] sm:text-xs font-semibold transition-all duration-300 ${
+                      isActive ? textActive[idx] : 'text-gray-600'
+                    }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>{stepTitles[idx]}</span>
+                    {/* Progress bar under each step */}
+                    <div className="w-14 sm:w-20 h-0.5 rounded-full bg-gray-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${isActive ? barActive[idx] : isDone ? 'bg-gray-600' : 'bg-transparent'}`}
+                        style={{ 
+                          width: isActive ? `${progress}%` : isDone ? '100%' : '0%',
+                          transition: isActive ? 'none' : 'width 0.3s ease'
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {idx < 3 && <div className={`hidden sm:block w-4 md:w-8 h-px mt-[-18px] transition-all duration-300 ${isDone ? 'bg-gray-600' : 'bg-gray-800/50'}`} />}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Step Content with smooth fade-out / fade-in */}
+          <div
+            style={{
+              opacity: isExiting ? 0 : 1,
+              transform: isExiting ? 'translateY(14px) scale(0.97)' : 'translateY(0) scale(1)',
+              transition: 'opacity 0.4s ease, transform 0.4s ease',
+            }}
+          >
+            {renderStepContent()}
+          </div>
+
+          {/* Bottom */}
+          <div className="text-center mt-8 sm:mt-10">
+            <p className="text-sm sm:text-lg md:text-xl text-gray-300 mb-4">
+              <span className="text-cyan-400 font-bold">No trading experience needed.</span> Let AI do the work for you.
+            </p>
+            <button onClick={() => router.push('/ea-store')}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-105 shadow-lg shadow-green-500/25"
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >START EARNING NOW <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" /></button>
+          </div>
+        </div>
+      </div>
+
+      {/* Transitions handled via inline styles */}
+    </div>
+  );
+}
+
 export default function Home() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -618,128 +870,8 @@ export default function Home() {
       {/* Main Content Section */}
       <div className="relative z-10 container mx-auto px-3 sm:px-4">
 
-        {/* Progress Steps - Animated Cinematic Section */}
-        {(() => {
-          const stepsData = [
-            { step: 1, icon: '🏦', title: 'Create Account', subtitle: 'Open an Exness broker account with our recommended settings for optimal EA performance.', color: 'cyan', cta: 'Open Exness Account', ctaLink: 'https://one.exnesstrack.org/a/sxz9ig3enp' },
-            { step: 2, icon: '📥', title: 'Download EA', subtitle: 'Get our AI-powered Expert Advisor from the EA Store and install it on your MT5 terminal.', color: 'yellow', cta: 'Visit EA Store', ctaLink: '/ea-store' },
-            { step: 3, icon: '🔑', title: 'Get License', subtitle: 'Purchase a subscription plan, enter your license key in the EA, and let AI start trading for you.', color: 'green', cta: 'View Plans', ctaLink: '/#pricing' },
-            { step: 4, icon: '💸', title: 'Withdraw Profit', subtitle: 'Watch your balance grow and withdraw your earnings anytime. Start profiting in minutes!', color: 'purple', cta: 'Start Now', ctaLink: '/ea-store' },
-          ];
-          return (
-          <div className="mb-12 sm:mb-24 relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-yellow-500/5 to-green-500/5 rounded-3xl blur-xl" />
-            
-            <div className="relative bg-gradient-to-r from-[#0a0a0f] via-[#12121a] to-[#0a0a0f] border border-cyan-500/20 rounded-2xl sm:rounded-3xl p-4 sm:p-8 md:p-12 overflow-hidden">
-              <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(6,182,212,0.03)_50%,transparent_100%)] animate-pulse" />
-              
-              <div className="relative z-10">
-                <div className="text-center mb-8 sm:mb-12">
-                  <h2 className="text-xl sm:text-2xl md:text-4xl font-bold text-white mb-2 sm:mb-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                    Start Earning in <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400">4 Simple Steps</span>
-                  </h2>
-                  <p className="text-gray-500 text-xs sm:text-base">From account creation to withdrawal — it takes just minutes!</p>
-                </div>
-
-                {/* Steps Timeline */}
-                <div className="space-y-0">
-                  {stepsData.map((item, idx) => {
-                    const colorMap: Record<string, { border: string; bg: string; text: string; badge: string; glow: string; line: string; ctaBg: string }> = {
-                      cyan: { border: 'border-cyan-500/30', bg: 'from-cyan-500/15 to-cyan-500/5', text: 'text-cyan-400', badge: 'bg-cyan-500', glow: 'shadow-cyan-500/30', line: 'from-cyan-500 to-yellow-500', ctaBg: 'from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400' },
-                      yellow: { border: 'border-yellow-500/30', bg: 'from-yellow-500/15 to-yellow-500/5', text: 'text-yellow-400', badge: 'bg-yellow-500', glow: 'shadow-yellow-500/30', line: 'from-yellow-500 to-green-500', ctaBg: 'from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-green-400' },
-                      green: { border: 'border-green-500/30', bg: 'from-green-500/15 to-green-500/5', text: 'text-green-400', badge: 'bg-green-500', glow: 'shadow-green-500/30', line: 'from-green-500 to-purple-500', ctaBg: 'from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400' },
-                      purple: { border: 'border-purple-500/30', bg: 'from-purple-500/15 to-purple-500/5', text: 'text-purple-400', badge: 'bg-purple-500', glow: 'shadow-purple-500/30', line: 'from-purple-500 to-cyan-500', ctaBg: 'from-purple-500 to-purple-400 hover:from-purple-400 hover:to-cyan-400' },
-                    };
-                    const c = colorMap[item.color];
-                    const isLast = idx === stepsData.length - 1;
-                    const animDelay = idx * 200;
-
-                    return (
-                      <div key={idx} className="flex gap-3 sm:gap-5" style={{ animation: `fadeSlideUp 0.6s ease-out ${animDelay}ms both` }}>
-                        {/* Timeline Column */}
-                        <div className="flex flex-col items-center flex-shrink-0">
-                          <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${c.badge} flex items-center justify-center text-black font-bold text-xs sm:text-sm shadow-lg ${c.glow}`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                            {item.step}
-                          </div>
-                          {!isLast && (
-                            <div className={`w-0.5 flex-1 min-h-[20px] bg-gradient-to-b ${c.line} opacity-40`} />
-                          )}
-                        </div>
-
-                        {/* Content Card */}
-                        <div className={`flex-1 bg-gradient-to-br ${c.bg} border ${c.border} rounded-xl sm:rounded-2xl p-3 sm:p-5 ${isLast ? 'mb-0' : 'mb-3 sm:mb-4'} transition-all hover:shadow-lg ${c.glow} hover:scale-[1.01] group`}>
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <span className="text-2xl sm:text-3xl flex-shrink-0">{item.icon}</span>
-                              <div className="min-w-0">
-                                <h3 className={`text-sm sm:text-lg font-bold ${c.text}`} style={{ fontFamily: 'Orbitron, sans-serif' }}>{item.title}</h3>
-                                <p className="text-gray-400 text-[11px] sm:text-sm leading-relaxed mt-0.5">{item.subtitle}</p>
-                              </div>
-                            </div>
-                            {item.ctaLink.startsWith('http') ? (
-                              <a
-                                href={item.ctaLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`inline-flex items-center justify-center gap-1.5 bg-gradient-to-r ${c.ctaBg} text-black px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 hover:scale-105`}
-                                style={{ fontFamily: 'Orbitron, sans-serif' }}
-                              >
-                                {item.cta} <ArrowRight className="w-3 h-3" />
-                              </a>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  if (item.ctaLink.startsWith('/#')) {
-                                    document.getElementById(item.ctaLink.replace('/#', ''))?.scrollIntoView({ behavior: 'smooth' });
-                                  } else {
-                                    router.push(item.ctaLink);
-                                  }
-                                }}
-                                className={`inline-flex items-center justify-center gap-1.5 bg-gradient-to-r ${c.ctaBg} text-black px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 hover:scale-105`}
-                                style={{ fontFamily: 'Orbitron, sans-serif' }}
-                              >
-                                {item.cta} <ArrowRight className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                {/* Bottom tagline */}
-                <div className="text-center mt-8 sm:mt-12">
-                  <p className="text-sm sm:text-lg md:text-xl text-gray-300 mb-4">
-                    <span className="text-cyan-400 font-bold">No trading experience needed.</span> Let AI do the work for you.
-                  </p>
-                  <button 
-                    onClick={() => router.push('/ea-store')}
-                    className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all transform hover:scale-105 shadow-lg shadow-green-500/25"
-                    style={{ fontFamily: 'Orbitron, sans-serif' }}
-                  >
-                    START EARNING NOW <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* CSS Animation Keyframes */}
-            <style jsx>{`
-              @keyframes fadeSlideUp {
-                from {
-                  opacity: 0;
-                  transform: translateY(30px);
-                }
-                to {
-                  opacity: 1;
-                  transform: translateY(0);
-                }
-              }
-            `}</style>
-          </div>
-          );
-        })()}
+        {/* Progress Steps - Auto-Playing Tab Slideshow */}
+        <StepsSlideshow router={router} />
 
         {/* EA Store Preview Section */}
         <div className="mb-12 sm:mb-24">
@@ -748,7 +880,7 @@ export default function Home() {
               <Store className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
               <span className="text-yellow-300 text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA STORE</span>
             </div>
-            <h2 className="text-2xl sm:text-4xl font-bold text-white mb-2 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your Trading AI</h2>
+            <h2 className="text-2xl sm:text-4xl font-bold text-white mb-2 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your Trading AI Power</h2>
             <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">Multiple EA options optimized for different investment sizes</p>
           </div>
           
@@ -812,7 +944,7 @@ export default function Home() {
               <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
               <span className="text-yellow-300 text-xs sm:text-sm">PRICING PLANS</span>
             </div>
-            <h2 className="text-2xl sm:text-4xl font-bold text-white mb-2 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your AI Power</h2>
+            <h2 className="text-2xl sm:text-4xl font-bold text-white mb-2 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>Choose Your AI Package</h2>
             <p className="text-gray-400 text-sm sm:text-base">Unlock the full potential of Mark's AI trading system</p>
           </div>
           
