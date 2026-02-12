@@ -7,6 +7,7 @@ import axios from 'axios';
 import ExnessBroker from '@/components/ExnessBroker';
 import QRCode from 'qrcode';
 
+const EXNESS_REFERRAL_LINK = 'https://one.exnessonelink.com/a/ustbuprn';
 const POLLING_INTERVAL = 2000; // Faster polling for real-time updates
 const EA_CONNECTED_TIMEOUT_SECONDS = 120; // Allow up to 2min between heartbeats before marking disconnected
 
@@ -85,6 +86,10 @@ export default function DashboardHome() {
   const [freeExnessUid, setFreeExnessUid] = useState('');
   const [claimingFree, setClaimingFree] = useState(false);
   const [freeClaimResult, setFreeClaimResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Free extension request state
+  const [requestingFreeExtension, setRequestingFreeExtension] = useState(false);
+  const [freeExtensionResult, setFreeExtensionResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const nicknameInputRef = useRef<HTMLInputElement>(null);
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
@@ -620,6 +625,49 @@ export default function DashboardHome() {
     }
   };
 
+  const handleRequestFreeExtension = async (showInModal = false) => {
+    if (!selectedLicense?.license_key || !user?.email) return;
+    setRequestingFreeExtension(true);
+    setFreeExtensionResult(null);
+    try {
+      const res = await fetch(`${API_URL}/request-free-extension/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email || (user as any)?.username || '',
+          license_key: selectedLicense.license_key,
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFreeExtensionResult({ type: 'success', text: data.message });
+        const newReq = {
+          id: data.request?.id || Date.now(),
+          request_number: data.request?.request_number || '',
+          request_type: 'extension',
+          status: 'pending',
+          user_note: '[EXNESS_FREE_EXTENSION]',
+          extend_license_key: selectedLicense.license_key,
+          created_at: new Date().toISOString(),
+          ...(data.request || {}),
+        };
+        setPurchaseRequests((prev: any[]) => [newReq, ...prev]);
+        fetchPurchaseRequests();
+        if (showInModal) {
+          setExtendSuccess(data.request);
+          setExtendStep(4);
+          setExtendMethod('free');
+        }
+      } else {
+        setFreeExtensionResult({ type: 'error', text: data.message || 'Failed to submit request' });
+      }
+    } catch (e) {
+      setFreeExtensionResult({ type: 'error', text: 'Connection error. Please try again.' });
+    } finally {
+      setRequestingFreeExtension(false);
+    }
+  };
+
   const renderActivationProgress = (req: any) => {
     const status = String(req?.status || '').toLowerCase();
     const isRejected = status === 'rejected';
@@ -824,14 +872,38 @@ export default function DashboardHome() {
                     </button>
                   )}
                   {isExpiredLicense ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowExtendModal(true)}
-                      className="px-3 py-2 rounded-lg text-xs font-bold bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/40"
-                      style={{ fontFamily: 'Orbitron, sans-serif' }}
-                    >
-                      Extend
-                    </button>
+                    <>
+                      {(() => {
+                        const isFreeLicense = (purchaseRequests || []).some(
+                          (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status === 'approved' && r.issued_license_key === selectedLicense.license_key
+                        );
+                        const hasPendingFreeExt = (purchaseRequests || []).some(
+                          (r: any) => (r.user_note || '').includes('[EXNESS_FREE_EXTENSION]') && r.status === 'pending' && r.extend_license_key === selectedLicense.license_key
+                        );
+                        if (isFreeLicense) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={handleRequestFreeExtension}
+                              disabled={requestingFreeExtension || hasPendingFreeExt}
+                              className={`px-3 py-2 rounded-lg text-xs font-bold border ${hasPendingFreeExt ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30 cursor-not-allowed opacity-70' : 'bg-green-500/20 hover:bg-green-500/30 text-green-200 border-green-500/40'}`}
+                              style={{ fontFamily: 'Orbitron, sans-serif' }}
+                            >
+                              {requestingFreeExtension ? 'Requesting...' : hasPendingFreeExt ? 'Pending...' : 'Request Extension'}
+                            </button>
+                          );
+                        }
+                        return null;
+                      })()}
+                      <button
+                        type="button"
+                        onClick={() => setShowExtendModal(true)}
+                        className="px-3 py-2 rounded-lg text-xs font-bold bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/40"
+                        style={{ fontFamily: 'Orbitron, sans-serif' }}
+                      >
+                        Extend
+                      </button>
+                    </>
                   ) : null}
                   <button
                     type="button"
@@ -843,6 +915,17 @@ export default function DashboardHome() {
                   </button>
                 </div>
               </div>
+
+              {/* Free Extension Result Message */}
+              {freeExtensionResult && (
+                <div className={`mt-2 mx-4 px-3 py-2 rounded-lg text-xs ${
+                  freeExtensionResult.type === 'success'
+                    ? 'bg-green-500/10 border border-green-500/30 text-green-300'
+                    : 'bg-red-500/10 border border-red-500/30 text-red-300'
+                }`}>
+                  {freeExtensionResult.text}
+                </div>
+              )}
 
               {isPurchaseRequest ? (
                 <div className="mt-4 space-y-3">
@@ -957,33 +1040,61 @@ export default function DashboardHome() {
                             const existingFreeClaim = (purchaseRequests || []).find(
                               (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status !== 'rejected'
                             );
-                            const isApproved = existingFreeClaim?.status === 'approved';
+                            const isClaimApproved = existingFreeClaim?.status === 'approved';
+                            const isThisLicenseFree = isClaimApproved && existingFreeClaim?.issued_license_key === selectedLicense?.license_key;
+                            const freeBoundAccount = isClaimApproved && !isThisLicenseFree ? (existingFreeClaim?.mt5_account || existingFreeClaim?.issued_license_key?.slice(0, 12) || '—') : null;
+                            const hasPendingFreeExt = (purchaseRequests || []).some(
+                              (r: any) => (r.user_note || '').includes('[EXNESS_FREE_EXTENSION]') && r.status === 'pending' && r.extend_license_key === selectedLicense?.license_key
+                            );
+                            const isDisabled = freeBoundAccount ? true : existingFreeClaim ? (!isClaimApproved || hasPendingFreeExt) : false;
                             return (
                               <button
-                                onClick={() => { setExtendMethod('free'); setExtendStep(3); }}
-                                disabled={!!existingFreeClaim}
+                                onClick={() => {
+                                  if (isThisLicenseFree) {
+                                    handleRequestFreeExtension(true);
+                                  } else if (!existingFreeClaim) {
+                                    setExtendMethod('free'); setExtendStep(3);
+                                  }
+                                }}
+                                disabled={isDisabled || requestingFreeExtension}
                                 className={`relative overflow-hidden rounded-xl border-2 p-4 sm:p-5 text-left transition-all ${
-                                  existingFreeClaim
-                                    ? isApproved ? 'border-green-500/30 bg-green-500/5 cursor-not-allowed' : 'border-yellow-500/30 bg-yellow-500/5 cursor-not-allowed'
+                                  isDisabled || requestingFreeExtension
+                                    ? 'border-gray-500/30 bg-gray-500/5 cursor-not-allowed opacity-60'
                                     : 'border-green-500/30 bg-gradient-to-br from-green-500/5 to-emerald-500/5 hover:border-green-400/60 hover:shadow-lg hover:shadow-green-500/10 cursor-pointer'
                                 }`}
                               >
                                 <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 via-emerald-400 to-green-500" />
                                 <div className="flex items-center gap-2 mb-2">
-                                  <Gift className="w-5 h-5 text-green-400" />
-                                  <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>GET IT FREE</span>
-                                  {existingFreeClaim ? (
-                                    isApproved ? (
-                                      <span className="text-[8px] sm:text-[9px] font-bold text-green-300 bg-green-500/20 px-1.5 py-0.5 rounded-full border border-green-400/40">APPROVED</span>
-                                    ) : (
-                                      <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
-                                    )
+                                  {requestingFreeExtension ? (
+                                    <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
                                   ) : (
+                                    <Gift className="w-5 h-5 text-green-400" />
+                                  )}
+                                  <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                                    {requestingFreeExtension ? 'REQUESTING...' : isThisLicenseFree ? 'FREE EXTEND' : 'GET IT FREE'}
+                                  </span>
+                                  {hasPendingFreeExt ? (
+                                    <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
+                                  ) : freeBoundAccount ? (
+                                    <span className="text-[8px] sm:text-[9px] font-bold text-gray-400 bg-gray-500/20 px-1.5 py-0.5 rounded-full border border-gray-400/40">BOUND</span>
+                                  ) : existingFreeClaim && !isClaimApproved ? (
+                                    <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
+                                  ) : requestingFreeExtension ? null : (
                                     <span className="text-[8px] sm:text-[9px] font-bold text-green-200 bg-green-500/25 px-1.5 py-0.5 rounded-full border border-green-400/40 animate-pulse">$0</span>
                                   )}
                                 </div>
                                 <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">
-                                  {existingFreeClaim ? (isApproved ? 'Your free claim has been approved!' : 'You already have a pending free claim.') : 'Open an Exness account under our referral link & get a free license!'}
+                                  {requestingFreeExtension
+                                    ? 'Submitting your free extension request...'
+                                    : freeBoundAccount
+                                      ? `Free license is bound to account ${freeBoundAccount} only.`
+                                      : hasPendingFreeExt
+                                        ? 'You have a pending free extension request. Please wait for admin verification.'
+                                        : isThisLicenseFree
+                                          ? 'Request a free extension — admin will verify your Exness referral.'
+                                          : existingFreeClaim
+                                            ? 'You already have a pending free claim.'
+                                            : 'Open an Exness account under our referral link & get a free license!'}
                                 </p>
                               </button>
                             );
@@ -1077,7 +1188,7 @@ export default function DashboardHome() {
                                 <div className="space-y-1.5">
                                   <div className="flex items-start gap-2">
                                     <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">1</span>
-                                    <p className="text-gray-400 text-[10px] sm:text-xs">Open an Exness account using our referral link</p>
+                                    <p className="text-gray-400 text-[10px] sm:text-xs">Open an Exness account using our <a href={EXNESS_REFERRAL_LINK} target="_blank" rel="noopener noreferrer" className="text-green-400 underline hover:text-green-300">referral link</a></p>
                                   </div>
                                   <div className="flex items-start gap-2">
                                     <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">2</span>
@@ -1118,15 +1229,28 @@ export default function DashboardHome() {
                     )}
                     {extendStep === 4 && (
                       <div className="text-center space-y-4">
-                        <div className="w-16 h-16 mx-auto bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 rounded-full flex items-center justify-center"><CheckCircle className="w-8 h-8 text-emerald-400" /></div>
-                        <div><h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extension Request Submitted!</h3><p className="text-gray-400 text-sm">Your payment is being reviewed. Once approved, your license will be automatically extended.</p></div>
-                        <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3 text-left space-y-1">
-                          <div className="flex justify-between text-xs"><span className="text-gray-500">Request</span><span className="text-white">#{extendSuccess?.request_number || extendSuccess?.id}</span></div>
-                          <div className="flex justify-between text-xs"><span className="text-gray-500">Plan</span><span className="text-cyan-400">{extendSelectedPlan?.name}</span></div>
-                          <div className="flex justify-between text-xs"><span className="text-gray-500">Amount</span><span className="text-white">${extendSelectedPlan?.price}</span></div>
-                          <div className="flex justify-between text-xs"><span className="text-gray-500">Status</span><span className="text-yellow-400 font-bold">PENDING APPROVAL</span></div>
+                        <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center ${extendMethod === 'free' ? 'bg-gradient-to-br from-green-500/20 to-emerald-500/20' : 'bg-gradient-to-br from-cyan-500/20 to-emerald-500/20'}`}><CheckCircle className={`w-8 h-8 ${extendMethod === 'free' ? 'text-green-400' : 'text-emerald-400'}`} /></div>
+                        <div>
+                          <h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                            {extendMethod === 'free' ? 'Free Extension Requested!' : 'Extension Request Submitted!'}
+                          </h3>
+                          <p className="text-gray-400 text-sm">
+                            {extendMethod === 'free'
+                              ? 'Our team will verify your Exness referral status. Once confirmed, your license will be extended automatically.'
+                              : 'Your payment is being reviewed. Once approved, your license will be automatically extended.'}
+                          </p>
                         </div>
-                        <button onClick={resetExtendModal} className="w-full bg-cyan-500 hover:bg-cyan-400 text-black py-2.5 rounded-lg font-bold text-sm transition-all" style={{ fontFamily: 'Orbitron, sans-serif' }}>Done</button>
+                        <div className={`bg-[#0a0a0f] border rounded-lg p-3 text-left space-y-1 ${extendMethod === 'free' ? 'border-green-500/20' : 'border-cyan-500/20'}`}>
+                          <div className="flex justify-between text-xs"><span className="text-gray-500">Request</span><span className="text-white">#{extendSuccess?.request_number || extendSuccess?.id}</span></div>
+                          <div className="flex justify-between text-xs"><span className="text-gray-500">Plan</span><span className={extendMethod === 'free' ? 'text-green-400' : 'text-cyan-400'}>{extendSuccess?.plan || extendSelectedPlan?.name}</span></div>
+                          {extendMethod === 'free' ? (
+                            <div className="flex justify-between text-xs"><span className="text-gray-500">Amount</span><span className="text-green-400 font-bold">FREE</span></div>
+                          ) : (
+                            <div className="flex justify-between text-xs"><span className="text-gray-500">Amount</span><span className="text-white">${extendSelectedPlan?.price}</span></div>
+                          )}
+                          <div className="flex justify-between text-xs"><span className="text-gray-500">Status</span><span className="text-yellow-400 font-bold">PENDING VERIFICATION</span></div>
+                        </div>
+                        <button onClick={resetExtendModal} className={`w-full py-2.5 rounded-lg font-bold text-sm transition-all ${extendMethod === 'free' ? 'bg-green-500 hover:bg-green-400 text-black' : 'bg-cyan-500 hover:bg-cyan-400 text-black'}`} style={{ fontFamily: 'Orbitron, sans-serif' }}>Done</button>
                       </div>
                     )}
                   </div>
@@ -1143,58 +1267,73 @@ export default function DashboardHome() {
       <div className="max-w-7xl mx-auto pt-3 sm:pt-5 px-0.5 sm:px-4 pb-6 sm:pb-8">
         <div className="space-y-3 sm:space-y-4">
           {/* License Expiry Warning Banner */}
-          {isActive && getDaysRemaining(selectedLicense) <= 7 && (
-            <div className={`rounded-lg px-3 sm:px-4 py-2 sm:py-3 border ${
-              getDaysRemaining(selectedLicense) <= 0 
-                ? 'bg-red-500/10 border-red-500/30' 
-                : getDaysRemaining(selectedLicense) <= 3 
-                  ? 'bg-orange-500/10 border-orange-500/30' 
-                  : 'bg-yellow-500/10 border-yellow-500/30'
-            }`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <span className="text-lg sm:text-xl">
-                    {getDaysRemaining(selectedLicense) <= 0 
-                      ? '🚨' 
-                      : getDaysRemaining(selectedLicense) <= 3 
-                        ? '⚠️' 
-                        : '⏰'}
-                  </span>
-                  <div>
-                    <p className={`font-bold text-sm sm:text-base ${
-                      getDaysRemaining(selectedLicense) <= 0 
-                        ? 'text-red-400' 
-                        : getDaysRemaining(selectedLicense) <= 3 
-                          ? 'text-orange-400' 
-                          : 'text-yellow-400'
-                    }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                      {getDaysRemaining(selectedLicense) <= 0 
-                        ? 'LICENSE EXPIRED!' 
-                        : `LICENSE EXPIRES IN ${getDaysRemaining(selectedLicense)} ${getDaysRemaining(selectedLicense) === 1 ? 'DAY' : 'DAYS'}`}
-                    </p>
-                    <p className="text-xs sm:text-sm text-gray-400">
-                      {getDaysRemaining(selectedLicense) <= 0 
-                        ? 'Your license has expired. Click below to extend now.' 
-                        : 'Extend your license to avoid any trading interruption.'}
-                    </p>
+          {(() => {
+            const daysLeft = getDaysRemaining(selectedLicense);
+            const isFreeLicenseBanner = (purchaseRequests || []).some(
+              (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status === 'approved' && r.issued_license_key === selectedLicense.license_key
+            );
+            const hasPendingFreeExt = isFreeLicenseBanner && (purchaseRequests || []).some(
+              (r: any) => (r.user_note || '').includes('[EXNESS_FREE_EXTENSION]') && r.status === 'pending' && r.extend_license_key === selectedLicense.license_key
+            );
+            const warningThreshold = isFreeLicenseBanner ? 10 : 7;
+            if (!isActive || daysLeft > warningThreshold) return null;
+            return (
+              <div className={`rounded-lg px-3 sm:px-4 py-2 sm:py-3 border ${
+                daysLeft <= 0 
+                  ? 'bg-red-500/10 border-red-500/30' 
+                  : daysLeft <= 3 
+                    ? 'bg-orange-500/10 border-orange-500/30' 
+                    : 'bg-yellow-500/10 border-yellow-500/30'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <span className="text-lg sm:text-xl">
+                      {daysLeft <= 0 ? '🚨' : daysLeft <= 3 ? '⚠️' : '⏰'}
+                    </span>
+                    <div>
+                      <p className={`font-bold text-sm sm:text-base ${
+                        daysLeft <= 0 ? 'text-red-400' : daysLeft <= 3 ? 'text-orange-400' : 'text-yellow-400'
+                      }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                        {daysLeft <= 0 
+                          ? 'LICENSE EXPIRED!' 
+                          : `LICENSE EXPIRES IN ${daysLeft} ${daysLeft === 1 ? 'DAY' : 'DAYS'}`}
+                      </p>
+                      <p className="text-xs sm:text-sm text-gray-400">
+                        {daysLeft <= 0 
+                          ? 'Your license has expired. Click below to extend now.' 
+                          : 'Extend your license to avoid any trading interruption.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isFreeLicenseBanner && (
+                      <button
+                        onClick={handleRequestFreeExtension}
+                        disabled={requestingFreeExtension || hasPendingFreeExt}
+                        className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold text-xs sm:text-sm transition-all ${hasPendingFreeExt ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 cursor-not-allowed opacity-70' : 'bg-green-500 hover:bg-green-400 text-black'}`}
+                        style={{ fontFamily: 'Orbitron, sans-serif' }}
+                      >
+                        {requestingFreeExtension ? 'REQUESTING...' : hasPendingFreeExt ? 'PENDING...' : 'FREE EXTEND'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowExtendModal(true)}
+                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold text-xs sm:text-sm transition-all ${
+                        daysLeft <= 0 
+                          ? 'bg-red-500 hover:bg-red-400 text-white' 
+                          : daysLeft <= 3 
+                            ? 'bg-orange-500 hover:bg-orange-400 text-white' 
+                            : 'bg-yellow-500 hover:bg-yellow-400 text-black'
+                      }`}
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      EXTEND NOW
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => setShowExtendModal(true)}
-                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold text-xs sm:text-sm transition-all ${
-                    getDaysRemaining(selectedLicense) <= 0 
-                      ? 'bg-red-500 hover:bg-red-400 text-white' 
-                      : getDaysRemaining(selectedLicense) <= 3 
-                        ? 'bg-orange-500 hover:bg-orange-400 text-white' 
-                        : 'bg-yellow-500 hover:bg-yellow-400 text-black'
-                  }`}
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
-                  EXTEND NOW
-                </button>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Compact Header Bar */}
           <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg px-2 sm:px-4 py-2 flex items-center justify-between">
@@ -1783,33 +1922,61 @@ export default function DashboardHome() {
                       const existingFreeClaim = (purchaseRequests || []).find(
                         (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status !== 'rejected'
                       );
-                      const isApproved = existingFreeClaim?.status === 'approved';
+                      const isClaimApproved = existingFreeClaim?.status === 'approved';
+                      const isThisLicenseFree = isClaimApproved && existingFreeClaim?.issued_license_key === selectedLicense?.license_key;
+                      const freeBoundAccount = isClaimApproved && !isThisLicenseFree ? (existingFreeClaim?.mt5_account || existingFreeClaim?.issued_license_key?.slice(0, 12) || '—') : null;
+                      const hasPendingFreeExt = (purchaseRequests || []).some(
+                        (r: any) => (r.user_note || '').includes('[EXNESS_FREE_EXTENSION]') && r.status === 'pending' && r.extend_license_key === selectedLicense?.license_key
+                      );
+                      const isDisabled = freeBoundAccount ? true : existingFreeClaim ? (!isClaimApproved || hasPendingFreeExt) : false;
                       return (
                         <button
-                          onClick={() => { setExtendMethod('free'); setExtendStep(3); }}
-                          disabled={!!existingFreeClaim}
+                          onClick={() => {
+                            if (isThisLicenseFree) {
+                              handleRequestFreeExtension(true);
+                            } else if (!existingFreeClaim) {
+                              setExtendMethod('free'); setExtendStep(3);
+                            }
+                          }}
+                          disabled={isDisabled || requestingFreeExtension}
                           className={`relative overflow-hidden rounded-xl border-2 p-4 sm:p-5 text-left transition-all ${
-                            existingFreeClaim
-                              ? isApproved ? 'border-green-500/30 bg-green-500/5 cursor-not-allowed' : 'border-yellow-500/30 bg-yellow-500/5 cursor-not-allowed'
+                            isDisabled || requestingFreeExtension
+                              ? 'border-gray-500/30 bg-gray-500/5 cursor-not-allowed opacity-60'
                               : 'border-green-500/30 bg-gradient-to-br from-green-500/5 to-emerald-500/5 hover:border-green-400/60 hover:shadow-lg hover:shadow-green-500/10 cursor-pointer'
                           }`}
                         >
                           <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 via-emerald-400 to-green-500" />
                           <div className="flex items-center gap-2 mb-2">
-                            <Gift className="w-5 h-5 text-green-400" />
-                            <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>GET IT FREE</span>
-                            {existingFreeClaim ? (
-                              isApproved ? (
-                                <span className="text-[8px] sm:text-[9px] font-bold text-green-300 bg-green-500/20 px-1.5 py-0.5 rounded-full border border-green-400/40">APPROVED</span>
-                              ) : (
-                                <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
-                              )
+                            {requestingFreeExtension ? (
+                              <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
                             ) : (
+                              <Gift className="w-5 h-5 text-green-400" />
+                            )}
+                            <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                              {requestingFreeExtension ? 'REQUESTING...' : isThisLicenseFree ? 'FREE EXTEND' : 'GET IT FREE'}
+                            </span>
+                            {hasPendingFreeExt ? (
+                              <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
+                            ) : freeBoundAccount ? (
+                              <span className="text-[8px] sm:text-[9px] font-bold text-gray-400 bg-gray-500/20 px-1.5 py-0.5 rounded-full border border-gray-400/40">BOUND</span>
+                            ) : existingFreeClaim && !isClaimApproved ? (
+                              <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
+                            ) : requestingFreeExtension ? null : (
                               <span className="text-[8px] sm:text-[9px] font-bold text-green-200 bg-green-500/25 px-1.5 py-0.5 rounded-full border border-green-400/40 animate-pulse">$0</span>
                             )}
                           </div>
                           <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">
-                            {existingFreeClaim ? (isApproved ? 'Your free claim has been approved!' : 'You already have a pending free claim.') : 'Open an Exness account under our referral link & get a free license!'}
+                            {requestingFreeExtension
+                              ? 'Submitting your free extension request...'
+                              : freeBoundAccount
+                                ? `Free license is bound to account ${freeBoundAccount} only.`
+                                : hasPendingFreeExt
+                                  ? 'You have a pending free extension request. Please wait for admin verification.'
+                                  : isThisLicenseFree
+                                    ? 'Request a free extension — admin will verify your Exness referral.'
+                                    : existingFreeClaim
+                                      ? 'You already have a pending free claim.'
+                                      : 'Open an Exness account under our referral link & get a free license!'}
                           </p>
                         </button>
                       );
@@ -1936,7 +2103,7 @@ export default function DashboardHome() {
                           <div className="space-y-1.5">
                             <div className="flex items-start gap-2">
                               <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">1</span>
-                              <p className="text-gray-400 text-[10px] sm:text-xs">Open an Exness account using our referral link</p>
+                              <p className="text-gray-400 text-[10px] sm:text-xs">Open an Exness account using our <a href={EXNESS_REFERRAL_LINK} target="_blank" rel="noopener noreferrer" className="text-green-400 underline hover:text-green-300">referral link</a></p>
                             </div>
                             <div className="flex items-start gap-2">
                               <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">2</span>
@@ -1979,22 +2146,32 @@ export default function DashboardHome() {
               {/* Step 4: Success */}
               {extendStep === 4 && (
                 <div className="text-center space-y-4">
-                  <div className="w-16 h-16 mx-auto bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 rounded-full flex items-center justify-center">
-                    <CheckCircle className="w-8 h-8 text-emerald-400" />
+                  <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center ${extendMethod === 'free' ? 'bg-gradient-to-br from-green-500/20 to-emerald-500/20' : 'bg-gradient-to-br from-cyan-500/20 to-emerald-500/20'}`}>
+                    <CheckCircle className={`w-8 h-8 ${extendMethod === 'free' ? 'text-green-400' : 'text-emerald-400'}`} />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extension Request Submitted!</h3>
-                    <p className="text-gray-400 text-sm">Your payment is being reviewed. Once approved, your license will be automatically extended.</p>
+                    <h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                      {extendMethod === 'free' ? 'Free Extension Requested!' : 'Extension Request Submitted!'}
+                    </h3>
+                    <p className="text-gray-400 text-sm">
+                      {extendMethod === 'free'
+                        ? 'Our team will verify your Exness referral status. Once confirmed, your license will be extended automatically.'
+                        : 'Your payment is being reviewed. Once approved, your license will be automatically extended.'}
+                    </p>
                   </div>
-                  <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3 text-left space-y-1">
+                  <div className={`bg-[#0a0a0f] border rounded-lg p-3 text-left space-y-1 ${extendMethod === 'free' ? 'border-green-500/20' : 'border-cyan-500/20'}`}>
                     <div className="flex justify-between text-xs"><span className="text-gray-500">Request</span><span className="text-white">#{extendSuccess?.request_number || extendSuccess?.id}</span></div>
-                    <div className="flex justify-between text-xs"><span className="text-gray-500">Plan</span><span className="text-cyan-400">{extendSelectedPlan?.name}</span></div>
-                    <div className="flex justify-between text-xs"><span className="text-gray-500">Amount</span><span className="text-white">${extendSelectedPlan?.price}</span></div>
-                    <div className="flex justify-between text-xs"><span className="text-gray-500">Status</span><span className="text-yellow-400 font-bold">PENDING APPROVAL</span></div>
+                    <div className="flex justify-between text-xs"><span className="text-gray-500">Plan</span><span className={extendMethod === 'free' ? 'text-green-400' : 'text-cyan-400'}>{extendSuccess?.plan || extendSelectedPlan?.name}</span></div>
+                    {extendMethod === 'free' ? (
+                      <div className="flex justify-between text-xs"><span className="text-gray-500">Amount</span><span className="text-green-400 font-bold">FREE</span></div>
+                    ) : (
+                      <div className="flex justify-between text-xs"><span className="text-gray-500">Amount</span><span className="text-white">${extendSelectedPlan?.price}</span></div>
+                    )}
+                    <div className="flex justify-between text-xs"><span className="text-gray-500">Status</span><span className="text-yellow-400 font-bold">PENDING VERIFICATION</span></div>
                   </div>
                   <button
                     onClick={resetExtendModal}
-                    className="w-full bg-cyan-500 hover:bg-cyan-400 text-black py-2.5 rounded-lg font-bold text-sm transition-all"
+                    className={`w-full py-2.5 rounded-lg font-bold text-sm transition-all ${extendMethod === 'free' ? 'bg-green-500 hover:bg-green-400 text-black' : 'bg-cyan-500 hover:bg-cyan-400 text-black'}`}
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
                     Done
@@ -2629,7 +2806,7 @@ export default function DashboardHome() {
                           <div className="space-y-1.5">
                             <div className="flex items-start gap-2">
                               <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">1</span>
-                              <p className="text-gray-400 text-[10px] sm:text-xs">Open an Exness account using our referral link (click the Exness banner above)</p>
+                              <p className="text-gray-400 text-[10px] sm:text-xs">Open an Exness account using our <a href={EXNESS_REFERRAL_LINK} target="_blank" rel="noopener noreferrer" className="text-green-400 underline hover:text-green-300">referral link</a></p>
                             </div>
                             <div className="flex items-start gap-2">
                               <span className="w-4 h-4 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-[10px] font-bold flex-shrink-0 mt-0.5">2</span>

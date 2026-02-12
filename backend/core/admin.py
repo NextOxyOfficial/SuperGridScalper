@@ -126,7 +126,12 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
     def _is_free_claim(self, obj):
         return '[EXNESS_FREE_CLAIM]' in (obj.user_note or '')
     
+    def _is_free_extension(self, obj):
+        return '[EXNESS_FREE_EXTENSION]' in (obj.user_note or '')
+    
     def request_type_display(self, obj):
+        if self._is_free_extension(obj):
+            return format_html('<span style="color: #f59e0b; font-weight: bold;">{}</span>', '🔄🎁 FREE EXT')
         if self._is_free_claim(obj):
             return format_html('<span style="color: #10b981; font-weight: bold;">{}</span>', '🎁 FREE')
         if obj.request_type == 'extension':
@@ -135,6 +140,8 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
     request_type_display.short_description = 'Type'
     
     def payment_method_display(self, obj):
+        if self._is_free_extension(obj):
+            return mark_safe('<span style="color: #f59e0b; font-weight: bold;">🔄🎁 Free Extension</span>')
         if self._is_free_claim(obj):
             return mark_safe('<span style="color: #10b981; font-weight: bold;">🎁 Free Exness Claim</span>')
         return obj.network or '-'
@@ -142,7 +149,7 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
     
     def get_readonly_fields(self, request, obj=None):
         fields = list(super().get_readonly_fields(request, obj))
-        if obj and self._is_free_claim(obj):
+        if obj and (self._is_free_claim(obj) or self._is_free_extension(obj)):
             fields.extend(['network', 'txid', 'proof', 'amount_usd'])
         return fields
     
@@ -734,7 +741,7 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
 
 @admin.register(License)
 class LicenseAdmin(admin.ModelAdmin):
-    list_display = ['license_key_display', 'user', 'plan', 'status_display', 'mt5_account', 'balance_display', 'equity_display', 'pl_display', 'positions_display', 'trade_status', 'days_remaining_display', 'expires_at']
+    list_display = ['license_key_display', 'user', 'plan', 'source_display', 'status_display', 'mt5_account', 'balance_display', 'equity_display', 'pl_display', 'positions_display', 'trade_status', 'days_remaining_display', 'expires_at']
     list_filter = ['status', 'plan']
     search_fields = ['license_key', 'user__email', 'mt5_account', 'user__username']
     readonly_fields = ['license_key', 'activated_at', 'verification_count', 'last_verified', 'created_at', 'updated_at']
@@ -752,6 +759,24 @@ class LicenseAdmin(admin.ModelAdmin):
     def license_key_display(self, obj):
         return f"{obj.license_key[:16]}..."
     license_key_display.short_description = 'License Key'
+
+    def source_display(self, obj):
+        from core.models import LicensePurchaseRequest
+        free_claim = LicensePurchaseRequest.objects.filter(
+            issued_license=obj,
+            user_note__icontains='[EXNESS_FREE_CLAIM]',
+            status='approved',
+        ).exists()
+        if free_claim:
+            return format_html('<span style="color: #10b981; font-weight: bold;">🎁 FREE</span>')
+        paid = LicensePurchaseRequest.objects.filter(
+            issued_license=obj,
+            status='approved',
+        ).exclude(user_note__icontains='[EXNESS_FREE_CLAIM]').exists()
+        if paid:
+            return format_html('<span style="color: #06b6d4; font-weight: bold;">💳 PAID</span>')
+        return format_html('<span style="color: #6b7280;">—</span>')
+    source_display.short_description = 'Source'
 
     def status_display(self, obj):
         colors = {

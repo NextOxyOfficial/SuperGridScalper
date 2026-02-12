@@ -2026,6 +2026,184 @@ def claim_free_exness_license(request):
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def request_free_extension(request):
+    """Request a free license extension for users whose free Exness license has expired.
+    Admin verifies the user is still under our referral before approving."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    email = (data.get('email') or '').strip()
+    license_key = (data.get('license_key') or '').strip().upper()
+
+    if not email:
+        return JsonResponse({'success': False, 'message': 'Email is required'}, status=400)
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key is required'}, status=400)
+
+    user = resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'message': 'User not found.'}, status=404)
+
+    # Find the license
+    try:
+        license_obj = License.objects.get(license_key__iexact=license_key, user=user)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'License not found.'}, status=404)
+
+    # Check if user originally got this license via a free Exness claim
+    # Try matching by issued_license first, then fallback to mt5_account match
+    original_claim = LicensePurchaseRequest.objects.filter(
+        user=user,
+        user_note__icontains='[EXNESS_FREE_CLAIM]',
+        status='approved',
+        issued_license=license_obj,
+    ).first()
+    if not original_claim and license_obj.mt5_account:
+        original_claim = LicensePurchaseRequest.objects.filter(
+            user=user,
+            user_note__icontains='[EXNESS_FREE_CLAIM]',
+            status='approved',
+            mt5_account=license_obj.mt5_account,
+        ).first()
+    if not original_claim:
+        # Final fallback: any approved free claim for this user
+        original_claim = LicensePurchaseRequest.objects.filter(
+            user=user,
+            user_note__icontains='[EXNESS_FREE_CLAIM]',
+            status='approved',
+        ).first()
+    if not original_claim:
+        return JsonResponse({
+            'success': False,
+            'message': 'This license was not obtained through a free Exness claim. Please use the paid extension option.'
+        }, status=400)
+
+    # Check for existing pending free extension request for this license
+    existing_pending = LicensePurchaseRequest.objects.filter(
+        extend_license=license_obj,
+        user_note__icontains='[EXNESS_FREE_EXTENSION]',
+        status='pending',
+    ).exists()
+    if existing_pending:
+        return JsonResponse({
+            'success': False,
+            'message': 'You already have a pending free extension request for this license. Please wait for admin verification.'
+        }, status=400)
+
+    # Use the same plan as the original claim
+    plan = original_claim.plan or SubscriptionPlan.objects.filter(is_active=True).order_by('price').first()
+    if not plan:
+        return JsonResponse({'success': False, 'message': 'No plans available'}, status=500)
+
+    note_parts = [
+        '[EXNESS_FREE_EXTENSION]',
+        f'License: {license_obj.license_key}',
+        f'MT5 Account: {license_obj.mt5_account or "-"}',
+        f'Original Claim: #{original_claim.request_number or original_claim.id}',
+        'User is requesting a free extension. Please verify the user is still under our Exness referral before approving.',
+    ]
+
+    purchase = LicensePurchaseRequest.objects.create(
+        user=user,
+        plan=plan,
+        mt5_account=license_obj.mt5_account or None,
+        network=None,
+        amount_usd=Decimal('0.00'),
+        txid='',
+        user_note='\n'.join(note_parts),
+        status='pending',
+        request_type='extension',
+        extend_license=license_obj,
+    )
+
+    try:
+        from core.utils import send_admin_notification
+        send_admin_notification(
+            subject=f'Admin Alert: Free Extension Request (#{purchase.request_number})',
+            heading='Free License Extension Request',
+            html_body=(
+                f"<p><strong>Type:</strong> 🔄🎁 FREE EXTENSION</p>"
+                f"<p><strong>User:</strong> {user.email}</p>"
+                f"<p><strong>License:</strong> {license_obj.license_key[:16]}...</p>"
+                f"<p><strong>MT5 Account:</strong> {license_obj.mt5_account or '-'}</p>"
+                f"<p><strong>Original Claim:</strong> #{original_claim.request_number or original_claim.id}</p>"
+                f"<p><strong>Plan:</strong> {plan.name} (FREE)</p>"
+                f"<p>Please verify the user is still under our Exness referral link before approving.</p>"
+            ),
+            text_body=(
+                f"Free Extension Request\n"
+                f"User: {user.email}\n"
+                f"License: {license_obj.license_key}\n"
+                f"MT5 Account: {license_obj.mt5_account or '-'}\n"
+                f"Original Claim: #{original_claim.request_number or original_claim.id}\n"
+                f"Plan: {plan.name} (FREE)\n"
+                f"Request ID: #{purchase.request_number}"
+            ),
+            preheader=f'Free extension request by {user.email}'
+        )
+    except Exception:
+        pass
+
+    # Send confirmation email to user
+    try:
+        from core.utils import get_email_from_address, render_email_template, can_send_email_to_user, get_unsubscribe_url, add_email_headers
+        from django.core.mail import EmailMultiAlternatives
+
+        if can_send_email_to_user(user, 'transactional'):
+            base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
+            subject = '🔄 Free Extension Request Received'
+            html_body = render_email_template(
+                subject=subject,
+                heading='Extension Request Submitted',
+                message=(
+                    f"<p>Hi {user.first_name or user.email.split('@')[0]},</p>"
+                    f"<p>We've received your free license extension request!</p>"
+                    f"<div style='background: #0a0a0f; border: 1px solid rgba(234,179,8,0.3); border-radius: 8px; padding: 16px; margin: 16px 0;'>"
+                    f"<p style='margin: 0 0 8px 0;'><strong style='color: #9ca3af;'>Request ID:</strong> <span style='color: #eab308;'>#{purchase.request_number}</span></p>"
+                    f"<p style='margin: 0 0 8px 0;'><strong style='color: #9ca3af;'>License:</strong> <span style='color: #ffffff;'>{license_obj.license_key[:16]}...</span></p>"
+                    f"<p style='margin: 0;'><strong style='color: #9ca3af;'>Status:</strong> <span style='color: #eab308;'>Pending Verification</span></p>"
+                    f"</div>"
+                    f"<p>Our team will verify that your Exness account is still under our referral. "
+                    f"Once confirmed, your license will be extended automatically.</p>"
+                    f"<p style='color: #f87171; font-size: 13px;'><strong>Important:</strong> Your Exness account must remain under our referral link to qualify for free extensions.</p>"
+                ),
+                cta_text='Contact Support',
+                cta_url=f'{base}/contact',
+                footer_note='You received this email because you requested a free license extension on MarksTrades.',
+                preheader=f'Your free extension request #{purchase.request_number} is being verified',
+                unsubscribe_url=get_unsubscribe_url(user),
+            )
+            msg = EmailMultiAlternatives(
+                subject,
+                f"Free extension request #{purchase.request_number} received. License: {license_obj.license_key[:16]}... Status: Pending verification.",
+                get_email_from_address(),
+                [user.email],
+            )
+            msg.attach_alternative(html_body, 'text/html')
+            msg = add_email_headers(msg, 'transactional', user=user)
+            msg.send(fail_silently=True)
+    except Exception:
+        pass
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Your free extension request has been submitted! Our team will verify your Exness account and extend your license.',
+        'request': {
+            'id': purchase.id,
+            'request_number': purchase.request_number,
+            'request_type': 'extension',
+            'status': purchase.status,
+            'plan': plan.name,
+            'license_key': license_obj.license_key,
+            'created_at': purchase.created_at.isoformat(),
+        }
+    })
+
+
+@csrf_exempt
 @require_http_methods(["GET"])
 def get_referral_transactions(request):
     """Paginated referral transactions"""
