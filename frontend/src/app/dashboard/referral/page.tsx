@@ -265,41 +265,58 @@ export default function ReferralPage() {
 
         {/* Recent Transactions */}
         {referralData.transactions && referralData.transactions.length > 0 && (
-          <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 border border-gray-700">
-            <h2 className="text-xl font-bold mb-4">Recent Transactions</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-700">
-                    <th className="text-left py-3 px-4 text-gray-400">User</th>
-                    <th className="text-left py-3 px-4 text-gray-400">Purchase</th>
-                    <th className="text-left py-3 px-4 text-gray-400">Commission</th>
-                    <th className="text-left py-3 px-4 text-gray-400">Status</th>
-                    <th className="text-left py-3 px-4 text-gray-400">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {referralData.transactions.map((tx: any) => (
-                    <tr key={tx.id} className="border-b border-gray-800">
-                      <td className="py-3 px-4">{tx.referred_user}</td>
-                      <td className="py-3 px-4">${tx.purchase_amount.toFixed(2)}</td>
-                      <td className="py-3 px-4 text-green-400 font-bold">${tx.commission_amount.toFixed(2)}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          tx.status === 'paid' ? 'bg-green-900 text-green-400' :
-                          tx.status === 'approved' ? 'bg-blue-900 text-blue-400' :
-                          'bg-yellow-900 text-yellow-400'
-                        }`}>
-                          {tx.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-gray-400 text-sm">
-                        {new Date(tx.created_at).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="bg-gradient-to-br from-[#0d1117] to-[#12121a] rounded-2xl border border-cyan-500/20 overflow-hidden">
+            <div className="px-4 sm:px-6 py-4 border-b border-cyan-500/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+                <h2 className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Recent Transactions</h2>
+              </div>
+              <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{referralData.transactions.length} transaction{referralData.transactions.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="divide-y divide-gray-800/50">
+              {referralData.transactions.map((tx: any) => {
+                const email = tx.referred_user_email || tx.referred_user || '';
+                const name = tx.referred_user_name || email.split('@')[0] || 'User';
+                const maskedEmail = email ? email.replace(/^(.{2})(.*)(@.*)$/, (m: string, a: string, b: string, c: string) => a + '*'.repeat(Math.min(b.length, 6)) + c) : '';
+                const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
+                  completed: { bg: 'bg-green-500/10 border-green-500/30', text: 'text-green-400', label: 'Completed' },
+                  paid: { bg: 'bg-cyan-500/10 border-cyan-500/30', text: 'text-cyan-400', label: 'Paid' },
+                  pending: { bg: 'bg-yellow-500/10 border-yellow-500/30', text: 'text-yellow-400', label: 'Pending' },
+                  cancelled: { bg: 'bg-red-500/10 border-red-500/30', text: 'text-red-400', label: 'Cancelled' },
+                };
+                const st = statusConfig[tx.status] || statusConfig.pending;
+                return (
+                  <div key={tx.id} className="px-4 sm:px-6 py-3 sm:py-4 hover:bg-white/[0.02] transition-colors">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs sm:text-sm font-bold text-cyan-400">{name.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-white text-xs sm:text-sm font-semibold truncate">{name}</p>
+                          <p className="text-gray-500 text-[10px] sm:text-xs truncate">{maskedEmail}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
+                        <div className="text-right hidden sm:block">
+                          <p className="text-gray-400 text-[10px] sm:text-xs">Purchase</p>
+                          <p className="text-white text-xs sm:text-sm font-semibold">${tx.purchase_amount.toFixed(2)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-gray-400 text-[10px] sm:text-xs">Commission</p>
+                          <p className="text-green-400 text-xs sm:text-sm font-bold">${tx.commission_amount.toFixed(2)}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border ${st.bg} ${st.text}`}>
+                            {st.label}
+                          </span>
+                          <p className="text-gray-600 text-[9px] sm:text-[10px] mt-0.5">{new Date(tx.created_at).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

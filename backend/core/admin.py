@@ -119,6 +119,8 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
     list_filter = ['status', 'request_type', 'network', 'plan', 'created_at']
     search_fields = ['user__email', 'txid', 'mt5_account']
     readonly_fields = ['created_at', 'updated_at', 'issued_license', 'reviewed_at', 'reviewed_by', 'request_type', 'extend_license']
+    autocomplete_fields = ['user', 'plan', 'network']
+    radio_fields = {'status': admin.HORIZONTAL}
     actions = ['approve_requests', 'reject_requests']
     
     def request_type_display(self, obj):
@@ -621,7 +623,8 @@ class LicenseAdmin(admin.ModelAdmin):
     list_filter = ['status', 'plan']
     search_fields = ['license_key', 'user__email', 'mt5_account', 'user__username']
     readonly_fields = ['license_key', 'activated_at', 'verification_count', 'last_verified', 'created_at', 'updated_at']
-    autocomplete_fields = ['user']
+    autocomplete_fields = ['user', 'plan']
+    radio_fields = {'status': admin.HORIZONTAL}
     inlines = [EASettingsInline, TradeDataInline]
     
     fieldsets = (

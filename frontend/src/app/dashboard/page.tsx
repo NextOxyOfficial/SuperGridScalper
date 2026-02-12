@@ -840,7 +840,7 @@ export default function DashboardHome() {
                               <span className="text-2xl sm:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</span>
                               <span className="text-gray-500 text-sm"> /{plan.duration_days} days</span>
                             </div>
-                            <div className="text-center text-cyan-400 text-xs font-semibold">+{plan.duration_days} days added to your license</div>
+                            <div className="text-center text-cyan-400 text-xs font-semibold">Add {plan.duration_days} {plan.duration_days === 1 ? 'day' : 'days'} to your license</div>
                           </div>
                         ))}
                       </div>
@@ -1511,7 +1511,7 @@ export default function DashboardHome() {
                         <span className="text-2xl sm:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</span>
                         <span className="text-gray-500 text-sm"> /{plan.duration_days} days</span>
                       </div>
-                      <div className="text-center text-cyan-400 text-xs font-semibold">+{plan.duration_days} days added to your license</div>
+                      <div className="text-center text-cyan-400 text-xs font-semibold">Add {plan.duration_days} {plan.duration_days === 1 ? 'day' : 'days'} to your license</div>
                     </div>
                   ))}
                 </div>

@@ -1665,15 +1665,24 @@ def get_referral_stats(request):
             })
         
         # Get transactions
-        transactions = ReferralTransaction.objects.filter(referral=referral).order_by('-created_at')[:10]
+        transactions = ReferralTransaction.objects.filter(referral=referral).select_related('referred_user', 'purchase_request').order_by('-created_at')[:10]
         transaction_list = []
         for t in transactions:
+            # Determine effective status: if purchase was approved, show as 'completed'
+            effective_status = t.status
+            if t.purchase_request and t.purchase_request.status == 'approved':
+                effective_status = 'completed' if t.status == 'pending' else t.status
+            
+            referred_name = t.referred_user.first_name or t.referred_user.username
+            referred_email = t.referred_user.email
             transaction_list.append({
                 'id': t.id,
-                'referred_user': t.referred_user.username,
+                'referred_user': referred_email,
+                'referred_user_name': referred_name,
+                'referred_user_email': referred_email,
                 'purchase_amount': float(t.purchase_amount),
                 'commission_amount': float(t.commission_amount),
-                'status': t.status,
+                'status': effective_status,
                 'created_at': t.created_at.isoformat(),
             })
         
