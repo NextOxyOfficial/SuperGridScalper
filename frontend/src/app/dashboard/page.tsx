@@ -884,7 +884,7 @@ export default function DashboardHome() {
                           return (
                             <button
                               type="button"
-                              onClick={handleRequestFreeExtension}
+                              onClick={() => handleRequestFreeExtension()}
                               disabled={requestingFreeExtension || hasPendingFreeExt}
                               className={`px-3 py-2 rounded-lg text-xs font-bold border ${hasPendingFreeExt ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30 cursor-not-allowed opacity-70' : 'bg-green-500/20 hover:bg-green-500/30 text-green-200 border-green-500/40'}`}
                               style={{ fontFamily: 'Orbitron, sans-serif' }}
@@ -1070,7 +1070,7 @@ export default function DashboardHome() {
                                   ) : (
                                     <Gift className="w-5 h-5 text-green-400" />
                                   )}
-                                  <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                                  <span className="text-white font-bold text-xs sm:text-sm whitespace-nowrap" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                                     {requestingFreeExtension ? 'REQUESTING...' : isThisLicenseFree ? 'FREE EXTEND' : 'GET IT FREE'}
                                   </span>
                                   {hasPendingFreeExt ? (
@@ -1106,8 +1106,7 @@ export default function DashboardHome() {
                             <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 via-cyan-400 to-cyan-500" />
                             <div className="flex items-center gap-2 mb-2">
                               <Wallet className="w-5 h-5 text-cyan-400" />
-                              <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>PAY WITH CRYPTO</span>
-                              <span className="text-[8px] sm:text-[9px] font-bold text-cyan-200 bg-cyan-500/20 px-1.5 py-0.5 rounded-full border border-cyan-400/40">${extendSelectedPlan?.price}</span>
+                              <span className="text-white font-bold text-xs sm:text-sm whitespace-nowrap" style={{ fontFamily: 'Orbitron, sans-serif' }}>PAY WITH CRYPTO</span>
                             </div>
                             <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">Pay with USDT and get your license extended after admin approval.</p>
                           </button>
@@ -1308,7 +1307,7 @@ export default function DashboardHome() {
                   <div className="flex items-center gap-2">
                     {isFreeLicenseBanner && (
                       <button
-                        onClick={handleRequestFreeExtension}
+                        onClick={() => handleRequestFreeExtension()}
                         disabled={requestingFreeExtension || hasPendingFreeExt}
                         className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold text-xs sm:text-sm transition-all ${hasPendingFreeExt ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 cursor-not-allowed opacity-70' : 'bg-green-500 hover:bg-green-400 text-black'}`}
                         style={{ fontFamily: 'Orbitron, sans-serif' }}
@@ -1952,7 +1951,7 @@ export default function DashboardHome() {
                             ) : (
                               <Gift className="w-5 h-5 text-green-400" />
                             )}
-                            <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                            <span className="text-white font-bold text-xs sm:text-sm whitespace-nowrap" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                               {requestingFreeExtension ? 'REQUESTING...' : isThisLicenseFree ? 'FREE EXTEND' : 'GET IT FREE'}
                             </span>
                             {hasPendingFreeExt ? (
@@ -1988,8 +1987,7 @@ export default function DashboardHome() {
                       <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 via-cyan-400 to-cyan-500" />
                       <div className="flex items-center gap-2 mb-2">
                         <Wallet className="w-5 h-5 text-cyan-400" />
-                        <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>PAY WITH CRYPTO</span>
-                        <span className="text-[8px] sm:text-[9px] font-bold text-cyan-200 bg-cyan-500/20 px-1.5 py-0.5 rounded-full border border-cyan-400/40">${extendSelectedPlan?.price}</span>
+                        <span className="text-white font-bold text-xs sm:text-sm whitespace-nowrap" style={{ fontFamily: 'Orbitron, sans-serif' }}>PAY WITH CRYPTO</span>
                       </div>
                       <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">Pay with USDT and get your license extended after admin approval.</p>
                     </button>
@@ -2546,7 +2544,7 @@ export default function DashboardHome() {
                           <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 via-emerald-400 to-green-500" />
                           <div className="flex items-center gap-2 mb-2">
                             <Gift className="w-5 h-5 text-green-400" />
-                            <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>GET IT FREE</span>
+                            <span className="text-white font-bold text-xs sm:text-sm whitespace-nowrap" style={{ fontFamily: 'Orbitron, sans-serif' }}>GET IT FREE</span>
                             {existingFreeClaim ? (
                               isApproved ? (
                                 <span className="text-[8px] sm:text-[9px] font-bold text-green-300 bg-green-500/20 px-1.5 py-0.5 rounded-full border border-green-400/40">APPROVED</span>
@@ -2574,7 +2572,7 @@ export default function DashboardHome() {
                       <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 via-cyan-400 to-cyan-500" />
                       <div className="flex items-center gap-2 mb-2">
                         <Wallet className="w-5 h-5 text-cyan-400" />
-                        <span className="text-white font-bold text-xs sm:text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>PAY WITH CRYPTO</span>
+                        <span className="text-white font-bold text-xs sm:text-sm whitespace-nowrap" style={{ fontFamily: 'Orbitron, sans-serif' }}>PAY WITH CRYPTO</span>
                         <span className="text-[8px] sm:text-[9px] font-bold text-cyan-200 bg-cyan-500/20 px-1.5 py-0.5 rounded-full border border-cyan-400/40">${selectedPlan?.price}</span>
                       </div>
                       <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">

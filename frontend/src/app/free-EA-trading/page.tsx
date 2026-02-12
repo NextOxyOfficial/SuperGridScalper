@@ -425,16 +425,6 @@ export default function FreeTradingPage() {
         </div>
       </section>
 
-      {/* Risk Disclaimer */}
-      <div className="border-t border-gray-800 py-6 sm:py-8">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6">
-          <p className="text-gray-600 text-[10px] sm:text-xs text-center leading-relaxed">
-            <span className="text-gray-500 font-semibold">Risk Disclaimer:</span> Trading forex and CFDs involves significant risk and may not be suitable for all investors. 
-            Past performance does not guarantee future results. You should not invest money that you cannot afford to lose. 
-            The free license offer is subject to verification and may be withdrawn at any time.
-          </p>
-        </div>
-      </div>
     </main>
   );
 }
