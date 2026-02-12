@@ -52,7 +52,15 @@ export default function DashboardHome() {
 
   // Extend license modal state
   const [showExtendModal, setShowExtendModal] = useState(false);
-  const [extendingPlan, setExtendingPlan] = useState<number | null>(null);
+  const [extendStep, setExtendStep] = useState<1 | 2 | 3>(1); // 1=select plan, 2=payment, 3=success
+  const [extendSelectedPlan, setExtendSelectedPlan] = useState<any>(null);
+  const [extendNetworkId, setExtendNetworkId] = useState<string>('');
+  const [extendTxid, setExtendTxid] = useState('');
+  const [extendNote, setExtendNote] = useState('');
+  const [extendProofFile, setExtendProofFile] = useState<File | null>(null);
+  const [extendSubmitting, setExtendSubmitting] = useState(false);
+  const [extendSuccess, setExtendSuccess] = useState<any>(null);
+  const [extendQrCode, setExtendQrCode] = useState('');
 
   // License toggle state
   const [togglingLicense, setTogglingLicense] = useState<string | null>(null);
@@ -116,7 +124,7 @@ export default function DashboardHome() {
   const selectedNetwork = paymentNetworks.find((n) => String(n.id) === String(selectedNetworkId));
 
   const pendingActivationCards = (purchaseRequests || [])
-    .filter((r) => String(r.status || '').toLowerCase() === 'pending')
+    .filter((r) => String(r.status || '').toLowerCase() === 'pending' && r.request_type !== 'extension')
     .map((r) => ({
       _type: 'purchase_request',
       status: 'pending',
@@ -174,17 +182,37 @@ export default function DashboardHome() {
           }
         }
 
-        // If admin approved and license key issued, refresh licenses so the card appears.
+        // If admin approved any request, refresh licenses (new license or extension)
         try {
-          const approvedKeys = (nextRequests || [])
-            .filter((r: any) => String(r?.status || '').toLowerCase() === 'approved' && r?.issued_license_key)
-            .map((r: any) => String(r.issued_license_key));
-
-          const missing = approvedKeys.some((k: string) => !(licenses || []).some((l: any) => String(l?.license_key) === k));
+          const approvedRequests = (nextRequests || [])
+            .filter((r: any) => String(r?.status || '').toLowerCase() === 'approved');
+          
+          const hasNewApproved = approvedRequests.some((r: any) => 
+            r?.issued_license_key && !(licenses || []).some((l: any) => String(l?.license_key) === String(r.issued_license_key))
+          );
+          
+          // Also refresh if any extension was recently approved (plan/expiry may have changed)
+          const hasExtensionApproved = approvedRequests.some((r: any) => 
+            r?.request_type === 'extension' && r?.extend_license_key
+          );
+          
           const now = Date.now();
-          if (missing && now - lastAutoLicenseRefreshRef.current > 5000) {
+          if ((hasNewApproved || hasExtensionApproved) && now - lastAutoLicenseRefreshRef.current > 5000) {
             lastAutoLicenseRefreshRef.current = now;
             await refreshLicenses();
+            // After refresh, re-read licenses from localStorage (since state may not be updated yet)
+            if (hasExtensionApproved && selectedLicense) {
+              try {
+                const freshData = localStorage.getItem('licenses');
+                if (freshData) {
+                  const freshLicenses = JSON.parse(freshData);
+                  const updated = freshLicenses.find((l: any) => l.license_key === selectedLicense.license_key);
+                  if (updated && (updated.plan !== selectedLicense.plan || updated.expires_at !== selectedLicense.expires_at)) {
+                    selectLicense({ ...selectedLicense, ...updated });
+                  }
+                }
+              } catch (_) {}
+            }
           }
         } catch (e) {
           // ignore
@@ -351,53 +379,93 @@ export default function DashboardHome() {
     }
   };
 
-  const handleExtendLicense = async (planId: number) => {
-    if (!selectedLicense) return;
+  const handleExtendSelectPlan = (plan: any) => {
+    setExtendSelectedPlan(plan);
+    setExtendStep(2);
+    // Set default network
+    if (paymentNetworks.length > 0 && !extendNetworkId) {
+      setExtendNetworkId(String(paymentNetworks[0].id));
+    }
+  };
+
+  // Generate QR code for extend modal
+  useEffect(() => {
+    const network = paymentNetworks.find((n: any) => String(n.id) === String(extendNetworkId));
+    if (network?.wallet_address) {
+      QRCode.toDataURL(network.wallet_address, { width: 200, margin: 1, color: { dark: '#000000', light: '#FFFFFF' } })
+        .then((url: string) => setExtendQrCode(url))
+        .catch(() => setExtendQrCode(''));
+    } else {
+      setExtendQrCode('');
+    }
+  }, [extendNetworkId, paymentNetworks]);
+
+  const handleExtendSubmit = async () => {
+    if (!selectedLicense || !extendSelectedPlan || !extendNetworkId || !extendProofFile) return;
     
-    setExtendingPlan(planId);
+    setExtendSubmitting(true);
     try {
-      console.log('Extending license:', selectedLicense.license_key, 'with plan:', planId);
-      console.log('API URL:', `${API_URL}/extend-license/`);
-      
-      const response = await fetch(`${API_URL}/extend-license/`, {
+      const form = new FormData();
+      form.append('email', user?.email || (user as any)?.username || '');
+      form.append('license_key', selectedLicense.license_key);
+      form.append('plan_id', String(extendSelectedPlan.id));
+      form.append('network_id', String(extendNetworkId));
+      form.append('txid', extendTxid.trim());
+      form.append('user_note', extendNote.trim());
+      form.append('proof', extendProofFile);
+
+      const res = await fetch(`${API_URL}/extension-requests/create/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          license_key: selectedLicense.license_key,
-          plan_id: planId
-        })
+        body: form
       });
-      
-      const data = await response.json();
-      console.log('Extend response:', data);
-      
+      const data = await res.json();
       if (data.success) {
-        // Show success message
-        const daysRemaining = data.license.days_remaining;
-        const dayText = daysRemaining === 1 ? 'day' : 'days';
-        alert(`✅ ${data.message}\nNew expiry: ${new Date(data.license.expires_at).toLocaleDateString()}\n${daysRemaining} ${dayText} remaining`);
-        
-        // Update selectedLicense with new data
-        const updatedLicense = {
-          ...selectedLicense,
-          expires_at: data.license.expires_at,
-          status: data.license.status
-        };
-        
-        // Update the license in context
-        selectLicense(updatedLicense);
-        
-        // Close modal
-        setShowExtendModal(false);
+        setExtendSuccess(data.request);
+        setExtendStep(3);
+        // Add to purchase requests list
+        setPurchaseRequests((prev) => [
+          {
+            id: data.request?.id,
+            request_number: data.request?.request_number,
+            request_type: 'extension',
+            status: 'pending',
+            created_at: data.request?.created_at || new Date().toISOString(),
+            plan: extendSelectedPlan?.name || '-',
+            plan_id: extendSelectedPlan?.id,
+            amount_usd: extendSelectedPlan?.price,
+            extend_license_key: selectedLicense.license_key,
+            network: paymentNetworks.find((n: any) => String(n.id) === String(extendNetworkId)) || {},
+            mt5_account: selectedLicense.mt5_account,
+            txid: extendTxid.trim(),
+            user_note: extendNote.trim(),
+            admin_note: null,
+            proof_url: null,
+            issued_license_key: null,
+          },
+          ...(prev || []),
+        ]);
+        fetchPurchaseRequests();
       } else {
-        alert('❌ ' + (data.message || 'Failed to extend license.'));
+        alert('❌ ' + (data.message || 'Failed to submit extension request.'));
       }
     } catch (error: any) {
-      console.error('Extend license error:', error);
-      alert('❌ Failed to extend license. Please make sure the backend server is running and try again.');
+      alert('❌ Failed to submit extension request. Please try again.');
     } finally {
-      setExtendingPlan(null);
+      setExtendSubmitting(false);
     }
+  };
+
+  const resetExtendModal = () => {
+    setShowExtendModal(false);
+    setExtendStep(1);
+    setExtendSelectedPlan(null);
+    setExtendNetworkId('');
+    setExtendTxid('');
+    setExtendNote('');
+    setExtendProofFile(null);
+    setExtendSubmitting(false);
+    setExtendSuccess(null);
+    setExtendQrCode('');
   };
 
   const handleToggleLicense = async (licenseKey: string, currentStatus: string) => {
@@ -730,44 +798,92 @@ export default function DashboardHome() {
                 </div>
               ) : null}
 
-              {isExpiredLicense && showExtendModal ? (
+              {/* Extend License Modal for expired/inactive licenses */}
+              {showExtendModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                  <div className="bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-6 w-full max-w-xl border border-purple-500/30">
-                    <div className="flex items-center justify-between mb-4">
+                  <div className={`bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-4 sm:p-6 w-full max-h-[90vh] overflow-y-auto border border-purple-500/30 ${
+                    extendStep === 1 ? (plans.length === 1 ? 'max-w-md' : plans.length === 2 ? 'max-w-2xl' : 'max-w-4xl') : 'max-w-lg'
+                  }`}>
+                    <div className="flex items-center justify-between mb-4 sm:mb-6">
                       <div className="flex items-center gap-3">
-                        <Sparkles className="w-6 h-6 text-cyan-400" />
-                        <h2 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extend Your License</h2>
+                        <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
+                        <h2 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {extendStep === 1 ? 'Extend License' : extendStep === 2 ? 'Payment Details' : 'Request Submitted'}
+                        </h2>
                       </div>
-                      <button
-                        onClick={() => setShowExtendModal(false)}
-                        className="text-gray-400 hover:text-white transition-colors"
-                      >
-                        <X className="w-6 h-6" />
+                      <button onClick={resetExtendModal} className="text-gray-400 hover:text-white transition-colors">
+                        <X className="w-5 h-5 sm:w-6 sm:h-6" />
                       </button>
                     </div>
-
-                    <div className="space-y-2">
-                      {plans.map((plan: any) => (
-                        <button
-                          key={plan.id}
-                          type="button"
-                          onClick={() => handleExtendLicense(plan.id)}
-                          disabled={extendingPlan === plan.id}
-                          className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <div className="text-left">
-                            <p className="text-white font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</p>
-                            <p className="text-gray-400 text-xs">{plan.duration_days} days</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-cyan-300 font-bold">${plan.price}</p>
-                          </div>
-                        </button>
+                    <div className="flex items-center gap-2 mb-4 sm:mb-6">
+                      {[1, 2, 3].map((s) => (
+                        <div key={s} className="flex items-center gap-2 flex-1">
+                          <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                            s <= extendStep ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-gray-500'
+                          }`}>{s}</div>
+                          {s < 3 && <div className={`flex-1 h-0.5 rounded ${s < extendStep ? 'bg-cyan-500' : 'bg-gray-700'}`} />}
+                        </div>
                       ))}
                     </div>
+                    {extendStep === 1 && (
+                      <div className={`grid gap-4 sm:gap-6 ${plans.length === 1 ? 'grid-cols-1' : plans.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'}`}>
+                        {plans.map((plan: any, index: number) => (
+                          <div key={plan.id} className={`relative bg-gradient-to-br from-white/5 to-transparent backdrop-blur-lg rounded-xl p-4 sm:p-6 border transition-all hover:scale-105 cursor-pointer ${
+                            index === 1 ? 'border-cyan-400 ring-2 ring-cyan-400/30 shadow-lg shadow-cyan-500/10' : 'border-cyan-500/20 hover:border-cyan-500/40'
+                          }`} onClick={() => handleExtendSelectPlan(plan)}>
+                            {index === 1 && <div className="absolute -top-3 left-1/2 transform -translate-x-1/2"><span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full">MOST POPULAR</span></div>}
+                            <h3 className="text-lg sm:text-xl font-bold text-white mb-1 text-center" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h3>
+                            <p className="text-gray-400 text-xs sm:text-sm mb-3 text-center">{plan.description}</p>
+                            <div className="mb-4 text-center">
+                              <span className="text-2xl sm:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</span>
+                              <span className="text-gray-500 text-sm"> /{plan.duration_days} days</span>
+                            </div>
+                            <div className="text-center text-cyan-400 text-xs font-semibold">+{plan.duration_days} days added to your license</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {extendStep === 2 && extendSelectedPlan && (() => {
+                      const extendNetwork = paymentNetworks.find((n: any) => String(n.id) === String(extendNetworkId));
+                      return (
+                        <div className="space-y-4">
+                          <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                              <div><p className="text-cyan-400 font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSelectedPlan.name}</p><p className="text-gray-400 text-xs">+{extendSelectedPlan.duration_days} days extension</p></div>
+                              <div className="text-right"><p className="text-white font-bold text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>${extendSelectedPlan.price}</p><button onClick={() => setExtendStep(1)} className="text-cyan-400 text-xs hover:underline">Change plan</button></div>
+                            </div>
+                          </div>
+                          <div><label className="text-gray-400 text-xs mb-1.5 block">Payment Network</label><div className="flex flex-wrap gap-2">{paymentNetworks.map((n: any) => (<button key={n.id} type="button" onClick={() => setExtendNetworkId(String(n.id))} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${String(n.id) === String(extendNetworkId) ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50' : 'bg-white/5 text-gray-400 border-gray-700 hover:border-gray-500'}`}>{n.name} ({n.token_symbol})</button>))}</div></div>
+                          {extendNetwork?.wallet_address && (
+                            <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3">
+                              <p className="text-gray-400 text-xs mb-2">Send exactly <span className="text-cyan-400 font-bold">${extendSelectedPlan.price}</span> in <span className="text-cyan-400 font-bold">{extendNetwork.token_symbol}</span> to:</p>
+                              <div className="flex items-center gap-2 bg-black/50 rounded p-2"><code className="text-cyan-400 text-xs break-all flex-1">{extendNetwork.wallet_address}</code><button onClick={() => navigator.clipboard.writeText(extendNetwork.wallet_address)} className="p-1.5 rounded hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-400 transition-all flex-shrink-0"><Copy className="w-3.5 h-3.5" /></button></div>
+                              {extendQrCode && <div className="flex justify-center mt-3"><img src={extendQrCode} alt="QR Code" className="w-32 h-32 rounded-lg border border-cyan-500/20" /></div>}
+                            </div>
+                          )}
+                          <div><label className="text-gray-400 text-xs mb-1.5 block">Transaction ID (TXID)</label><input type="text" value={extendTxid} onChange={(e) => setExtendTxid(e.target.value)} placeholder="Paste your transaction hash..." className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none" /></div>
+                          <div><label className="text-gray-400 text-xs mb-1.5 block">Payment Proof (Screenshot) *</label><label className="flex items-center justify-center gap-2 w-full bg-[#0a0a0f] border border-dashed border-cyan-500/30 rounded-lg px-3 py-3 cursor-pointer hover:border-cyan-500/50 transition-all"><Upload className="w-4 h-4 text-gray-400" /><span className="text-gray-400 text-xs">{extendProofFile ? extendProofFile.name : 'Click to upload proof'}</span><input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setExtendProofFile(e.target.files?.[0] || null)} /></label></div>
+                          <div><label className="text-gray-400 text-xs mb-1.5 block">Note (optional)</label><textarea value={extendNote} onChange={(e) => setExtendNote(e.target.value)} placeholder="Any additional info..." rows={2} className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none resize-none" /></div>
+                          <button onClick={handleExtendSubmit} disabled={extendSubmitting || !extendProofFile || !extendNetworkId} className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none flex items-center justify-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <><Upload className="w-4 h-4" /> Submit Extension Request</>}</button>
+                        </div>
+                      );
+                    })()}
+                    {extendStep === 3 && (
+                      <div className="text-center space-y-4">
+                        <div className="w-16 h-16 mx-auto bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 rounded-full flex items-center justify-center"><CheckCircle className="w-8 h-8 text-emerald-400" /></div>
+                        <div><h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extension Request Submitted!</h3><p className="text-gray-400 text-sm">Your payment is being reviewed. Once approved, your license will be automatically extended.</p></div>
+                        <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3 text-left space-y-1">
+                          <div className="flex justify-between text-xs"><span className="text-gray-500">Request</span><span className="text-white">#{extendSuccess?.request_number || extendSuccess?.id}</span></div>
+                          <div className="flex justify-between text-xs"><span className="text-gray-500">Plan</span><span className="text-cyan-400">{extendSelectedPlan?.name}</span></div>
+                          <div className="flex justify-between text-xs"><span className="text-gray-500">Amount</span><span className="text-white">${extendSelectedPlan?.price}</span></div>
+                          <div className="flex justify-between text-xs"><span className="text-gray-500">Status</span><span className="text-yellow-400 font-bold">PENDING APPROVAL</span></div>
+                        </div>
+                        <button onClick={resetExtendModal} className="w-full bg-cyan-500 hover:bg-cyan-400 text-black py-2.5 rounded-lg font-bold text-sm transition-all" style={{ fontFamily: 'Orbitron, sans-serif' }}>Done</button>
+                      </div>
+                    )}
                   </div>
                 </div>
-              ) : null}
+              )}
             </div>
           </div>
         </div>
@@ -1338,99 +1454,200 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Extend License Modal */}
+        {/* Extend License Modal - Multi-step Payment Flow */}
         {showExtendModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className={`bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-6 w-full max-h-[90vh] overflow-y-auto border border-purple-500/30 ${
-              plans.length === 1 ? 'max-w-md' : plans.length === 2 ? 'max-w-2xl' : 'max-w-4xl'
+            <div className={`bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-4 sm:p-6 w-full max-h-[90vh] overflow-y-auto border border-purple-500/30 ${
+              extendStep === 1 ? (plans.length === 1 ? 'max-w-md' : plans.length === 2 ? 'max-w-2xl' : 'max-w-4xl') : 'max-w-lg'
             }`}>
-              <div className="flex items-center justify-between mb-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <div className="flex items-center gap-3">
-                  <Sparkles className="w-6 h-6 text-cyan-400" />
-                  <h2 className="text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extend Your License</h2>
+                  <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
+                  <h2 className="text-lg sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    {extendStep === 1 ? 'Extend License' : extendStep === 2 ? 'Payment Details' : 'Request Submitted'}
+                  </h2>
                 </div>
-                <button
-                  onClick={() => setShowExtendModal(false)}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  <X className="w-6 h-6" />
+                <button onClick={resetExtendModal} className="text-gray-400 hover:text-white transition-colors">
+                  <X className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
               </div>
 
-              <div className={`grid gap-6 ${
-                plans.length === 1 ? 'grid-cols-1' : 
-                plans.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 
-                'grid-cols-1 md:grid-cols-3'
-              }`}>
-                {plans.map((plan: any, index: number) => (
-                  <div
-                    key={plan.id}
-                    className={`relative bg-gradient-to-br from-white/5 to-transparent backdrop-blur-lg rounded-xl p-6 border transition-all hover:scale-105 ${
-                      index === 1
-                        ? 'border-cyan-400 ring-2 ring-cyan-400/30 shadow-lg shadow-cyan-500/10'
-                        : 'border-cyan-500/20 hover:border-cyan-500/40'
-                    }`}
-                  >
-                    {index === 1 && (
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                        <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full">
-                          MOST POPULAR
-                        </span>
-                      </div>
-                    )}
-                    <h3 className="text-xl font-bold text-white mb-2 text-center" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                      {plan.name}
-                    </h3>
-                    <p className="text-gray-400 text-sm mb-4 text-center">
-                      {plan.description}
-                    </p>
-                    <div className="mb-6 text-center">
-                      <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                        ${plan.price}
-                      </span>
-                      <span className="text-gray-500 text-sm">
-                        /{plan.duration_days} days
-                      </span>
-                    </div>
-                    <ul className="space-y-2 mb-6">
-                      <li className="flex items-center gap-2 text-gray-300 text-sm">
-                        <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                        {plan.max_accounts} MT5 Account{plan.max_accounts > 1 ? 's' : ''}
-                      </li>
-                      <li className="flex items-center gap-2 text-gray-300 text-sm">
-                        <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                        AI-Powered Trading
-                      </li>
-                      <li className="flex items-center gap-2 text-gray-300 text-sm">
-                        <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                        24/7 Support
-                      </li>
-                      <li className="flex items-center gap-2 text-gray-300 text-sm">
-                        <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                        Regular Updates
-                      </li>
-                    </ul>
-                    <button
-                      onClick={() => handleExtendLicense(plan.id)}
-                      disabled={extendingPlan === plan.id}
-                      className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
-                        index === 1
-                          ? 'bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black shadow-lg shadow-cyan-500/25'
-                          : 'bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                      {extendingPlan === plan.id ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>Extend Now</>
-                      )}
-                    </button>
+              {/* Step Indicator */}
+              <div className="flex items-center gap-2 mb-4 sm:mb-6">
+                {[1, 2, 3].map((s) => (
+                  <div key={s} className="flex items-center gap-2 flex-1">
+                    <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                      s <= extendStep ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-gray-500'
+                    }`}>{s}</div>
+                    {s < 3 && <div className={`flex-1 h-0.5 rounded ${s < extendStep ? 'bg-cyan-500' : 'bg-gray-700'}`} />}
                   </div>
                 ))}
               </div>
+
+              {/* Step 1: Select Plan */}
+              {extendStep === 1 && (
+                <div className={`grid gap-4 sm:gap-6 ${
+                  plans.length === 1 ? 'grid-cols-1' : plans.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'
+                }`}>
+                  {plans.map((plan: any, index: number) => (
+                    <div
+                      key={plan.id}
+                      className={`relative bg-gradient-to-br from-white/5 to-transparent backdrop-blur-lg rounded-xl p-4 sm:p-6 border transition-all hover:scale-105 cursor-pointer ${
+                        index === 1 ? 'border-cyan-400 ring-2 ring-cyan-400/30 shadow-lg shadow-cyan-500/10' : 'border-cyan-500/20 hover:border-cyan-500/40'
+                      }`}
+                      onClick={() => handleExtendSelectPlan(plan)}
+                    >
+                      {index === 1 && (
+                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                          <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full">MOST POPULAR</span>
+                        </div>
+                      )}
+                      <h3 className="text-lg sm:text-xl font-bold text-white mb-1 text-center" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h3>
+                      <p className="text-gray-400 text-xs sm:text-sm mb-3 text-center">{plan.description}</p>
+                      <div className="mb-4 text-center">
+                        <span className="text-2xl sm:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${plan.price}</span>
+                        <span className="text-gray-500 text-sm"> /{plan.duration_days} days</span>
+                      </div>
+                      <div className="text-center text-cyan-400 text-xs font-semibold">+{plan.duration_days} days added to your license</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Step 2: Payment Details */}
+              {extendStep === 2 && extendSelectedPlan && (() => {
+                const extendNetwork = paymentNetworks.find((n: any) => String(n.id) === String(extendNetworkId));
+                return (
+                  <div className="space-y-4">
+                    {/* Plan Summary */}
+                    <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-cyan-400 font-bold text-sm" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSelectedPlan.name}</p>
+                          <p className="text-gray-400 text-xs">+{extendSelectedPlan.duration_days} days extension</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-white font-bold text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>${extendSelectedPlan.price}</p>
+                          <button onClick={() => setExtendStep(1)} className="text-cyan-400 text-xs hover:underline">Change plan</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Payment Network */}
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1.5 block">Payment Network</label>
+                      <div className="flex flex-wrap gap-2">
+                        {paymentNetworks.map((n: any) => (
+                          <button
+                            key={n.id}
+                            type="button"
+                            onClick={() => setExtendNetworkId(String(n.id))}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                              String(n.id) === String(extendNetworkId)
+                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                                : 'bg-white/5 text-gray-400 border-gray-700 hover:border-gray-500'
+                            }`}
+                          >
+                            {n.name} ({n.token_symbol})
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Wallet Address + QR */}
+                    {extendNetwork?.wallet_address && (
+                      <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3">
+                        <p className="text-gray-400 text-xs mb-2">Send exactly <span className="text-cyan-400 font-bold">${extendSelectedPlan.price}</span> in <span className="text-cyan-400 font-bold">{extendNetwork.token_symbol}</span> to:</p>
+                        <div className="flex items-center gap-2 bg-black/50 rounded p-2">
+                          <code className="text-cyan-400 text-xs break-all flex-1">{extendNetwork.wallet_address}</code>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(extendNetwork.wallet_address)}
+                            className="p-1.5 rounded hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-400 transition-all flex-shrink-0"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {extendQrCode && (
+                          <div className="flex justify-center mt-3">
+                            <img src={extendQrCode} alt="QR Code" className="w-32 h-32 rounded-lg border border-cyan-500/20" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* TXID */}
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1.5 block">Transaction ID (TXID)</label>
+                      <input
+                        type="text"
+                        value={extendTxid}
+                        onChange={(e) => setExtendTxid(e.target.value)}
+                        placeholder="Paste your transaction hash..."
+                        className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Payment Proof Upload */}
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1.5 block">Payment Proof (Screenshot) *</label>
+                      <label className="flex items-center justify-center gap-2 w-full bg-[#0a0a0f] border border-dashed border-cyan-500/30 rounded-lg px-3 py-3 cursor-pointer hover:border-cyan-500/50 transition-all">
+                        <Upload className="w-4 h-4 text-gray-400" />
+                        <span className="text-gray-400 text-xs">{extendProofFile ? extendProofFile.name : 'Click to upload proof'}</span>
+                        <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setExtendProofFile(e.target.files?.[0] || null)} />
+                      </label>
+                    </div>
+
+                    {/* Note */}
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1.5 block">Note (optional)</label>
+                      <textarea
+                        value={extendNote}
+                        onChange={(e) => setExtendNote(e.target.value)}
+                        placeholder="Any additional info..."
+                        rows={2}
+                        className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none resize-none"
+                      />
+                    </div>
+
+                    {/* Submit */}
+                    <button
+                      onClick={handleExtendSubmit}
+                      disabled={extendSubmitting || !extendProofFile || !extendNetworkId}
+                      className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none flex items-center justify-center gap-2"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      {extendSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <><Upload className="w-4 h-4" /> Submit Extension Request</>}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Step 3: Success */}
+              {extendStep === 3 && (
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 mx-auto bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 rounded-full flex items-center justify-center">
+                    <CheckCircle className="w-8 h-8 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extension Request Submitted!</h3>
+                    <p className="text-gray-400 text-sm">Your payment is being reviewed. Once approved, your license will be automatically extended.</p>
+                  </div>
+                  <div className="bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3 text-left space-y-1">
+                    <div className="flex justify-between text-xs"><span className="text-gray-500">Request</span><span className="text-white">#{extendSuccess?.request_number || extendSuccess?.id}</span></div>
+                    <div className="flex justify-between text-xs"><span className="text-gray-500">Plan</span><span className="text-cyan-400">{extendSelectedPlan?.name}</span></div>
+                    <div className="flex justify-between text-xs"><span className="text-gray-500">Amount</span><span className="text-white">${extendSelectedPlan?.price}</span></div>
+                    <div className="flex justify-between text-xs"><span className="text-gray-500">Status</span><span className="text-yellow-400 font-bold">PENDING APPROVAL</span></div>
+                  </div>
+                  <button
+                    onClick={resetExtendModal}
+                    className="w-full bg-cyan-500 hover:bg-cyan-400 text-black py-2.5 rounded-lg font-bold text-sm transition-all"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1817,7 +2034,11 @@ export default function DashboardHome() {
                           <div key={r.id} className="bg-black/30 border border-cyan-500/10 rounded-lg p-3">
                             <div className="flex items-center justify-between gap-2">
                               <div>
-                                <p className="text-white text-xs font-semibold">#{r.request_number || r.id} • {r.plan} • ${r.amount_usd}</p>
+                                <p className="text-white text-xs font-semibold">
+                                  #{r.request_number || r.id}
+                                  {r.request_type === 'extension' && <span className="text-yellow-400 ml-1">🔄 EXT</span>}
+                                  {' • '}{r.plan} • ${r.amount_usd}
+                                </p>
                                 <p className="text-gray-500 text-[10px]">{r.network?.name} • {new Date(r.created_at).toLocaleString()}</p>
                               </div>
                               <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
@@ -2125,102 +2346,7 @@ export default function DashboardHome() {
         </div>
       )}
 
-      {/* Extend License Modal */}
-      {showExtendModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className={`bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-6 w-full max-h-[90vh] overflow-y-auto border border-purple-500/30 ${
-            plans.length === 1 ? 'max-w-md' : plans.length === 2 ? 'max-w-2xl' : 'max-w-4xl'
-          }`}>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <Sparkles className="w-6 h-6 text-cyan-400" />
-                <h2 className="text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Extend Your License</h2>
-              </div>
-              <button
-                onClick={() => setShowExtendModal(false)}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className={`grid gap-6 ${
-              plans.length === 1 ? 'grid-cols-1' : 
-              plans.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 
-              'grid-cols-1 md:grid-cols-3'
-            }`}>
-              {plans.map((plan: any, index: number) => (
-                <div
-                  key={plan.id}
-                  className={`relative bg-gradient-to-br from-white/5 to-transparent backdrop-blur-lg rounded-xl p-6 border transition-all hover:scale-105 ${
-                    index === 1
-                      ? 'border-cyan-400 ring-2 ring-cyan-400/30 shadow-lg shadow-cyan-500/10'
-                      : 'border-cyan-500/20 hover:border-cyan-500/40'
-                  }`}
-                >
-                  {index === 1 && (
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                      <span className="bg-gradient-to-r from-cyan-500 to-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full">
-                        MOST POPULAR
-                      </span>
-                    </div>
-                  )}
-                  <h3 className="text-xl font-bold text-white mb-2 text-center" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                    {plan.name}
-                  </h3>
-                  <p className="text-gray-400 text-sm mb-4 text-center">
-                    {plan.description}
-                  </p>
-                  <div className="mb-6 text-center">
-                    <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                      ${plan.price}
-                    </span>
-                    <span className="text-gray-500 text-sm">
-                      /{plan.duration_days} days
-                    </span>
-                  </div>
-                  <ul className="space-y-2 mb-6">
-                    <li className="flex items-center gap-2 text-gray-300 text-sm">
-                      <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                      {plan.max_accounts} MT5 Account{plan.max_accounts > 1 ? 's' : ''}
-                    </li>
-                    <li className="flex items-center gap-2 text-gray-300 text-sm">
-                      <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                      AI-Powered Trading
-                    </li>
-                    <li className="flex items-center gap-2 text-gray-300 text-sm">
-                      <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                      24/7 Support
-                    </li>
-                    <li className="flex items-center gap-2 text-gray-300 text-sm">
-                      <CheckCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                      Regular Updates
-                    </li>
-                  </ul>
-                  <button
-                    onClick={() => handleExtendLicense(plan.id)}
-                    disabled={extendingPlan === plan.id}
-                    className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
-                      index === 1
-                        ? 'bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black shadow-lg shadow-cyan-500/25'
-                        : 'bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {extendingPlan === plan.id ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>Extend Now</>
-                    )}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Extend modal is handled in the license details view */}
     </div>
   );
 }

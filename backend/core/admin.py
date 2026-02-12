@@ -113,21 +113,86 @@ class PaymentNetworkAdmin(admin.ModelAdmin):
 
 @admin.register(LicensePurchaseRequest)
 class LicensePurchaseRequestAdmin(admin.ModelAdmin):
-    list_display = ['created_at', 'user', 'plan', 'network', 'amount_usd', 'status', 'mt5_account', 'txid', 'reviewed_at', 'license_link']
-    list_filter = ['status', 'network', 'plan', 'created_at']
+    list_display = ['created_at', 'request_type_display', 'user', 'plan', 'network', 'amount_usd', 'status', 'mt5_account', 'txid', 'reviewed_at', 'license_link']
+    list_filter = ['status', 'request_type', 'network', 'plan', 'created_at']
     search_fields = ['user__email', 'txid', 'mt5_account']
-    readonly_fields = ['created_at', 'updated_at', 'issued_license', 'reviewed_at', 'reviewed_by']
+    readonly_fields = ['created_at', 'updated_at', 'issued_license', 'reviewed_at', 'reviewed_by', 'request_type', 'extend_license']
     actions = ['approve_requests', 'reject_requests']
+    
+    def request_type_display(self, obj):
+        if obj.request_type == 'extension':
+            return format_html('<span style="color: #f59e0b; font-weight: bold;">🔄 EXT</span>')
+        return format_html('<span style="color: #10b981; font-weight: bold;">🆕 NEW</span>')
+    request_type_display.short_description = 'Type'
     
     def license_link(self, obj):
         if obj.issued_license:
             url = f'/admin/core/license/{obj.issued_license.id}/change/'
             return format_html('<a href="{}">View License</a>', url)
+        if obj.extend_license:
+            url = f'/admin/core/license/{obj.extend_license.id}/change/'
+            return format_html('<a href="{}">🔄 Extend</a>', url)
         return '-'
     license_link.short_description = 'License'
     
     def save_model(self, request, obj, form, change):
-        """Auto-create license when status is changed to approved via admin form"""
+        """Auto-create/extend license when status is changed to approved via admin form"""
+        if change and obj.status == 'approved' and obj.request_type == 'extension' and obj.extend_license and not obj.issued_license_id:
+            # Extension: add days to existing license and update plan
+            from datetime import timedelta
+            lic = obj.extend_license
+            if lic.expires_at < timezone.now():
+                lic.expires_at = timezone.now() + timedelta(days=obj.plan.duration_days)
+            else:
+                lic.expires_at = lic.expires_at + timedelta(days=obj.plan.duration_days)
+            lic.plan = obj.plan
+            lic.status = 'active'
+            lic.save()
+            obj.issued_license = lic
+            obj.reviewed_by = request.user
+            obj.reviewed_at = timezone.now()
+            self.message_user(request, f'License {lic.license_key[:16]}... extended by {obj.plan.duration_days} days (plan: {obj.plan.name})')
+            
+            try:
+                from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+                from django.core.mail import EmailMultiAlternatives
+                
+                base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+                subject = 'License Extended - Payment Approved'
+                
+                if can_send_email_to_user(obj.user, 'transactional'):
+                    html_message = render_email_template(
+                        subject=subject,
+                        heading='🎉 License Extended!',
+                        message=f"""
+                            <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                            <p>Your payment has been <strong style="color: #10b981;">approved</strong> and your license has been extended.</p>
+                            
+                            <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">Extension Details:</p>
+                                <p style="margin: 4px 0; color: #374151;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                <p style="margin: 4px 0; color: #374151;"><strong>Added:</strong> +{obj.plan.duration_days} days</p>
+                                <p style="margin: 4px 0; color: #374151;"><strong>New Expiry:</strong> {lic.expires_at.strftime('%B %d, %Y')}</p>
+                                <p style="margin: 4px 0; color: #374151;"><strong>Days Remaining:</strong> {lic.days_remaining()}</p>
+                            </div>
+                        """,
+                        cta_text='OPEN DASHBOARD',
+                        cta_url=f'{base}/dashboard',
+                        footer_note='Thank you for continuing with MarksTrades!',
+                        preheader=f'Your license has been extended with {obj.plan.name}. {lic.days_remaining()} days remaining!',
+                        unsubscribe_url=get_unsubscribe_url(obj.user)
+                    )
+                    text_msg = f"Hi {obj.user.first_name or 'Trader'},\n\nYour license has been extended.\nPlan: {obj.plan.name}\nAdded: +{obj.plan.duration_days} days\nNew Expiry: {lic.expires_at.strftime('%B %d, %Y')}\n\nOpen your dashboard: {base}/dashboard"
+                    msg = EmailMultiAlternatives(subject, text_msg, get_email_from_address(), [obj.user.email])
+                    msg.attach_alternative(html_message, "text/html")
+                    msg = add_email_headers(msg, 'transactional', user=obj.user)
+                    msg.send(fail_silently=False)
+            except Exception as e:
+                print(f'[ADMIN] Failed to send extension email: {e}')
+            
+            super().save_model(request, obj, form, change)
+            return
+        
         if change and obj.status == 'approved' and not obj.issued_license_id:
             # Create license automatically
             try:
@@ -198,8 +263,60 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
     def approve_requests(self, request, queryset):
-        for obj in queryset.select_related('user', 'plan', 'network', 'issued_license'):
+        for obj in queryset.select_related('user', 'plan', 'network', 'issued_license', 'extend_license'):
             if obj.status != 'pending':
+                continue
+            
+            # Handle extension requests
+            if obj.request_type == 'extension' and obj.extend_license:
+                from datetime import timedelta
+                lic = obj.extend_license
+                if lic.expires_at < timezone.now():
+                    lic.expires_at = timezone.now() + timedelta(days=obj.plan.duration_days)
+                else:
+                    lic.expires_at = lic.expires_at + timedelta(days=obj.plan.duration_days)
+                lic.plan = obj.plan
+                lic.status = 'active'
+                lic.save()
+                obj.issued_license = lic
+                obj.status = 'approved'
+                obj.reviewed_by = request.user
+                obj.reviewed_at = timezone.now()
+                obj.save(update_fields=['issued_license', 'status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+                self.message_user(request, f'License {lic.license_key[:16]}... extended by {obj.plan.duration_days} days (plan: {obj.plan.name})')
+                
+                try:
+                    from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+                    from django.core.mail import EmailMultiAlternatives
+                    base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+                    subject = 'License Extended - Payment Approved'
+                    if can_send_email_to_user(obj.user, 'transactional'):
+                        html_message = render_email_template(
+                            subject=subject,
+                            heading='🎉 License Extended!',
+                            message=f"""
+                                <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                                <p>Your license has been <strong style="color: #10b981;">extended</strong>!</p>
+                                <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                    <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">Extension Details:</p>
+                                    <p style="margin: 4px 0; color: #374151;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                    <p style="margin: 4px 0; color: #374151;"><strong>Added:</strong> +{obj.plan.duration_days} days</p>
+                                    <p style="margin: 4px 0; color: #374151;"><strong>New Expiry:</strong> {lic.expires_at.strftime('%B %d, %Y')}</p>
+                                </div>
+                            """,
+                            cta_text='OPEN DASHBOARD',
+                            cta_url=f'{base}/dashboard',
+                            footer_note='Thank you for continuing with MarksTrades!',
+                            preheader=f'License extended with {obj.plan.name}!',
+                            unsubscribe_url=get_unsubscribe_url(obj.user)
+                        )
+                        text_msg = f"Your license has been extended.\nPlan: {obj.plan.name}\nAdded: +{obj.plan.duration_days} days\nNew Expiry: {lic.expires_at.strftime('%B %d, %Y')}"
+                        msg = EmailMultiAlternatives(subject, text_msg, get_email_from_address(), [obj.user.email])
+                        msg.attach_alternative(html_message, "text/html")
+                        msg = add_email_headers(msg, 'transactional', user=obj.user)
+                        msg.send(fail_silently=False)
+                except Exception:
+                    pass
                 continue
             
             # If already has a license linked, just update status

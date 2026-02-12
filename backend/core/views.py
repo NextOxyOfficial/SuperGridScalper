@@ -461,7 +461,7 @@ def list_license_purchase_requests(request):
     if not user:
         return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
 
-    qs = LicensePurchaseRequest.objects.filter(user=user).select_related('plan', 'network', 'issued_license')
+    qs = LicensePurchaseRequest.objects.filter(user=user).select_related('plan', 'network', 'issued_license', 'extend_license')
     items = []
     for pr in qs:
         proof_url = None
@@ -474,6 +474,7 @@ def list_license_purchase_requests(request):
         items.append({
             'id': pr.id,
             'request_number': pr.request_number,
+            'request_type': pr.request_type,
             'status': pr.status,
             'created_at': pr.created_at.isoformat(),
             'reviewed_at': pr.reviewed_at.isoformat() if pr.reviewed_at else None,
@@ -493,6 +494,7 @@ def list_license_purchase_requests(request):
             'admin_note': pr.admin_note,
             'proof_url': proof_url,
             'issued_license_key': pr.issued_license.license_key if pr.issued_license else None,
+            'extend_license_key': pr.extend_license.license_key if pr.extend_license else None,
         })
 
     return JsonResponse({'success': True, 'requests': items})
@@ -1037,6 +1039,109 @@ def extend_license(request):
             'expires_at': license_obj.expires_at.isoformat(),
             'days_remaining': license_obj.days_remaining(),
             'mt5_account': license_obj.mt5_account
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_extension_request(request):
+    """Create a payment request to extend an existing license."""
+    email = (request.POST.get('email') or '').strip()
+    license_key = (request.POST.get('license_key') or '').strip().upper()
+    plan_id = (request.POST.get('plan_id') or '').strip()
+    network_id = (request.POST.get('network_id') or '').strip()
+    txid = (request.POST.get('txid') or '').strip()
+    user_note = (request.POST.get('user_note') or '').strip()
+    proof = request.FILES.get('proof')
+
+    if not email or not license_key or not plan_id or not network_id:
+        return JsonResponse({'success': False, 'message': 'Email, license key, plan, and network are required'}, status=400)
+
+    if not proof:
+        return JsonResponse({'success': False, 'message': 'Payment proof file is required'}, status=400)
+
+    user = resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+
+    try:
+        license_obj = License.objects.get(license_key=license_key, user=user)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'License not found'}, status=404)
+
+    try:
+        plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+    except SubscriptionPlan.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid plan selected'}, status=400)
+
+    try:
+        network = PaymentNetwork.objects.get(id=network_id, is_active=True)
+    except PaymentNetwork.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid payment network selected'}, status=400)
+
+    # Prevent duplicate pending extension requests for the same license
+    if LicensePurchaseRequest.objects.filter(extend_license=license_obj, status='pending').exists():
+        return JsonResponse({'success': False, 'message': 'You already have a pending extension request for this license. Please wait for it to be reviewed.'}, status=400)
+
+    purchase = LicensePurchaseRequest.objects.create(
+        user=user,
+        plan=plan,
+        mt5_account=license_obj.mt5_account or None,
+        network=network,
+        amount_usd=plan.price,
+        txid=txid,
+        proof=proof,
+        user_note=user_note,
+        status='pending',
+        request_type='extension',
+        extend_license=license_obj,
+    )
+
+    try:
+        from core.utils import send_admin_notification
+        send_admin_notification(
+            subject=f'Admin Alert: License Extension Request (#{purchase.id})',
+            heading='License Extension Request',
+            html_body=(
+                f"<p><strong>Type:</strong> 🔄 EXTENSION</p>"
+                f"<p><strong>User:</strong> {user.email}</p>"
+                f"<p><strong>License:</strong> {license_obj.license_key[:16]}...</p>"
+                f"<p><strong>Current Plan:</strong> {license_obj.plan.name}</p>"
+                f"<p><strong>Extend To:</strong> {plan.name} (+{plan.duration_days} days)</p>"
+                f"<p><strong>Amount:</strong> ${float(plan.price)} {network.token_symbol}</p>"
+                f"<p><strong>Network:</strong> {network.name}</p>"
+                f"<p><strong>TXID:</strong> {purchase.txid or '-'}</p>"
+            ),
+            text_body=(
+                f"Extension request\n"
+                f"User: {user.email}\n"
+                f"License: {license_obj.license_key}\n"
+                f"Current Plan: {license_obj.plan.name}\n"
+                f"Extend To: {plan.name} (+{plan.duration_days} days)\n"
+                f"Amount: ${float(plan.price)} {network.token_symbol}\n"
+                f"Network: {network.name}\n"
+                f"TXID: {purchase.txid or '-'}\n"
+                f"Request ID: #{purchase.id}"
+            ),
+            preheader=f'Extension request by {user.email} for {plan.name}'
+        )
+    except Exception:
+        pass
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Extension request submitted! Awaiting admin approval.',
+        'request': {
+            'id': purchase.id,
+            'request_number': purchase.request_number,
+            'request_type': 'extension',
+            'status': 'pending',
+            'plan': plan.name,
+            'plan_id': plan.id,
+            'amount_usd': float(plan.price),
+            'created_at': purchase.created_at.isoformat(),
+            'extend_license_key': license_obj.license_key,
         }
     })
 

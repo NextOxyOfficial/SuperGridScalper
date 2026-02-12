@@ -670,6 +670,10 @@ class LicensePurchaseRequest(models.Model):
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
     ]
+    REQUEST_TYPE_CHOICES = [
+        ('new', 'New License'),
+        ('extension', 'License Extension'),
+    ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='purchase_requests')
     plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT)
@@ -680,12 +684,14 @@ class LicensePurchaseRequest(models.Model):
     proof = models.FileField(upload_to='payment_proofs/', blank=True, null=True)
     user_note = models.TextField(blank=True)
     request_number = models.CharField(max_length=6, unique=True, editable=False, null=True, blank=True)
+    request_type = models.CharField(max_length=20, choices=REQUEST_TYPE_CHOICES, default='new')
+    extend_license = models.ForeignKey(License, on_delete=models.SET_NULL, null=True, blank=True, related_name='extension_requests', help_text='License to extend (for extension requests)')
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     admin_note = models.TextField(blank=True)
     reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_purchase_requests')
     reviewed_at = models.DateTimeField(null=True, blank=True)
-    issued_license = models.OneToOneField(License, on_delete=models.SET_NULL, null=True, blank=True, related_name='purchase_request')
+    issued_license = models.ForeignKey(License, on_delete=models.SET_NULL, null=True, blank=True, related_name='purchase_requests')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -705,7 +711,8 @@ class LicensePurchaseRequest(models.Model):
                 return number
 
     def __str__(self):
-        return f"#{self.request_number} - {self.user.email} - {self.plan.name} - {self.status}"
+        type_label = 'EXT' if self.request_type == 'extension' else 'NEW'
+        return f"#{self.request_number} [{type_label}] - {self.user.email} - {self.plan.name} - {self.status}"
 
     class Meta:
         ordering = ['-created_at']
