@@ -123,8 +123,8 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
     
     def request_type_display(self, obj):
         if obj.request_type == 'extension':
-            return format_html('<span style="color: #f59e0b; font-weight: bold;">🔄 EXT</span>')
-        return format_html('<span style="color: #10b981; font-weight: bold;">🆕 NEW</span>')
+            return format_html('<span style="color: #f59e0b; font-weight: bold;">{}</span>', '🔄 EXT')
+        return format_html('<span style="color: #10b981; font-weight: bold;">{}</span>', '🆕 NEW')
     request_type_display.short_description = 'Type'
     
     def license_link(self, obj):
