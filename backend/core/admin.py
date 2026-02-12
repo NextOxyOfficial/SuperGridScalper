@@ -8,7 +8,7 @@ from django.utils.html import format_html
 from django.utils import timezone
 from decimal import Decimal
 from django.db.models import F
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest, SMTPSettings, EmailPreference
+from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest, SMTPSettings, EmailPreference, PayoutMethod
 
 
 # Unregister default User admin and register with search
@@ -194,6 +194,29 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
             except Exception as e:
                 print(f'[ADMIN] Failed to send extension email: {e}')
             
+            # Track referral commission for extension/renewal
+            try:
+                attribution = ReferralAttribution.objects.select_related('referral').filter(referred_user=obj.user).first()
+                if attribution and attribution.referral and attribution.referral.is_active and attribution.referral.referrer_id != obj.user.id:
+                    referral = attribution.referral
+                    if not ReferralTransaction.objects.filter(purchase_request=obj).exists():
+                        commission_amount = (obj.amount_usd * referral.commission_percent) / Decimal('100')
+                        ReferralTransaction.objects.create(
+                            referral=referral,
+                            referred_user=obj.user,
+                            purchase_request=obj,
+                            purchase_amount=obj.amount_usd,
+                            commission_amount=commission_amount,
+                            status='pending'
+                        )
+                        Referral.objects.filter(pk=referral.pk).update(
+                            purchases=F('purchases') + 1,
+                            total_earnings=F('total_earnings') + commission_amount,
+                            pending_earnings=F('pending_earnings') + commission_amount,
+                        )
+            except Exception:
+                pass
+            
             super().save_model(request, obj, form, change)
             return
         
@@ -342,6 +365,29 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                         msg.attach_alternative(html_message, "text/html")
                         msg = add_email_headers(msg, 'transactional', user=obj.user)
                         msg.send(fail_silently=False)
+                except Exception:
+                    pass
+                
+                # Track referral commission for extension/renewal
+                try:
+                    attribution = ReferralAttribution.objects.select_related('referral').filter(referred_user=obj.user).first()
+                    if attribution and attribution.referral and attribution.referral.is_active and attribution.referral.referrer_id != obj.user.id:
+                        referral = attribution.referral
+                        if not ReferralTransaction.objects.filter(purchase_request=obj).exists():
+                            commission_amount = (obj.amount_usd * referral.commission_percent) / Decimal('100')
+                            ReferralTransaction.objects.create(
+                                referral=referral,
+                                referred_user=obj.user,
+                                purchase_request=obj,
+                                purchase_amount=obj.amount_usd,
+                                commission_amount=commission_amount,
+                                status='pending'
+                            )
+                            Referral.objects.filter(pk=referral.pk).update(
+                                purchases=F('purchases') + 1,
+                                total_earnings=F('total_earnings') + commission_amount,
+                                pending_earnings=F('pending_earnings') + commission_amount,
+                            )
                 except Exception:
                     pass
                 continue
@@ -1074,6 +1120,17 @@ class ReferralPayoutAdmin(admin.ModelAdmin):
             color, icon, obj.status.upper()
         )
     status_display.short_description = 'Status'
+
+
+# ==================== PAYOUT METHOD ADMIN ====================
+
+@admin.register(PayoutMethod)
+class PayoutMethodAdmin(admin.ModelAdmin):
+    list_display = ['name', 'code', 'placeholder', 'is_active', 'sort_order']
+    list_filter = ['is_active']
+    search_fields = ['name', 'code']
+    list_editable = ['is_active', 'sort_order']
+    ordering = ['sort_order', 'name']
 
 
 # ==================== TRADE COMMAND SYSTEM ADMIN ====================

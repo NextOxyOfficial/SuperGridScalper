@@ -11,7 +11,7 @@ from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.db.models import Count, F
-from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest
+from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest, PayoutMethod
 from decimal import Decimal
 import json
 
@@ -1728,6 +1728,9 @@ def get_referral_stats(request):
                 signups=computed_signups,
             )
         
+        # Get dynamic payout methods
+        payout_methods = list(PayoutMethod.objects.filter(is_active=True).values('id', 'name', 'code', 'placeholder'))
+
         return JsonResponse({
             'success': True,
             'has_referral': True,
@@ -1743,6 +1746,7 @@ def get_referral_stats(request):
             },
             'transactions': transaction_list,
             'payouts': payout_list,
+            'payout_methods': payout_methods,
         })
     
     except Exception as e:

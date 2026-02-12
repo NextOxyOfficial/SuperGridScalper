@@ -516,6 +516,23 @@ class ReferralPayout(models.Model):
         ordering = ['-requested_at']
 
 
+class PayoutMethod(models.Model):
+    """Dynamic payout methods for referral payouts - managed from admin"""
+    name = models.CharField(max_length=100, help_text="Display name, e.g. PayPal, Bank Transfer, USDT (TRC20)")
+    code = models.CharField(max_length=50, unique=True, help_text="Internal code, e.g. paypal, bank, usdt_trc20")
+    placeholder = models.CharField(max_length=200, blank=True, help_text="Placeholder text for the details input, e.g. 'Enter your PayPal email'")
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Payout Method"
+        verbose_name_plural = "Payout Methods"
+        ordering = ['sort_order', 'name']
+
+
 class EAActionLog(models.Model):
     """Action logs from EA trading activity"""
     LOG_TYPES = [

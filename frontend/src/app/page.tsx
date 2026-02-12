@@ -1098,55 +1098,56 @@ export default function Home() {
             <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">Watch our video tutorials to set up EA correctly</p>
           </div>
           
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+          {/* Topic Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-6 sm:mb-10">
             {[
-              { icon: Shield, title: 'Risk Mgmt', desc: 'Lot sizing & capital', color: 'yellow' },
-              { icon: Settings, title: 'EA Config', desc: 'Optimal settings', color: 'purple' },
-              { icon: TrendingUp, title: 'Strategies', desc: 'Trading modes', color: 'green' },
-              { icon: Zap, title: 'Quick Setup', desc: '5 min install', color: 'cyan' }
-            ].map((item, idx) => (
-              <div key={idx} className={`bg-[#12121a] border ${
-                item.color === 'yellow' ? 'border-yellow-500/20 hover:border-yellow-400/50' :
-                item.color === 'purple' ? 'border-purple-500/20 hover:border-purple-400/50' :
-                item.color === 'green' ? 'border-green-500/20 hover:border-green-400/50' :
-                'border-cyan-500/20 hover:border-cyan-400/50'
-              } rounded-xl p-3 sm:p-5 transition-all hover:scale-105 cursor-pointer group`} onClick={() => router.push('/guideline')}>
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${
-                  item.color === 'yellow' ? 'bg-yellow-500/20' :
-                  item.color === 'purple' ? 'bg-purple-500/20' :
-                  item.color === 'green' ? 'bg-green-500/20' :
-                  'bg-cyan-500/20'
-                } rounded-xl flex items-center justify-center mb-2 sm:mb-3`}>
-                  <item.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${
-                    item.color === 'yellow' ? 'text-yellow-400' :
-                    item.color === 'purple' ? 'text-purple-400' :
-                    item.color === 'green' ? 'text-green-400' :
-                    'text-cyan-400'
-                  }`} />
+              { icon: Shield, title: 'Risk Management', desc: 'Learn proper lot sizing & capital protection', color: 'yellow', num: '01' },
+              { icon: Settings, title: 'EA Configuration', desc: 'Optimal settings for maximum performance', color: 'purple', num: '02' },
+              { icon: TrendingUp, title: 'Trading Strategies', desc: 'Master different trading modes', color: 'green', num: '03' },
+              { icon: Zap, title: 'Quick Setup', desc: 'Get started in just 5 minutes', color: 'cyan', num: '04' }
+            ].map((item, idx) => {
+              const colorMap: Record<string, { border: string; hoverBorder: string; bg: string; icon: string; num: string; glow: string }> = {
+                yellow: { border: 'border-yellow-500/20', hoverBorder: 'hover:border-yellow-400/50', bg: 'bg-yellow-500/10', icon: 'text-yellow-400', num: 'text-yellow-500/20', glow: 'group-hover:shadow-yellow-500/10' },
+                purple: { border: 'border-purple-500/20', hoverBorder: 'hover:border-purple-400/50', bg: 'bg-purple-500/10', icon: 'text-purple-400', num: 'text-purple-500/20', glow: 'group-hover:shadow-purple-500/10' },
+                green: { border: 'border-green-500/20', hoverBorder: 'hover:border-green-400/50', bg: 'bg-green-500/10', icon: 'text-green-400', num: 'text-green-500/20', glow: 'group-hover:shadow-green-500/10' },
+                cyan: { border: 'border-cyan-500/20', hoverBorder: 'hover:border-cyan-400/50', bg: 'bg-cyan-500/10', icon: 'text-cyan-400', num: 'text-cyan-500/20', glow: 'group-hover:shadow-cyan-500/10' },
+              };
+              const c = colorMap[item.color];
+              return (
+                <div key={idx} className={`relative bg-[#12121a] border ${c.border} ${c.hoverBorder} rounded-xl sm:rounded-2xl p-3 sm:p-6 transition-all hover:scale-[1.03] cursor-pointer group overflow-hidden ${c.glow} hover:shadow-lg`} onClick={() => router.push('/guideline')}>
+                  <div className={`absolute top-2 right-2 sm:top-3 sm:right-3 text-2xl sm:text-4xl font-black ${c.num} select-none`} style={{ fontFamily: 'Orbitron, sans-serif' }}>{item.num}</div>
+                  <div className={`w-10 h-10 sm:w-14 sm:h-14 ${c.bg} rounded-xl sm:rounded-2xl flex items-center justify-center mb-2 sm:mb-4 transition-transform group-hover:scale-110`}>
+                    <item.icon className={`w-5 h-5 sm:w-7 sm:h-7 ${c.icon}`} />
+                  </div>
+                  <h3 className={`text-white font-bold text-xs sm:text-lg mb-0.5 sm:mb-2 transition-colors group-hover:${c.icon}`} style={{ fontFamily: 'Orbitron, sans-serif' }}>{item.title}</h3>
+                  <p className="text-gray-500 text-[10px] sm:text-sm leading-relaxed">{item.desc}</p>
                 </div>
-                <h3 className="text-white font-bold text-xs sm:text-base mb-0.5 sm:mb-1 group-hover:text-cyan-400 transition">{item.title}</h3>
-                <p className="text-gray-500 text-[10px] sm:text-sm">{item.desc}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
           
-          <div className="bg-gradient-to-r from-cyan-500/10 to-yellow-500/10 border border-cyan-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="w-10 h-10 sm:w-14 sm:h-14 bg-cyan-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                <BookOpen className="w-5 h-5 sm:w-7 sm:h-7 text-cyan-400" />
+          {/* CTA Banner */}
+          <div className="relative bg-gradient-to-br from-[#0d1117] to-[#12121a] border border-cyan-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-8 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-yellow-500/5" />
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+            <div className="relative flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-6">
+              <div className="flex items-center gap-3 sm:gap-5">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-xl font-bold text-white mb-0.5 sm:mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Video Tutorials</h3>
+                  <p className="text-gray-400 text-[11px] sm:text-sm">15+ step-by-step videos from installation to advanced strategies</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Video Tutorials</h3>
-                <p className="text-gray-400 text-[10px] sm:text-sm">15+ videos from installation to strategies</p>
-              </div>
+              <button 
+                onClick={() => router.push('/guideline')}
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-yellow-400 text-black px-5 sm:px-8 py-2.5 sm:py-3.5 rounded-xl font-bold text-xs sm:text-base transition-all w-full sm:w-auto justify-center shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:scale-105"
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" /> WATCH NOW
+              </button>
             </div>
-            <button 
-              onClick={() => router.push('/guideline')}
-              className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-bold text-xs sm:text-base transition-all w-full md:w-auto justify-center"
-              style={{ fontFamily: 'Orbitron, sans-serif' }}
-            >
-              <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" /> WATCH
-            </button>
           </div>
         </div>
 
