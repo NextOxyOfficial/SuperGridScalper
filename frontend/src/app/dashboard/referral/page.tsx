@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useDashboard } from '../context';
-import { Copy, Check, DollarSign, Users, TrendingUp, Gift, ExternalLink, MousePointerClick } from 'lucide-react';
+import { Copy, Check, DollarSign, Users, TrendingUp, Gift, ExternalLink, MousePointerClick, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import axios from 'axios';
 
 export default function ReferralPage() {
@@ -14,11 +14,40 @@ export default function ReferralPage() {
   const [paymentMethod, setPaymentMethod] = useState('paypal');
   const [paymentDetails, setPaymentDetails] = useState('');
 
+  // Pagination state
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [txPage, setTxPage] = useState(1);
+  const [txTotalPages, setTxTotalPages] = useState(0);
+  const [txTotal, setTxTotal] = useState(0);
+  const [txLoading, setTxLoading] = useState(false);
+
+  const [payouts, setPayouts] = useState<any[]>([]);
+  const [payoutPage, setPayoutPage] = useState(1);
+  const [payoutTotalPages, setPayoutTotalPages] = useState(0);
+  const [payoutTotal, setPayoutTotal] = useState(0);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+
+  const [payoutTab, setPayoutTab] = useState<'request' | 'history'>('request');
+
+  const PER_PAGE = 10;
+
   useEffect(() => {
     if (user) {
       fetchReferralData();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user && referralData?.has_referral) {
+      fetchTransactions(txPage);
+    }
+  }, [user, referralData?.has_referral, txPage]);
+
+  useEffect(() => {
+    if (user && referralData?.has_referral) {
+      fetchPayouts(payoutPage);
+    }
+  }, [user, referralData?.has_referral, payoutPage]);
 
   const fetchReferralData = async () => {
     try {
@@ -37,6 +66,42 @@ export default function ReferralPage() {
       console.error('Error fetching referral data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTransactions = async (page: number) => {
+    try {
+      setTxLoading(true);
+      const response = await axios.get(`${API_URL}/referral/transactions/`, {
+        params: { username: user?.username, email: user?.email, page, per_page: PER_PAGE }
+      });
+      if (response.data.success) {
+        setTransactions(response.data.transactions);
+        setTxTotalPages(response.data.total_pages);
+        setTxTotal(response.data.total);
+      }
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
+  const fetchPayouts = async (page: number) => {
+    try {
+      setPayoutLoading(true);
+      const response = await axios.get(`${API_URL}/referral/payouts/`, {
+        params: { username: user?.username, email: user?.email, page, per_page: PER_PAGE }
+      });
+      if (response.data.success) {
+        setPayouts(response.data.payouts);
+        setPayoutTotalPages(response.data.total_pages);
+        setPayoutTotal(response.data.total);
+      }
+    } catch (error) {
+      console.error('Error fetching payouts:', error);
+    } finally {
+      setPayoutLoading(false);
     }
   };
 
@@ -210,165 +275,255 @@ export default function ReferralPage() {
           </p>
         </div>
 
-        {/* Request Payout */}
-        {stats.pending_earnings > 0 && (
-          <div className="bg-[#12121a] border border-green-500/20 rounded-xl p-3 sm:p-4">
-            <h2 className="text-sm sm:text-base font-bold mb-2 sm:mb-3 text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Request Payout</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3">
-              <div>
-                <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Amount (USD)</label>
-                <input
-                  type="number"
-                  value={payoutAmount}
-                  onChange={(e) => setPayoutAmount(e.target.value)}
-                  placeholder="0.00"
-                  max={stats.pending_earnings}
-                  className="w-full bg-[#0a0a0f] border border-green-500/30 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-green-500/50"
-                />
-                <p className="text-[10px] text-gray-500 mt-0.5">Available: <span className="text-green-400 font-bold">${stats.pending_earnings.toFixed(2)}</span></p>
-              </div>
-              <div>
-                <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Payment Method</label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full bg-[#0a0a0f] border border-green-500/30 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-green-500/50"
-                >
-                  {referralData.payout_methods && referralData.payout_methods.length > 0 ? (
-                    referralData.payout_methods.map((m: any) => (
-                      <option key={m.code} value={m.code}>{m.name}</option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="paypal">PayPal</option>
-                      <option value="bank">Bank Transfer</option>
-                      <option value="crypto">Cryptocurrency</option>
-                    </>
-                  )}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Payment Details</label>
-                <input
-                  type="text"
-                  value={paymentDetails}
-                  onChange={(e) => setPaymentDetails(e.target.value)}
-                  placeholder={
-                    referralData.payout_methods?.find((m: any) => m.code === paymentMethod)?.placeholder
-                    || 'Enter payment details'
-                  }
-                  className="w-full bg-[#0a0a0f] border border-green-500/30 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-green-500/50"
-                />
-              </div>
-            </div>
+        {/* Request Payout / Payout History Tabbed Section */}
+        <div className="bg-[#12121a] border border-green-500/20 rounded-xl p-3 sm:p-4">
+          {/* Tabs */}
+          <div className="flex gap-1 mb-3 sm:mb-4 bg-[#0a0a0f] rounded-lg p-0.5 w-fit">
             <button
-              onClick={requestPayout}
-              className="mt-3 sm:mt-4 w-full sm:w-auto bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-6 py-2 rounded-lg font-bold text-xs sm:text-sm transition-all transform hover:scale-105 shadow-lg shadow-green-500/20"
+              onClick={() => setPayoutTab('request')}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-md text-[10px] sm:text-xs font-bold transition-all ${
+                payoutTab === 'request'
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
               Request Payout
             </button>
+            <button
+              onClick={() => setPayoutTab('history')}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-md text-[10px] sm:text-xs font-bold transition-all ${
+                payoutTab === 'history'
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              Payout History
+              {payoutTotal > 0 && <span className="ml-1.5 text-[9px] bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded-full">{payoutTotal}</span>}
+            </button>
           </div>
-        )}
+
+          {/* Request Payout Tab */}
+          {payoutTab === 'request' && (
+            <div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3">
+                <div>
+                  <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Amount (USD)</label>
+                  <input
+                    type="number"
+                    value={payoutAmount}
+                    onChange={(e) => setPayoutAmount(e.target.value)}
+                    placeholder="0.00"
+                    max={stats.pending_earnings}
+                    className="w-full bg-[#0a0a0f] border border-green-500/30 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-green-500/50"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-0.5">Available: <span className="text-green-400 font-bold">${stats.pending_earnings.toFixed(2)}</span></p>
+                </div>
+                <div>
+                  <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Payment Method</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full bg-[#0a0a0f] border border-green-500/30 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-green-500/50"
+                  >
+                    {referralData.payout_methods && referralData.payout_methods.length > 0 ? (
+                      referralData.payout_methods.map((m: any) => (
+                        <option key={m.code} value={m.code}>{m.name}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="paypal">PayPal</option>
+                        <option value="bank">Bank Transfer</option>
+                        <option value="crypto">Cryptocurrency</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Payment Details</label>
+                  <input
+                    type="text"
+                    value={paymentDetails}
+                    onChange={(e) => setPaymentDetails(e.target.value)}
+                    placeholder={
+                      referralData.payout_methods?.find((m: any) => m.code === paymentMethod)?.placeholder
+                      || 'Enter payment details'
+                    }
+                    className="w-full bg-[#0a0a0f] border border-green-500/30 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-green-500/50"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={requestPayout}
+                className="mt-3 sm:mt-4 w-full sm:w-auto bg-gradient-to-r from-green-500 to-green-400 hover:from-green-400 hover:to-cyan-400 text-black px-6 py-2 rounded-lg font-bold text-xs sm:text-sm transition-all transform hover:scale-105 shadow-lg shadow-green-500/20"
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                Request Payout
+              </button>
+            </div>
+          )}
+
+          {/* Payout History Tab */}
+          {payoutTab === 'history' && (
+            <div>
+              {payoutLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
+                  <span className="ml-2 text-gray-400 text-xs">Loading payouts...</span>
+                </div>
+              ) : payouts.length === 0 ? (
+                <p className="text-gray-500 text-xs sm:text-sm text-center py-6">No payout history yet.</p>
+              ) : (
+                <>
+                  <div className="divide-y divide-gray-800/50 -mx-3 sm:-mx-4">
+                    {payouts.map((payout: any) => {
+                      const payoutStatusConfig: Record<string, { bg: string; text: string }> = {
+                        completed: { bg: 'bg-green-500/10 border-green-500/30', text: 'text-green-400' },
+                        processing: { bg: 'bg-blue-500/10 border-blue-500/30', text: 'text-blue-400' },
+                        failed: { bg: 'bg-red-500/10 border-red-500/30', text: 'text-red-400' },
+                        pending: { bg: 'bg-yellow-500/10 border-yellow-500/30', text: 'text-yellow-400' },
+                      };
+                      const ps = payoutStatusConfig[payout.status] || payoutStatusConfig.pending;
+                      return (
+                        <div key={payout.id} className="px-3 sm:px-4 py-3 sm:py-3.5 hover:bg-white/[0.02] transition-colors">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <p className="text-white text-sm sm:text-base font-bold">${payout.amount.toFixed(2)}</p>
+                              <span className="text-gray-400 text-[10px] sm:text-xs capitalize bg-gray-800/60 px-2 py-0.5 rounded">{payout.payment_method}</span>
+                            </div>
+                            <div className="flex items-center gap-3 sm:gap-4">
+                              <span className={`inline-block px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${ps.bg} ${ps.text} capitalize`}>
+                                {payout.status}
+                              </span>
+                              <div className="text-right">
+                                <p className="text-gray-500 text-[10px] sm:text-xs">{new Date(payout.requested_at).toLocaleDateString()}</p>
+                                {payout.processed_at && <p className="text-gray-600 text-[9px] sm:text-[10px]">Done: {new Date(payout.processed_at).toLocaleDateString()}</p>}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Payout Pagination */}
+                  {payoutTotalPages > 1 && (
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800/50">
+                      <p className="text-gray-500 text-[10px] sm:text-xs">Page {payoutPage} of {payoutTotalPages}</p>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setPayoutPage(p => Math.max(1, p - 1))}
+                          disabled={payoutPage <= 1}
+                          className="p-1.5 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setPayoutPage(p => Math.min(payoutTotalPages, p + 1))}
+                          disabled={payoutPage >= payoutTotalPages}
+                          className="p-1.5 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Recent Transactions */}
-        {referralData.transactions && referralData.transactions.length > 0 && (
-          <div className="bg-gradient-to-br from-[#0d1117] to-[#12121a] rounded-2xl border border-cyan-500/20 overflow-hidden">
-            <div className="px-4 sm:px-6 py-4 border-b border-cyan-500/10 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-                <h2 className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Recent Transactions</h2>
+        <div className="bg-gradient-to-br from-[#0d1117] to-[#12121a] rounded-2xl border border-cyan-500/20 overflow-hidden">
+          <div className="px-4 sm:px-6 py-4 border-b border-cyan-500/10 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+              <h2 className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Recent Transactions</h2>
+            </div>
+            <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{txTotal} transaction{txTotal !== 1 ? 's' : ''}</span>
+          </div>
+          {txLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
+              <span className="ml-2 text-gray-400 text-xs">Loading transactions...</span>
+            </div>
+          ) : transactions.length === 0 ? (
+            <p className="text-gray-500 text-xs sm:text-sm text-center py-6">No transactions yet.</p>
+          ) : (
+            <>
+              <div className="divide-y divide-gray-800/50">
+                {transactions.map((tx: any) => {
+                  const email = tx.referred_user_email || tx.referred_user || '';
+                  const name = tx.referred_user_name || email.split('@')[0] || 'User';
+                  const maskedEmail = email ? email.replace(/^(.{2})(.*)(@.*)$/, (m: string, a: string, b: string, c: string) => a + '*'.repeat(Math.min(b.length, 6)) + c) : '';
+                  const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
+                    completed: { bg: 'bg-green-500/10 border-green-500/30', text: 'text-green-400', label: 'Earned' },
+                    paid: { bg: 'bg-cyan-500/10 border-cyan-500/30', text: 'text-cyan-400', label: 'Paid' },
+                    pending: { bg: 'bg-yellow-500/10 border-yellow-500/30', text: 'text-yellow-400', label: 'Pending' },
+                    cancelled: { bg: 'bg-red-500/10 border-red-500/30', text: 'text-red-400', label: 'Cancelled' },
+                  };
+                  const st = statusConfig[tx.status] || statusConfig.pending;
+                  return (
+                    <div key={tx.id} className="px-4 sm:px-6 py-3.5 sm:py-4 hover:bg-white/[0.02] transition-colors">
+                      <div className="flex items-center justify-between gap-3">
+                        {/* User info */}
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm sm:text-base font-bold text-cyan-400">{name.charAt(0).toUpperCase()}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-white text-sm sm:text-base font-semibold truncate">{name}</p>
+                            <p className="text-gray-500 text-[10px] sm:text-xs truncate">{maskedEmail}</p>
+                            <p className="text-gray-500 text-[10px] sm:text-xs mt-0.5">{new Date(tx.created_at).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                        {/* Stats */}
+                        <div className="flex items-center gap-6 sm:gap-10 flex-shrink-0">
+                          <div className="text-right hidden sm:block">
+                            <p className="text-gray-500 text-[10px] sm:text-xs">Purchase</p>
+                            <p className="text-white text-sm font-semibold">${tx.purchase_amount.toFixed(2)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-gray-500 text-[10px] sm:text-xs">Commission</p>
+                            <p className="text-green-400 text-sm font-bold">${tx.commission_amount.toFixed(2)}</p>
+                          </div>
+                          <div className="text-right min-w-[70px] sm:min-w-[85px]">
+                            <span className={`inline-block px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${st.bg} ${st.text}`}>
+                              {st.label}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{referralData.transactions.length} transaction{referralData.transactions.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div className="divide-y divide-gray-800/50">
-              {referralData.transactions.map((tx: any) => {
-                const email = tx.referred_user_email || tx.referred_user || '';
-                const name = tx.referred_user_name || email.split('@')[0] || 'User';
-                const maskedEmail = email ? email.replace(/^(.{2})(.*)(@.*)$/, (m: string, a: string, b: string, c: string) => a + '*'.repeat(Math.min(b.length, 6)) + c) : '';
-                const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
-                  completed: { bg: 'bg-green-500/10 border-green-500/30', text: 'text-green-400', label: 'Completed' },
-                  paid: { bg: 'bg-cyan-500/10 border-cyan-500/30', text: 'text-cyan-400', label: 'Paid' },
-                  pending: { bg: 'bg-yellow-500/10 border-yellow-500/30', text: 'text-yellow-400', label: 'Pending' },
-                  cancelled: { bg: 'bg-red-500/10 border-red-500/30', text: 'text-red-400', label: 'Cancelled' },
-                };
-                const st = statusConfig[tx.status] || statusConfig.pending;
-                return (
-                  <div key={tx.id} className="px-4 sm:px-6 py-3.5 sm:py-4 hover:bg-white/[0.02] transition-colors">
-                    <div className="flex items-center justify-between gap-3">
-                      {/* User info */}
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm sm:text-base font-bold text-cyan-400">{name.charAt(0).toUpperCase()}</span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-white text-sm sm:text-base font-semibold truncate">{name}</p>
-                          <p className="text-gray-500 text-[10px] sm:text-xs truncate">{maskedEmail}</p>
-                        </div>
-                      </div>
-                      {/* Stats */}
-                      <div className="flex items-center gap-4 sm:gap-6 flex-shrink-0">
-                        <div className="text-right hidden sm:block">
-                          <p className="text-gray-500 text-[10px] sm:text-xs">Purchase</p>
-                          <p className="text-white text-sm font-semibold">${tx.purchase_amount.toFixed(2)}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-gray-500 text-[10px] sm:text-xs">Commission</p>
-                          <p className="text-green-400 text-sm font-bold">${tx.commission_amount.toFixed(2)}</p>
-                        </div>
-                        <div className="text-right min-w-[70px] sm:min-w-[85px]">
-                          <span className={`inline-block px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${st.bg} ${st.text}`}>
-                            {st.label}
-                          </span>
-                          <p className="text-gray-600 text-[9px] sm:text-[10px] mt-1">{new Date(tx.created_at).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                    </div>
+              {/* Transaction Pagination */}
+              {txTotalPages > 1 && (
+                <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t border-cyan-500/10">
+                  <p className="text-gray-500 text-[10px] sm:text-xs">Page {txPage} of {txTotalPages}</p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setTxPage(p => Math.max(1, p - 1))}
+                      disabled={txPage <= 1}
+                      className="p-1.5 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setTxPage(p => Math.min(txTotalPages, p + 1))}
+                      disabled={txPage >= txTotalPages}
+                      className="p-1.5 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Payout History */}
-        {referralData.payouts && referralData.payouts.length > 0 && (
-          <div className="bg-gradient-to-br from-[#0d1117] to-[#12121a] rounded-2xl border border-gray-700/50 overflow-hidden">
-            <div className="px-4 sm:px-6 py-4 border-b border-gray-700/30">
-              <h2 className="text-sm sm:text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Payout History</h2>
-            </div>
-            <div className="divide-y divide-gray-800/50">
-              {referralData.payouts.map((payout: any) => {
-                const payoutStatusConfig: Record<string, { bg: string; text: string }> = {
-                  completed: { bg: 'bg-green-500/10 border-green-500/30', text: 'text-green-400' },
-                  processing: { bg: 'bg-blue-500/10 border-blue-500/30', text: 'text-blue-400' },
-                  failed: { bg: 'bg-red-500/10 border-red-500/30', text: 'text-red-400' },
-                  pending: { bg: 'bg-yellow-500/10 border-yellow-500/30', text: 'text-yellow-400' },
-                };
-                const ps = payoutStatusConfig[payout.status] || payoutStatusConfig.pending;
-                return (
-                  <div key={payout.id} className="px-4 sm:px-6 py-3.5 sm:py-4 hover:bg-white/[0.02] transition-colors">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <p className="text-white text-sm sm:text-base font-bold">${payout.amount.toFixed(2)}</p>
-                        <span className="text-gray-400 text-[10px] sm:text-xs capitalize bg-gray-800/60 px-2 py-0.5 rounded">{payout.payment_method}</span>
-                      </div>
-                      <div className="flex items-center gap-3 sm:gap-4">
-                        <span className={`inline-block px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${ps.bg} ${ps.text} capitalize`}>
-                          {payout.status}
-                        </span>
-                        <div className="text-right">
-                          <p className="text-gray-500 text-[10px] sm:text-xs">{new Date(payout.requested_at).toLocaleDateString()}</p>
-                          {payout.processed_at && <p className="text-gray-600 text-[9px] sm:text-[10px]">Done: {new Date(payout.processed_at).toLocaleDateString()}</p>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

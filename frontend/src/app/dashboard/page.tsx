@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock } from 'lucide-react';
+import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock, Pencil } from 'lucide-react';
 import { useDashboard } from './context';
 import axios from 'axios';
 import ExnessBroker from '@/components/ExnessBroker';
@@ -67,6 +67,12 @@ export default function DashboardHome() {
   // License toggle state
   const [togglingLicense, setTogglingLicense] = useState<string | null>(null);
 
+  // Nickname editing state
+  const [editingNickname, setEditingNickname] = useState<string | null>(null);
+  const [nicknameValue, setNicknameValue] = useState('');
+  const [savingNickname, setSavingNickname] = useState(false);
+
+  const nicknameInputRef = useRef<HTMLInputElement>(null);
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
   
   // Keep closed positions scroll at top (latest positions shown first via reverse order)
@@ -2261,6 +2267,63 @@ export default function DashboardHome() {
                     {lic.status === 'suspended' ? 'DEACTIVATED' : lic.status?.toUpperCase()}
                   </span>
                   <span className="font-bold text-white text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>{lic.plan}</span>
+                  {/* Nickname */}
+                  {editingNickname === lic.license_key ? (
+                    <form
+                      className="flex items-center gap-1"
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSavingNickname(true);
+                        try {
+                          await axios.post(`${API_URL}/license-nickname/`, {
+                            email: user?.email,
+                            license_key: lic.license_key,
+                            nickname: nicknameValue.slice(0, 20),
+                          });
+                          refreshLicenses();
+                        } catch (err) { console.error(err); }
+                        setSavingNickname(false);
+                        setEditingNickname(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        ref={nicknameInputRef}
+                        type="text"
+                        value={nicknameValue}
+                        onChange={(e) => setNicknameValue(e.target.value.slice(0, 20))}
+                        maxLength={20}
+                        placeholder="Nickname"
+                        autoFocus
+                        className="bg-[#0a0a0f] border border-cyan-500/30 rounded px-1.5 py-0.5 text-[10px] sm:text-xs text-white w-[100px] sm:w-[130px] focus:outline-none focus:border-cyan-400"
+                        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setEditingNickname(null); } }}
+                      />
+                      <button type="submit" disabled={savingNickname} className="p-0.5 text-green-400 hover:text-green-300">
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setEditingNickname(null); }} className="p-0.5 text-gray-500 hover:text-gray-300">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </form>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingNickname(lic.license_key);
+                        setNicknameValue(lic.nickname || '');
+                      }}
+                      className="flex items-center gap-1 text-[10px] sm:text-xs text-gray-500 hover:text-cyan-400 transition-colors px-1.5 py-0.5 rounded hover:bg-cyan-500/10"
+                      title="Set nickname"
+                    >
+                      {lic.nickname ? (
+                        <span className="text-cyan-300 font-medium">{lic.nickname}</span>
+                      ) : (
+                        <span className="italic">Add name</span>
+                      )}
+                      <Pencil className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 sm:gap-3">
                   {(lic.status === 'active' || lic.status === 'suspended') && (

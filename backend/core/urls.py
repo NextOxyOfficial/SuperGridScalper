@@ -35,6 +35,8 @@ urlpatterns = [
     path('referral/stats/', views.get_referral_stats, name='get_referral_stats'),
     path('referral/track-click/', views.track_referral_click, name='track_referral_click'),
     path('referral/request-payout/', views.request_payout, name='request_payout'),
+    path('referral/transactions/', views.get_referral_transactions, name='get_referral_transactions'),
+    path('referral/payouts/', views.get_referral_payouts, name='get_referral_payouts'),
     
     # Trade Command System
     path('trade-commands/close-position/', views.close_position, name='close_position'),
@@ -47,6 +49,7 @@ urlpatterns = [
     # Site Settings
     path('site-settings/', views.get_site_settings, name='get_site_settings'),
     
-    # License Toggle
+    # License Toggle & Nickname
     path('toggle-license/', views.toggle_license_status, name='toggle_license_status'),
+    path('license-nickname/', views.update_license_nickname, name='update_license_nickname'),
 ]

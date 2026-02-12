@@ -685,6 +685,7 @@ def login(request):
             'expires_at': lic.expires_at.isoformat(),
             'days_remaining': lic.days_remaining(),
             'mt5_account': lic.mt5_account,
+            'nickname': lic.nickname or '',
             'mt5_accounts': [a.mt5_account for a in lic.mt5_accounts.all().order_by('created_at')],
             'max_accounts': lic.plan.max_accounts,
             'ea_settings': ea_settings
@@ -835,6 +836,7 @@ def get_licenses(request):
             'expires_at': lic.expires_at.isoformat(),
             'days_remaining': lic.days_remaining(),
             'mt5_account': lic.mt5_account,
+            'nickname': lic.nickname or '',
             'ea_settings': ea_settings
         })
     
@@ -842,6 +844,40 @@ def get_licenses(request):
         'success': True,
         'licenses': license_list
     })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def update_license_nickname(request):
+    """Update the nickname for a license (max 20 chars)"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    email = (data.get('email') or '').strip()
+    license_key = (data.get('license_key') or '').strip()
+    nickname = (data.get('nickname') or '').strip()
+
+    if not email or not license_key:
+        return JsonResponse({'success': False, 'message': 'Email and license_key are required'}, status=400)
+
+    if len(nickname) > 20:
+        return JsonResponse({'success': False, 'message': 'Nickname must be 20 characters or less'}, status=400)
+
+    user = resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+
+    try:
+        lic = License.objects.get(license_key=license_key, user=user)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'License not found'}, status=404)
+
+    lic.nickname = nickname
+    lic.save(update_fields=['nickname', 'updated_at'])
+
+    return JsonResponse({'success': True, 'nickname': lic.nickname})
 
 
 @csrf_exempt
@@ -961,6 +997,7 @@ def subscribe(request):
             'expires_at': lic.expires_at.isoformat(),
             'days_remaining': lic.days_remaining(),
             'mt5_account': lic.mt5_account,
+            'nickname': lic.nickname or '',
             'ea_settings': ea_settings
         })
     
@@ -1664,41 +1701,6 @@ def get_referral_stats(request):
                 'message': 'No referral code created yet'
             })
         
-        # Get transactions
-        transactions = ReferralTransaction.objects.filter(referral=referral).select_related('referred_user', 'purchase_request').order_by('-created_at')[:10]
-        transaction_list = []
-        for t in transactions:
-            # Determine effective status: if purchase was approved, show as 'completed'
-            effective_status = t.status
-            if t.purchase_request and t.purchase_request.status == 'approved':
-                effective_status = 'completed' if t.status == 'pending' else t.status
-            
-            referred_name = t.referred_user.first_name or t.referred_user.username
-            referred_email = t.referred_user.email
-            transaction_list.append({
-                'id': t.id,
-                'referred_user': referred_email,
-                'referred_user_name': referred_name,
-                'referred_user_email': referred_email,
-                'purchase_amount': float(t.purchase_amount),
-                'commission_amount': float(t.commission_amount),
-                'status': effective_status,
-                'created_at': t.created_at.isoformat(),
-            })
-        
-        # Get payouts
-        payouts = ReferralPayout.objects.filter(referral=referral).order_by('-requested_at')[:10]
-        payout_list = []
-        for p in payouts:
-            payout_list.append({
-                'id': p.id,
-                'amount': float(p.amount),
-                'payment_method': p.payment_method,
-                'status': p.status,
-                'requested_at': p.requested_at.isoformat(),
-                'processed_at': p.processed_at.isoformat() if p.processed_at else None,
-            })
-        
         # Compute accurate stats from source-of-truth tables
         from django.db.models import Sum
         all_transactions = ReferralTransaction.objects.filter(referral=referral)
@@ -1744,8 +1746,8 @@ def get_referral_stats(request):
                 'signups': computed_signups,
                 'purchases': computed_purchases,
             },
-            'transactions': transaction_list,
-            'payouts': payout_list,
+            'total_transactions': ReferralTransaction.objects.filter(referral=referral).count(),
+            'total_payouts': ReferralPayout.objects.filter(referral=referral).count(),
             'payout_methods': payout_methods,
         })
     
@@ -1839,6 +1841,119 @@ def request_payout(request):
             'remaining_balance': float(referral.pending_earnings)
         })
     
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_referral_transactions(request):
+    """Paginated referral transactions"""
+    try:
+        username = request.GET.get('username')
+        email = request.GET.get('email')
+        page = int(request.GET.get('page', 1))
+        per_page = int(request.GET.get('per_page', 10))
+        per_page = min(per_page, 50)  # cap
+
+        if not username and not email:
+            return JsonResponse({'success': False, 'message': 'Username or email required'}, status=400)
+
+        try:
+            user = User.objects.get(username=username) if username else User.objects.get(email=email)
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+
+        try:
+            referral = Referral.objects.get(referrer=user)
+        except Referral.DoesNotExist:
+            return JsonResponse({'success': True, 'transactions': [], 'total': 0, 'page': page, 'per_page': per_page, 'total_pages': 0})
+
+        qs = ReferralTransaction.objects.filter(referral=referral).select_related('referred_user', 'purchase_request').order_by('-created_at')
+        total = qs.count()
+        total_pages = (total + per_page - 1) // per_page
+        offset = (page - 1) * per_page
+        transactions = qs[offset:offset + per_page]
+
+        transaction_list = []
+        for t in transactions:
+            effective_status = t.status
+            if t.purchase_request and t.purchase_request.status == 'approved':
+                effective_status = 'completed' if t.status == 'pending' else t.status
+            referred_name = t.referred_user.first_name or t.referred_user.username
+            referred_email = t.referred_user.email
+            transaction_list.append({
+                'id': t.id,
+                'referred_user': referred_email,
+                'referred_user_name': referred_name,
+                'referred_user_email': referred_email,
+                'purchase_amount': float(t.purchase_amount),
+                'commission_amount': float(t.commission_amount),
+                'status': effective_status,
+                'created_at': t.created_at.isoformat(),
+            })
+
+        return JsonResponse({
+            'success': True,
+            'transactions': transaction_list,
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'total_pages': total_pages,
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_referral_payouts(request):
+    """Paginated referral payouts"""
+    try:
+        username = request.GET.get('username')
+        email = request.GET.get('email')
+        page = int(request.GET.get('page', 1))
+        per_page = int(request.GET.get('per_page', 10))
+        per_page = min(per_page, 50)  # cap
+
+        if not username and not email:
+            return JsonResponse({'success': False, 'message': 'Username or email required'}, status=400)
+
+        try:
+            user = User.objects.get(username=username) if username else User.objects.get(email=email)
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'User not found'}, status=404)
+
+        try:
+            referral = Referral.objects.get(referrer=user)
+        except Referral.DoesNotExist:
+            return JsonResponse({'success': True, 'payouts': [], 'total': 0, 'page': page, 'per_page': per_page, 'total_pages': 0})
+
+        qs = ReferralPayout.objects.filter(referral=referral).order_by('-requested_at')
+        total = qs.count()
+        total_pages = (total + per_page - 1) // per_page
+        offset = (page - 1) * per_page
+        payouts = qs[offset:offset + per_page]
+
+        payout_list = []
+        for p in payouts:
+            payout_list.append({
+                'id': p.id,
+                'amount': float(p.amount),
+                'payment_method': p.payment_method,
+                'status': p.status,
+                'requested_at': p.requested_at.isoformat(),
+                'processed_at': p.processed_at.isoformat() if p.processed_at else None,
+            })
+
+        return JsonResponse({
+            'success': True,
+            'payouts': payout_list,
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'total_pages': total_pages,
+        })
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 

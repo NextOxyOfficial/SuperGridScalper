@@ -43,6 +43,9 @@ class License(models.Model):
     activated_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     
+    # User-defined nickname
+    nickname = models.CharField(max_length=20, blank=True, default='', help_text="User-defined nickname for this license")
+    
     # MT5 Account binding
     mt5_account = models.CharField(max_length=50, blank=True, null=True, help_text="Bound MT5 account number")
     hardware_id = models.CharField(max_length=255, blank=True, null=True, help_text="Hardware identifier")
