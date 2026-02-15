@@ -931,14 +931,14 @@ class LicenseAdmin(admin.ModelAdmin):
             status='approved',
         ).exists()
         if free_claim:
-            return format_html('<span style="color: #10b981; font-weight: bold;">🎁 FREE</span>')
+            return mark_safe('<span style="color: #10b981; font-weight: bold;">🎁 FREE</span>')
         paid = LicensePurchaseRequest.objects.filter(
             issued_license=obj,
             status='approved',
         ).exclude(user_note__icontains='[EXNESS_FREE_CLAIM]').exists()
         if paid:
-            return format_html('<span style="color: #06b6d4; font-weight: bold;">💳 PAID</span>')
-        return format_html('<span style="color: #6b7280;">—</span>')
+            return mark_safe('<span style="color: #06b6d4; font-weight: bold;">💳 PAID</span>')
+        return mark_safe('<span style="color: #6b7280;">—</span>')
     source_display.short_description = 'Source'
 
     def status_display(self, obj):
