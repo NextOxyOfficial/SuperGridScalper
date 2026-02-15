@@ -166,7 +166,7 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         """Auto-create/extend license when status is changed to approved via admin form"""
         if change and obj.status == 'approved' and obj.request_type == 'extension' and obj.extend_license and not obj.issued_license_id:
-            # Extension: add days to existing license and update plan
+            # Extension: add days and upgrade plan to the selected one
             from datetime import timedelta
             lic = obj.extend_license
             if lic.expires_at < timezone.now():
@@ -334,6 +334,86 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                     
             except Exception as e:
                 self.message_user(request, f'Failed to create license: {e}', level='error')
+        
+        # Handle rejection via admin form — send rejection email
+        if change and obj.status == 'rejected':
+            is_free_claim = '[EXNESS_FREE_CLAIM]' in (obj.user_note or '')
+            is_free_extension = '[EXNESS_FREE_EXTENSION]' in (obj.user_note or '')
+            is_extension = obj.request_type == 'extension'
+            obj.reviewed_by = request.user
+            obj.reviewed_at = timezone.now()
+            try:
+                from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+                from django.core.mail import EmailMultiAlternatives
+                base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+                if can_send_email_to_user(obj.user, 'transactional'):
+                    if is_free_claim:
+                        subject = 'Free License Claim Rejected — Account Not Under Our Referral'
+                        heading = 'Free License Claim Rejected'
+                        detail_html = f"""
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.request_number or obj.id}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>MT5 Account:</strong> {obj.mt5_account or '-'}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Reason:</strong> <span style="color: #f87171;">Exness account not found under our referral</span></p>
+                        """
+                    elif is_free_extension:
+                        subject = 'Free Extension Rejected — Verification Failed'
+                        heading = 'Free Extension Rejected'
+                        detail_html = f"""
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.request_number or obj.id}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>MT5 Account:</strong> {obj.mt5_account or '-'}</p>
+                        """
+                    elif is_extension:
+                        subject = 'Extension Request Rejected - Action Needed'
+                        heading = 'Extension Payment Rejected'
+                        detail_html = f"""
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.request_number or obj.id}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Amount:</strong> ${obj.amount_usd}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Network:</strong> {obj.network.name if obj.network else '-'}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>TXID:</strong> {obj.txid or '-'}</p>
+                        """
+                    else:
+                        subject = 'Payment Rejected - Action Needed'
+                        heading = 'Payment Verification Failed'
+                        detail_html = f"""
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.request_number or obj.id}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Network:</strong> {obj.network.name if obj.network else '-'}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>TXID:</strong> {obj.txid or '-'}</p>
+                        """
+                    html_message = render_email_template(
+                        subject=subject,
+                        heading=heading,
+                        message=f"""
+                            <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                            <p>Your request has been <strong style="color: #ef4444;">rejected</strong>.</p>
+                            <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                <p style="margin: 0 0 8px 0; color: #ef4444; font-weight: 600;">Details:</p>
+                                {detail_html}
+                            </div>
+                            <p><strong>What to do next:</strong></p>
+                            <ul style="color: #d1d5db; line-height: 1.7;">
+                                <li>Review your request details</li>
+                                <li>Submit a new request from your dashboard</li>
+                                <li>Contact support if you believe this is a mistake</li>
+                            </ul>
+                        """,
+                        cta_text='GO TO DASHBOARD',
+                        cta_url=f'{base}/dashboard',
+                        footer_note='If you believe this is a mistake, please contact our support team.',
+                        preheader=f'Your request #{obj.request_number or obj.id} was rejected.',
+                        unsubscribe_url=get_unsubscribe_url(obj.user)
+                    )
+                    text_msg = f"Hi {obj.user.first_name or 'Trader'},\n\nYour request #{obj.request_number or obj.id} has been rejected.\nPlan: {obj.plan.name}\n\nPlease check your dashboard: {base}/dashboard"
+                    msg = EmailMultiAlternatives(subject, text_msg, get_email_from_address(), [obj.user.email])
+                    msg.attach_alternative(html_message, "text/html")
+                    msg = add_email_headers(msg, 'transactional', user=obj.user)
+                    msg.send(fail_silently=False)
+                    self.message_user(request, f'Rejection email sent to {obj.user.email}')
+            except Exception as e:
+                print(f'[ADMIN] Failed to send rejection email: {e}')
+
         super().save_model(request, obj, form, change)
 
     def approve_requests(self, request, queryset):
@@ -627,6 +707,8 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
             obj.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
 
             is_free_claim = '[EXNESS_FREE_CLAIM]' in (obj.user_note or '')
+            is_free_extension = '[EXNESS_FREE_EXTENSION]' in (obj.user_note or '')
+            is_extension = obj.request_type == 'extension'
 
             try:
                 from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
@@ -638,7 +720,6 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                     raise Exception('User opted out of transactional emails')
 
                 if is_free_claim:
-                    # Special rejection email for free Exness claims
                     subject = 'Free License Claim Rejected — Account Not Under Our Referral'
                     text_message = (
                         f"Hi {obj.user.first_name or 'Trader'},\n\n"
@@ -686,13 +767,95 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                         preheader=f'Your free license claim was rejected. Your Exness account is not under our referral.',
                         unsubscribe_url=get_unsubscribe_url(obj.user)
                     )
+                elif is_free_extension:
+                    subject = 'Free Extension Rejected — Verification Failed'
+                    text_message = (
+                        f"Hi {obj.user.first_name or 'Trader'},\n\n"
+                        "Your free license extension request has been rejected.\n\n"
+                        f"Request ID: #{obj.request_number or obj.id}\n"
+                        f"Plan: {obj.plan.name}\n"
+                        f"MT5 Account: {obj.mt5_account or '-'}\n\n"
+                        "This may be because your Exness account is no longer under our referral, or verification failed.\n\n"
+                        "You can purchase a paid extension from your dashboard.\n"
+                        f"Open your dashboard: {base}/dashboard\n\n"
+                        "If you believe this is a mistake, please contact support."
+                    )
+                    html_message = render_email_template(
+                        subject=subject,
+                        heading='Free Extension Rejected',
+                        message=f"""
+                            <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                            <p>Your free license extension request has been <strong style="color: #ef4444;">rejected</strong>.</p>
+                            
+                            <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                <p style="margin: 0 0 8px 0; color: #ef4444; font-weight: 600;">Extension Details:</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.request_number or obj.id}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>MT5 Account:</strong> {obj.mt5_account or '-'}</p>
+                            </div>
+                            
+                            <p><strong>What to do next:</strong></p>
+                            <ul style="color: #d1d5db; line-height: 1.7;">
+                                <li>Ensure your Exness account is still active under our referral</li>
+                                <li>Purchase a paid extension from your dashboard</li>
+                                <li>Contact support if you believe this is a mistake</li>
+                            </ul>
+                        """,
+                        cta_text='GO TO DASHBOARD',
+                        cta_url=f'{base}/dashboard',
+                        footer_note='If you believe this is a mistake, please contact our support team.',
+                        preheader=f'Your free extension request #{obj.request_number or obj.id} was rejected.',
+                        unsubscribe_url=get_unsubscribe_url(obj.user)
+                    )
+                elif is_extension:
+                    subject = 'Extension Request Rejected - Action Needed'
+                    text_message = (
+                        f"Hi {obj.user.first_name or 'Trader'},\n\n"
+                        "Your license extension payment could not be verified and has been rejected.\n\n"
+                        f"Request ID: #{obj.request_number or obj.id}\n"
+                        f"Plan: {obj.plan.name}\n"
+                        f"Amount: ${obj.amount_usd}\n"
+                        f"Network: {obj.network.name if obj.network else '-'}\n"
+                        f"TXID: {obj.txid or '-'}\n\n"
+                        "You can submit a new extension request from your dashboard.\n"
+                        f"Open your dashboard: {base}/dashboard\n\n"
+                        "If you believe this is a mistake, please contact support."
+                    )
+                    html_message = render_email_template(
+                        subject=subject,
+                        heading='Extension Payment Rejected',
+                        message=f"""
+                            <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                            <p>Your license extension payment could not be verified and has been <strong style="color: #ef4444;">rejected</strong>.</p>
+                            
+                            <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                <p style="margin: 0 0 8px 0; color: #ef4444; font-weight: 600;">Extension Details:</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.request_number or obj.id}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Amount:</strong> ${obj.amount_usd}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Network:</strong> {obj.network.name if obj.network else '-'}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>TXID:</strong> {obj.txid or '-'}</p>
+                            </div>
+                            
+                            <p><strong>What to do next:</strong></p>
+                            <ul style="color: #d1d5db; line-height: 1.7;">
+                                <li>Double-check your payment transaction</li>
+                                <li>Submit a new extension request from your dashboard</li>
+                                <li>Contact support if you believe this is a mistake</li>
+                            </ul>
+                        """,
+                        cta_text='EXTEND LICENSE',
+                        cta_url=f'{base}/dashboard',
+                        footer_note='If you believe this is a mistake, please contact our support team.',
+                        preheader=f'Extension payment rejected for request #{obj.request_number or obj.id}. Please review and resubmit.',
+                        unsubscribe_url=get_unsubscribe_url(obj.user)
+                    )
                 else:
-                    # Standard payment rejection email
                     subject = 'Payment Rejected - Action Needed'
                     text_message = (
                         f"Hi {obj.user.first_name or 'Trader'},\n\n"
                         "Unfortunately, your payment could not be verified and has been rejected.\n\n"
-                        f"Request ID: #{obj.id}\n"
+                        f"Request ID: #{obj.request_number or obj.id}\n"
                         f"Plan: {obj.plan.name}\n"
                         f"Network: {obj.network.name if obj.network else '-'}\n"
                         f"TXID: {obj.txid or '-'}\n\n"
@@ -709,7 +872,7 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                             
                             <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 16px; margin: 20px 0; border-radius: 4px;">
                                 <p style="margin: 0 0 8px 0; color: #ef4444; font-weight: 600;">Request Details:</p>
-                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.id}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.request_number or obj.id}</p>
                                 <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
                                 <p style="margin: 4px 0; color: #d1d5db;"><strong>Network:</strong> {obj.network.name if obj.network else '-'}</p>
                                 <p style="margin: 4px 0; color: #d1d5db;"><strong>TXID:</strong> {obj.txid or '-'}</p>
@@ -725,7 +888,7 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                         cta_text='SUBMIT NEW PROOF',
                         cta_url=f'{base}/dashboard',
                         footer_note='If you believe this is a mistake, please contact our support team immediately.',
-                        preheader=f'Payment verification failed for request #{obj.id}. Please review and resubmit.',
+                        preheader=f'Payment verification failed for request #{obj.request_number or obj.id}. Please review and resubmit.',
                         unsubscribe_url=get_unsubscribe_url(obj.user)
                     )
                 

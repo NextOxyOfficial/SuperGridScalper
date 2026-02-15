@@ -184,7 +184,7 @@ export default function ReferralPage() {
 
   if (!referralData?.has_referral) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white p-3 sm:p-4">
+      <div className="min-h-screen bg-[#0a0a0f] text-white p-1 sm:p-4">
         <div className="max-w-4xl mx-auto">
           <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-6 sm:p-8 text-center">
             <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-green-500/20 to-green-400/10 border border-green-500/30 rounded-xl mb-4 sm:mb-6">
@@ -228,7 +228,7 @@ export default function ReferralPage() {
   const stats = referralData.stats;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white p-3 sm:p-4">
+    <div className="min-h-screen bg-[#0a0a0f] text-white p-1 sm:p-4">
       <div className="max-w-6xl mx-auto space-y-3 sm:space-y-4">
         {/* Header */}
         <div className="text-center mb-4 sm:mb-6">
@@ -243,28 +243,28 @@ export default function ReferralPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-2">
-          <div className="bg-[#12121a] border border-green-500/20 rounded-lg p-1.5 sm:p-3 hover:border-green-500/40 transition-all">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-2">
+          <div className="bg-[#12121a] border border-green-500/20 rounded-lg p-2 sm:p-3 hover:border-green-500/40 transition-all">
             <DollarSign className="w-4 h-4 sm:w-6 sm:h-6 text-green-400 mb-1 sm:mb-2" />
             <p className="text-gray-500 text-[10px] sm:text-xs mb-0.5">Total Earnings</p>
             <p className="text-sm sm:text-xl lg:text-2xl font-bold text-green-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${stats.total_earnings.toFixed(2)}</p>
           </div>
-          <div className="bg-[#12121a] border border-yellow-500/20 rounded-lg p-1.5 sm:p-3 hover:border-yellow-500/40 transition-all">
+          <div className="bg-[#12121a] border border-yellow-500/20 rounded-lg p-2 sm:p-3 hover:border-yellow-500/40 transition-all">
             <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-yellow-400 mb-1 sm:mb-2" />
             <p className="text-gray-500 text-[10px] sm:text-xs mb-0.5">Pending</p>
             <p className="text-sm sm:text-xl lg:text-2xl font-bold text-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${stats.pending_earnings.toFixed(2)}</p>
           </div>
-          <div className="bg-[#12121a] border border-orange-500/20 rounded-lg p-1.5 sm:p-3 hover:border-orange-500/40 transition-all">
+          <div className="bg-[#12121a] border border-orange-500/20 rounded-lg p-2 sm:p-3 hover:border-orange-500/40 transition-all">
             <MousePointerClick className="w-4 h-4 sm:w-6 sm:h-6 text-orange-400 mb-1 sm:mb-2" />
             <p className="text-gray-500 text-[10px] sm:text-xs mb-0.5">Link Clicks</p>
             <p className="text-sm sm:text-xl lg:text-2xl font-bold text-orange-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>{stats.clicks}</p>
           </div>
-          <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-1.5 sm:p-3 hover:border-cyan-500/40 transition-all">
+          <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-2 sm:p-3 hover:border-cyan-500/40 transition-all">
             <Users className="w-4 h-4 sm:w-6 sm:h-6 text-cyan-400 mb-1 sm:mb-2" />
             <p className="text-gray-500 text-[10px] sm:text-xs mb-0.5">Signups</p>
             <p className="text-sm sm:text-xl lg:text-2xl font-bold text-cyan-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>{stats.signups}</p>
           </div>
-          <div className="bg-[#12121a] border border-purple-500/20 rounded-lg p-1.5 sm:p-3 hover:border-purple-500/40 transition-all col-span-3 lg:col-span-1">
+          <div className="bg-[#12121a] border border-purple-500/20 rounded-lg p-2 sm:p-3 hover:border-purple-500/40 transition-all col-span-2 sm:col-span-3 lg:col-span-1">
             <Gift className="w-4 h-4 sm:w-6 sm:h-6 text-purple-400 mb-1 sm:mb-2" />
             <p className="text-gray-500 text-[10px] sm:text-xs mb-0.5">Purchases</p>
             <p className="text-sm sm:text-xl lg:text-2xl font-bold text-purple-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>{stats.purchases}</p>

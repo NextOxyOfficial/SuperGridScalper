@@ -126,22 +126,31 @@ class Command(BaseCommand):
         self._send(from_email, to_email, 'License Extended - Payment Approved', html, 'License Extended')
         sent += 1
 
-        # 5. Password Reset
-        self.stdout.write(f'[5/7] Sending Password Reset email...')
+        # 5. Access Key Reset
+        self.stdout.write(f'[5/7] Sending Access Key Reset email...')
         html = render_email_template(
-            subject='Password Reset Request',
-            heading='Password Reset',
+            subject='🔑 Access Key Reset Request',
+            heading='🔑 Access Key Reset',
             message=f"""
                 <p>Hi <strong>Trader</strong>,</p>
-                <p>We received a request to reset your password. Click the button below to set a new password.</p>
-                <p style="color: #9ca3af; font-size: 13px;">This link will expire in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+                <p>We received a request to reset the access key for your <strong>MarksTrades</strong> account.</p>
+                <p>Click the button below to set a new access key:</p>
+
+                <div style="background-color: rgba(6, 182, 212, 0.1); border-left: 3px solid #06b6d4; padding: 14px; margin: 16px 0; border-radius: 4px;">
+                    <p style="margin: 0 0 6px 0; color: #06b6d4; font-weight: 600; font-size: 13px;">Request Details:</p>
+                    <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>Account:</strong> test@markstrades.com</p>
+                    <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>Request Type:</strong> Access Key Reset</p>
+                    <p style="margin: 3px 0; color: #facc15; font-size: 13px;"><strong>⏱ Expires in:</strong> 24 hours</p>
+                </div>
+
+                <p style="color: #6b7280; font-size: 13px;">If you did not request this reset, you can safely ignore this email. Your access key will remain unchanged.</p>
             """,
-            cta_text='RESET PASSWORD',
-            cta_url=f'{base}/reset-password?token=test-token-123',
-            footer_note='If you did not request a password reset, please ignore this email.',
-            preheader='Reset your MarksTrades password',
+            cta_text='RESET ACCESS KEY',
+            cta_url=f'{base}/reset-password?uid=test-uid&token=test-token-123',
+            footer_note='For security, this link can only be used once. If you need a new link, please request another reset.',
+            preheader='Reset your MarksTrades access key',
         )
-        self._send(from_email, to_email, 'Password Reset Request', html, 'Password Reset')
+        self._send(from_email, to_email, '🔑 Access Key Reset Request', html, 'Access Key Reset')
         sent += 1
 
         # 6. Expiry Reminder (7 days)

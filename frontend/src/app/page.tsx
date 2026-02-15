@@ -299,6 +299,7 @@ export default function Home() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPlanTab, setSelectedPlanTab] = useState(0)
+  const [eaProducts, setEaProducts] = useState<any[]>([])
   
   // Typing effect states
   const [typedText, setTypedText] = useState('')
@@ -392,6 +393,19 @@ export default function Home() {
       }
     }
     fetchPlans()
+
+    const fetchEaProducts = async () => {
+      try {
+        const res = await fetch(`${API_URL}/ea-products/`)
+        const data = await res.json()
+        if (data.success && data.products?.length > 0) {
+          setEaProducts(data.products.filter((p: any) => !p.is_coming_soon))
+        }
+      } catch (err) {
+        console.error('Failed to fetch EA products:', err)
+      }
+    }
+    fetchEaProducts()
   }, [])
 
   // Typing effect
@@ -1055,46 +1069,49 @@ export default function Home() {
             <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-2">Multiple EA options optimized for different investment sizes</p>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {[
-              { name: 'Gold Scalper Lite', investment: '$350 - $1K', profit: '70-120%', color: 'cyan', risk: 'Low' },
-              { name: 'Gold Scalper Pro', investment: '$1K - $5K', profit: '100-180%', color: 'yellow', risk: 'Medium', popular: true },
-              { name: 'Gold Scalper Elite', investment: '$5K - $50K', profit: '150-250%', color: 'purple', risk: 'Med-High' },
-              { name: 'BTC Scalper', investment: '$500 - $10K', profit: '80-200%', color: 'orange', risk: 'High' }
-            ].map((ea, idx) => (
-              <div key={idx} className={`relative bg-gradient-to-br ${
-                ea.color === 'cyan' ? 'from-cyan-500/10 to-cyan-500/5 border-cyan-500/30 hover:border-cyan-400' :
-                ea.color === 'yellow' ? 'from-yellow-500/10 to-yellow-500/5 border-yellow-500/30 hover:border-yellow-400' :
-                ea.color === 'purple' ? 'from-purple-500/10 to-purple-500/5 border-purple-500/30 hover:border-purple-400' :
-                'from-orange-500/10 to-orange-500/5 border-orange-500/30 hover:border-orange-400'
-              } border rounded-xl p-3 sm:p-4 transition-all hover:scale-105`}>
-                {ea.popular && (
-                  <div className="absolute -top-2 left-1/2 -translate-x-1/2">
-                    <span className="bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">POPULAR</span>
-                  </div>
-                )}
-                <h3 className="text-white font-bold text-xs sm:text-base mb-1 sm:mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{ea.name}</h3>
-                <div className="space-y-0.5 sm:space-y-1 text-[10px] sm:text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Investment:</span>
-                    <span className="text-white">{ea.investment}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Profit:</span>
-                    <span className={`font-bold ${
-                      ea.color === 'cyan' ? 'text-cyan-400' :
-                      ea.color === 'yellow' ? 'text-yellow-400' :
-                      ea.color === 'purple' ? 'text-purple-400' :
-                      'text-orange-400'
-                    }`}>{ea.profit}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Risk:</span>
-                    <span className="text-gray-300">{ea.risk}</span>
+          <div className={`grid md:grid-cols-2 ${eaProducts.length >= 4 ? 'lg:grid-cols-4' : eaProducts.length === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-4 mb-8`}>
+            {(eaProducts.length > 0 ? eaProducts : [
+              { name: 'Gold Scalper Lite', min_investment: 350, max_investment: 1000, expected_profit: '70-120%', color: 'cyan', risk_level: 'Low', is_popular: false },
+              { name: 'Gold Scalper Pro', min_investment: 1000, max_investment: 5000, expected_profit: '100-180%', color: 'yellow', risk_level: 'Medium', is_popular: true },
+              { name: 'Gold Scalper Elite', min_investment: 5000, max_investment: 50000, expected_profit: '150-250%', color: 'purple', risk_level: 'Med-High', is_popular: false },
+              { name: 'BTC Scalper', min_investment: 500, max_investment: 10000, expected_profit: '80-200%', color: 'orange', risk_level: 'High', is_popular: false }
+            ]).map((ea: any, idx: number) => {
+              const c = ea.color || 'cyan';
+              const colorMap: Record<string, { bg: string; border: string; text: string }> = {
+                cyan: { bg: 'from-cyan-500/10 to-cyan-500/5', border: 'border-cyan-500/30 hover:border-cyan-400', text: 'text-cyan-400' },
+                yellow: { bg: 'from-yellow-500/10 to-yellow-500/5', border: 'border-yellow-500/30 hover:border-yellow-400', text: 'text-yellow-400' },
+                purple: { bg: 'from-purple-500/10 to-purple-500/5', border: 'border-purple-500/30 hover:border-purple-400', text: 'text-purple-400' },
+                orange: { bg: 'from-orange-500/10 to-orange-500/5', border: 'border-orange-500/30 hover:border-orange-400', text: 'text-orange-400' },
+                green: { bg: 'from-green-500/10 to-green-500/5', border: 'border-green-500/30 hover:border-green-400', text: 'text-green-400' },
+                red: { bg: 'from-red-500/10 to-red-500/5', border: 'border-red-500/30 hover:border-red-400', text: 'text-red-400' },
+              };
+              const colors = colorMap[c] || colorMap.cyan;
+              const formatInv = (v: number) => v >= 1000 ? `$${v / 1000}K` : `$${v}`;
+              return (
+                <div key={ea.id || idx} className={`relative bg-gradient-to-br ${colors.bg} ${colors.border} border rounded-xl p-3 sm:p-4 transition-all hover:scale-105`}>
+                  {ea.is_popular && (
+                    <div className="absolute -top-2 left-1/2 -translate-x-1/2">
+                      <span className="bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">POPULAR</span>
+                    </div>
+                  )}
+                  <h3 className="text-white font-bold text-xs sm:text-base mb-1 sm:mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{ea.name}</h3>
+                  <div className="space-y-0.5 sm:space-y-1 text-[10px] sm:text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Investment:</span>
+                      <span className="text-white">{formatInv(ea.min_investment)} - {formatInv(ea.max_investment)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Profit:</span>
+                      <span className={`font-bold ${colors.text}`}>{ea.expected_profit}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Risk:</span>
+                      <span className="text-gray-300">{ea.risk_level}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           
           <div className="text-center">

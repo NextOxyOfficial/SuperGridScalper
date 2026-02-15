@@ -84,6 +84,7 @@ export default function DashboardHome() {
   // Free Exness claim state
   const [freeExnessMt5, setFreeExnessMt5] = useState('');
   const [freeExnessUid, setFreeExnessUid] = useState('');
+  const [freeClaimPlanId, setFreeClaimPlanId] = useState<string>('');
   const [claimingFree, setClaimingFree] = useState(false);
   const [freeClaimResult, setFreeClaimResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -596,6 +597,7 @@ export default function DashboardHome() {
           email: user?.email || (user as any)?.username || '',
           mt5_account: freeExnessMt5.trim(),
           exness_uid: freeExnessUid.trim(),
+          plan_id: freeClaimPlanId || null,
         })
       });
       const data = await res.json();
@@ -636,6 +638,7 @@ export default function DashboardHome() {
         body: JSON.stringify({
           email: user.email || (user as any)?.username || '',
           license_key: selectedLicense.license_key,
+          plan_id: extendSelectedPlan?.id || null,
         })
       });
       const data = await res.json();
@@ -1133,7 +1136,22 @@ export default function DashboardHome() {
                             </div>
                           )}
                           <div><label className="text-gray-400 text-xs mb-1.5 block">Transaction ID (TXID)</label><input type="text" value={extendTxid} onChange={(e) => setExtendTxid(e.target.value)} placeholder="Paste your transaction hash..." className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none" /></div>
-                          <div><label className="text-gray-400 text-xs mb-1.5 block">Payment Proof (Screenshot) *</label><label className="flex items-center justify-center gap-2 w-full bg-[#0a0a0f] border border-dashed border-cyan-500/30 rounded-lg px-3 py-3 cursor-pointer hover:border-cyan-500/50 transition-all"><Upload className="w-4 h-4 text-gray-400" /><span className="text-gray-400 text-xs">{extendProofFile ? extendProofFile.name : 'Click to upload proof'}</span><input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setExtendProofFile(e.target.files?.[0] || null)} /></label></div>
+                          <div>
+                            <label className="text-gray-400 text-xs mb-1.5 block">Payment Proof (Screenshot) *</label>
+                            <input type="file" accept="image/*,.pdf" className="hidden" id="extendProofUpload1" onChange={(e) => setExtendProofFile(e.target.files?.[0] || null)} />
+                            {extendProofFile ? (
+                              <div className="flex items-center gap-2 bg-green-500/5 border border-green-500/30 rounded-lg px-3 py-2.5">
+                                <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                                <span className="text-green-300 text-xs truncate flex-1">{extendProofFile.name}</span>
+                                <label htmlFor="extendProofUpload1" className="text-[10px] text-cyan-400 hover:text-cyan-300 cursor-pointer flex-shrink-0">Change</label>
+                                <button type="button" onClick={() => { setExtendProofFile(null); const el = document.getElementById('extendProofUpload1') as HTMLInputElement; if (el) el.value = ''; }} className="p-1 rounded hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all flex-shrink-0" title="Remove file"><X className="w-3.5 h-3.5" /></button>
+                              </div>
+                            ) : (
+                              <label htmlFor="extendProofUpload1" className="flex items-center justify-center gap-2 w-full bg-[#0a0a0f] border border-dashed border-cyan-500/30 rounded-lg px-3 py-3 cursor-pointer hover:border-cyan-500/50 transition-all">
+                                <Upload className="w-4 h-4 text-gray-400" /><span className="text-gray-400 text-xs">Click to upload proof</span>
+                              </label>
+                            )}
+                          </div>
                           <div><label className="text-gray-400 text-xs mb-1.5 block">Note (optional)</label><textarea value={extendNote} onChange={(e) => setExtendNote(e.target.value)} placeholder="Any additional info..." rows={2} className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none resize-none" /></div>
                           <button onClick={handleExtendSubmit} disabled={extendSubmitting || !extendProofFile || !extendNetworkId} className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none flex items-center justify-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{extendSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <><Upload className="w-4 h-4" /> Submit Extension Request</>}</button>
                         </div>
@@ -1205,6 +1223,18 @@ export default function DashboardHome() {
                               </div>
                               <div className="space-y-2">
                                 <div>
+                                  <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Select Plan Duration *</label>
+                                  <div className="grid grid-cols-3 gap-1.5">
+                                    {plans.map((plan: any) => (
+                                      <button key={plan.id} type="button" onClick={() => setFreeClaimPlanId(String(plan.id))}
+                                        className={`px-2 py-2 rounded-lg text-center transition-all border ${String(freeClaimPlanId) === String(plan.id) ? 'bg-green-500/20 border-green-400 text-green-300' : 'bg-[#0a0a0f] border-green-500/15 text-gray-400 hover:border-green-500/40'}`}>
+                                        <p className="text-[10px] sm:text-xs font-bold">{plan.name}</p>
+                                        <p className="text-[9px] text-gray-500">{plan.duration_days} days</p>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
                                   <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Exness MT5 Account Number *</label>
                                   <input type="text" value={freeExnessMt5} onChange={(e) => setFreeExnessMt5(e.target.value)} placeholder="e.g. 12345678" className="w-full px-3 py-2 bg-[#0a0a0f] border border-green-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-400" />
                                 </div>
@@ -1218,7 +1248,7 @@ export default function DashboardHome() {
                                   {freeClaimResult.text}
                                 </div>
                               )}
-                              <button onClick={handleFreeExnessClaim} disabled={claimingFree || !freeExnessMt5.trim()} className="w-full bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-400 hover:to-emerald-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-green-500/20 disabled:shadow-none" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                              <button onClick={handleFreeExnessClaim} disabled={claimingFree || !freeExnessMt5.trim() || !freeClaimPlanId} className="w-full bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-400 hover:to-emerald-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-green-500/20 disabled:shadow-none" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                                 {claimingFree ? 'SUBMITTING...' : 'CLAIM FREE LICENSE'}
                               </button>
                             </>
@@ -1782,15 +1812,14 @@ export default function DashboardHome() {
                   </div>
                 </div>
                 
-                {/* Extend Subscription - Show when expired or about to expire */}
+                {/* Extend Subscription - Show when ≤10 days (free) or ≤7 days (paid) */}
+                {getDaysRemaining(selectedLicense) <= ((purchaseRequests || []).some((r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status === 'approved' && r.issued_license_key === selectedLicense.license_key) ? 10 : 7) && (
                 <div className={`rounded-lg p-3 sm:p-4 border ${
                   getDaysRemaining(selectedLicense) <= 0 
                     ? 'bg-red-500/10 border-red-500/30' 
                     : getDaysRemaining(selectedLicense) <= 3 
                       ? 'bg-orange-500/10 border-orange-500/30' 
-                      : getDaysRemaining(selectedLicense) <= 7
-                        ? 'bg-yellow-500/10 border-yellow-500/30'
-                        : 'bg-cyan-500/5 border-cyan-500/20'
+                      : 'bg-yellow-500/10 border-yellow-500/30'
                 }`}>
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
@@ -1799,24 +1828,20 @@ export default function DashboardHome() {
                           ? 'text-red-400' 
                           : getDaysRemaining(selectedLicense) <= 3 
                             ? 'text-orange-400' 
-                            : getDaysRemaining(selectedLicense) <= 7
-                              ? 'text-yellow-400'
-                              : 'text-cyan-400'
+                            : 'text-yellow-400'
                       }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
                         {getDaysRemaining(selectedLicense) <= 0 
                           ? '🚨 License Expired!' 
                           : getDaysRemaining(selectedLicense) <= 3 
                             ? '⚠️ License Expiring Soon!' 
-                            : getDaysRemaining(selectedLicense) <= 7
-                              ? '⏰ License Expiring in 7 Days!'
-                              : `📅 ${getDaysRemaining(selectedLicense)} Days Remaining`}
+                            : `⏰ ${getDaysRemaining(selectedLicense)} Days Remaining`}
                       </p>
                       <p className="text-gray-400 text-[10px] sm:text-xs mt-1">
                         {getDaysRemaining(selectedLicense) <= 0 
                           ? 'Your license has expired. Extend now to continue trading.' 
                           : getDaysRemaining(selectedLicense) <= 3 
                             ? `Only ${getDaysRemaining(selectedLicense)} ${getDaysRemaining(selectedLicense) === 1 ? 'day' : 'days'} remaining. Extend to avoid interruption.`
-                            : `Extend your subscription anytime to add more days.`}
+                            : `Your license expires in ${getDaysRemaining(selectedLicense)} days. Extend now to avoid interruption.`}
                       </p>
                     </div>
                     <button
@@ -1824,9 +1849,7 @@ export default function DashboardHome() {
                       className={`flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${
                         getDaysRemaining(selectedLicense) <= 0 
                           ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400 text-white shadow-lg shadow-red-500/20' 
-                          : getDaysRemaining(selectedLicense) <= 7
-                            ? 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black shadow-lg shadow-yellow-500/20'
-                            : 'bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-black shadow-lg shadow-cyan-500/20'
+                          : 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black shadow-lg shadow-yellow-500/20'
                       }`}
                       style={{ fontFamily: 'Orbitron, sans-serif' }}
                     >
@@ -1835,6 +1858,7 @@ export default function DashboardHome() {
                     </button>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           </div>
@@ -2036,11 +2060,19 @@ export default function DashboardHome() {
                     </div>
                     <div>
                       <label className="text-gray-400 text-xs mb-1.5 block">Payment Proof (Screenshot) *</label>
-                      <label className="flex items-center justify-center gap-2 w-full bg-[#0a0a0f] border border-dashed border-cyan-500/30 rounded-lg px-3 py-3 cursor-pointer hover:border-cyan-500/50 transition-all">
-                        <Upload className="w-4 h-4 text-gray-400" />
-                        <span className="text-gray-400 text-xs">{extendProofFile ? extendProofFile.name : 'Click to upload proof'}</span>
-                        <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setExtendProofFile(e.target.files?.[0] || null)} />
-                      </label>
+                      <input type="file" accept="image/*,.pdf" className="hidden" id="extendProofUpload2" onChange={(e) => setExtendProofFile(e.target.files?.[0] || null)} />
+                      {extendProofFile ? (
+                        <div className="flex items-center gap-2 bg-green-500/5 border border-green-500/30 rounded-lg px-3 py-2.5">
+                          <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                          <span className="text-green-300 text-xs truncate flex-1">{extendProofFile.name}</span>
+                          <label htmlFor="extendProofUpload2" className="text-[10px] text-cyan-400 hover:text-cyan-300 cursor-pointer flex-shrink-0">Change</label>
+                          <button type="button" onClick={() => { setExtendProofFile(null); const el = document.getElementById('extendProofUpload2') as HTMLInputElement; if (el) el.value = ''; }} className="p-1 rounded hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all flex-shrink-0" title="Remove file"><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ) : (
+                        <label htmlFor="extendProofUpload2" className="flex items-center justify-center gap-2 w-full bg-[#0a0a0f] border border-dashed border-cyan-500/30 rounded-lg px-3 py-3 cursor-pointer hover:border-cyan-500/50 transition-all">
+                          <Upload className="w-4 h-4 text-gray-400" /><span className="text-gray-400 text-xs">Click to upload proof</span>
+                        </label>
+                      )}
                     </div>
                     <div>
                       <label className="text-gray-400 text-xs mb-1.5 block">Note (optional)</label>
@@ -2119,6 +2151,18 @@ export default function DashboardHome() {
                         </div>
                         <div className="space-y-2">
                           <div>
+                            <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Select Plan Duration *</label>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {plans.map((plan: any) => (
+                                <button key={plan.id} type="button" onClick={() => setFreeClaimPlanId(String(plan.id))}
+                                  className={`px-2 py-2 rounded-lg text-center transition-all border ${String(freeClaimPlanId) === String(plan.id) ? 'bg-green-500/20 border-green-400 text-green-300' : 'bg-[#0a0a0f] border-green-500/15 text-gray-400 hover:border-green-500/40'}`}>
+                                  <p className="text-[10px] sm:text-xs font-bold">{plan.name}</p>
+                                  <p className="text-[9px] text-gray-500">{plan.duration_days} days</p>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
                             <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Exness MT5 Account Number *</label>
                             <input type="text" value={freeExnessMt5} onChange={(e) => setFreeExnessMt5(e.target.value)} placeholder="e.g. 12345678" className="w-full px-3 py-2 bg-[#0a0a0f] border border-green-500/30 rounded-lg text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-400" />
                           </div>
@@ -2132,7 +2176,7 @@ export default function DashboardHome() {
                             {freeClaimResult.text}
                           </div>
                         )}
-                        <button onClick={handleFreeExnessClaim} disabled={claimingFree || !freeExnessMt5.trim()} className="w-full bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-400 hover:to-emerald-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-green-500/20 disabled:shadow-none" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                        <button onClick={handleFreeExnessClaim} disabled={claimingFree || !freeExnessMt5.trim() || !freeClaimPlanId} className="w-full bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-400 hover:to-emerald-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-green-500/20 disabled:shadow-none" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                           {claimingFree ? 'SUBMITTING...' : 'CLAIM FREE LICENSE'}
                         </button>
                       </>
@@ -2188,9 +2232,9 @@ export default function DashboardHome() {
               <div className="bg-gradient-to-b from-[#12121a] to-[#0a0a0f] border border-red-500/30 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl shadow-red-500/10" onClick={(e) => e.stopPropagation()}>
                 <div className="px-5 py-4 border-b border-red-500/20 bg-red-500/5">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center border border-red-500/30">
+                    <button onClick={() => setShowDeactivateModal(false)} className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center border border-red-500/30 hover:bg-red-500/30 transition-colors cursor-pointer">
                       <X className="w-5 h-5 text-red-400" />
-                    </div>
+                    </button>
                     <div>
                       <h3 className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>DEACTIVATE LICENSE</h3>
                       <p className="text-gray-500 text-[10px] sm:text-xs">This action will stop all trading</p>
@@ -2322,8 +2366,7 @@ export default function DashboardHome() {
   return (
     <div className="max-w-3xl mx-auto px-1 sm:px-4 py-4 sm:py-8">
       <div className="text-center mb-4 sm:mb-6">
-        <h2 className="text-lg sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Welcome,</h2>
-        <h2 className="text-sm sm:text-xl font-bold text-cyan-400 mb-1 break-all px-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{user?.name || user?.email}</h2>
+        <h2 className="text-lg sm:text-2xl font-bold mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}><span className="text-white">Welcome, </span><span className="text-cyan-400 break-all">{user?.name || user?.email}</span></h2>
         <p className="text-gray-500 text-xs sm:text-sm">Select a license to access your AI trading dashboard</p>
       </div>
 
@@ -2585,61 +2628,69 @@ export default function DashboardHome() {
 
               {/* Step 3: Complete - Crypto Payment */}
               {plans.length > 0 && purchaseStep === 3 && purchaseMethod === 'crypto' ? (
-                <>
-                  <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-2">
                     <button
                       type="button"
                       onClick={() => setPurchaseStep(2)}
-                      className="text-cyan-300 hover:text-cyan-200 text-xs font-medium"
+                      className="text-cyan-300 hover:text-cyan-200 text-xs font-medium flex items-center gap-1"
                     >
                       ← Back
                     </button>
-                    <p className="text-[10px] text-gray-600">Review wallet, upload proof, submit</p>
+                    <p className="text-[10px] text-gray-600 italic">Review wallet, upload proof, submit</p>
                   </div>
 
-                  <div className="mb-3">
-                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">MT5 Account Number</label>
-                    <input
-                      type="text"
-                      value={mt5Account}
-                      onChange={(e) => setMt5Account(e.target.value)}
-                      placeholder="Enter MT5 account number"
-                      className="w-full px-3 py-2 sm:py-2.5 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white placeholder-gray-600"
-                    />
-                    <p className="text-[10px] sm:text-xs text-gray-600 mt-1">License will be bound to this account only</p>
+                  {/* Section 1: Account & Network */}
+                  <div className="bg-[#0a0a12] border border-cyan-500/15 rounded-xl p-3 sm:p-4 space-y-3">
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1.5 block">MT5 Account Number</label>
+                      <input
+                        type="text"
+                        value={mt5Account}
+                        onChange={(e) => setMt5Account(e.target.value)}
+                        placeholder="Enter MT5 account number"
+                        className="w-full px-3 py-2 sm:py-2.5 bg-black/50 border border-cyan-500/20 rounded-lg focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 text-xs sm:text-sm text-white placeholder-gray-600 outline-none transition-all"
+                      />
+                      <p className="text-[10px] text-gray-600 mt-1">License will be bound to this account only</p>
+                    </div>
+
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1.5 block">Payment Network</label>
+                      <div className="flex flex-wrap gap-2">
+                        {paymentNetworks.map((n) => (
+                          <button
+                            key={n.id}
+                            type="button"
+                            onClick={() => setSelectedNetworkId(String(n.id))}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                              String(n.id) === String(selectedNetworkId)
+                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm shadow-cyan-500/10'
+                                : 'bg-white/5 text-gray-400 border-gray-700 hover:border-gray-500'
+                            }`}
+                          >
+                            {n.name} ({n.token_symbol})
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="mb-3">
-                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Payment Network</label>
-                    <select
-                      value={selectedNetworkId}
-                      onChange={(e) => setSelectedNetworkId(e.target.value)}
-                      className="w-full px-3 py-2 sm:py-2.5 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white"
-                    >
-                      <option value="" disabled>Select network</option>
-                      {paymentNetworks.map((n) => (
-                        <option key={n.id} value={String(n.id)}>
-                          {n.name} ({n.token_symbol})
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Wallet address is set from backend/admin</p>
-                  </div>
-
+                  {/* Section 2: Wallet & QR */}
                   {selectedPlan && selectedNetwork ? (
-                    <div className="mb-3 bg-[#0a0a0f] border border-cyan-500/20 rounded-xl p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Wallet className="w-4 h-4 text-yellow-400" />
-                            <p className="text-xs text-gray-400">Send exactly</p>
-                          </div>
-                          <p className="text-lg font-bold text-yellow-300" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                            ${selectedPlan.price} {selectedNetwork.token_symbol}
-                          </p>
-                          <p className="text-[10px] text-gray-500 mt-1">To wallet ({selectedNetwork.name})</p>
-                          <div className="mt-2 flex items-center gap-2">
-                            <code className="flex-1 font-mono text-[10px] sm:text-xs text-cyan-300 bg-black/40 px-2 py-2 rounded border border-cyan-500/20 break-all">
+                    <div className="bg-[#0a0a12] border border-cyan-500/15 rounded-xl p-3 sm:p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Wallet className="w-4 h-4 text-yellow-400" />
+                        <p className="text-xs text-gray-400">Send exactly</p>
+                      </div>
+                      <p className="text-xl sm:text-2xl font-bold text-yellow-300 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                        ${selectedPlan.price} {selectedNetwork.token_symbol}
+                      </p>
+                      <p className="text-[10px] text-gray-500 mb-3">To wallet ({selectedNetwork.name})</p>
+
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 bg-black/50 rounded-lg p-2.5 border border-cyan-500/15">
+                            <code className="text-cyan-400 text-[10px] sm:text-xs break-all flex-1 leading-relaxed">
                               {selectedNetwork.wallet_address}
                             </code>
                             <button
@@ -2649,50 +2700,50 @@ export default function DashboardHome() {
                                 setWalletCopied(true);
                                 setTimeout(() => setWalletCopied(false), 2000);
                               }}
-                              className={`p-2 rounded-lg border transition-all duration-300 ${walletCopied ? 'bg-green-500/20 border-green-500/50' : 'bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30'}`}
+                              className={`p-1.5 rounded-lg border transition-all duration-300 flex-shrink-0 ${walletCopied ? 'bg-green-500/20 border-green-500/50' : 'bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30'}`}
                               title={walletCopied ? 'Copied!' : 'Copy wallet'}
                             >
                               {walletCopied ? (
-                                <Check className="w-4 h-4 text-green-400" />
+                                <Check className="w-3.5 h-3.5 text-green-400" />
                               ) : (
-                                <Copy className="w-4 h-4 text-cyan-300" />
+                                <Copy className="w-3.5 h-3.5 text-cyan-300" />
                               )}
                             </button>
                           </div>
                         </div>
 
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 bg-white rounded-lg p-2 flex items-center justify-center flex-shrink-0">
-                          {qrCodeDataUrl ? (
+                        {qrCodeDataUrl && (
+                          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-lg p-1.5 flex items-center justify-center flex-shrink-0">
                             <img
                               alt="Wallet QR"
                               className="w-full h-full object-contain"
                               src={qrCodeDataUrl}
                             />
-                          ) : (
-                            <div className="flex items-center justify-center w-full h-full text-gray-400 text-xs">
-                              Loading QR...
-                            </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-[10px] text-gray-500 mt-2">After sending funds, upload proof and submit for admin approval.</p>
+                      <p className="text-[10px] text-gray-500 mt-2.5 flex items-center gap-1.5">
+                        <span className="w-1 h-1 bg-yellow-400 rounded-full inline-block" />
+                        After sending funds, upload proof below and submit for admin approval.
+                      </p>
                     </div>
                   ) : null}
 
-                  <div className="mb-3">
-                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Transaction ID (optional)</label>
-                    <input
-                      type="text"
-                      value={txid}
-                      onChange={(e) => setTxid(e.target.value)}
-                      placeholder="Paste TXID / Hash"
-                      className="w-full px-3 py-2 sm:py-2.5 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white placeholder-gray-600"
-                    />
-                  </div>
+                  {/* Section 3: Proof & Details */}
+                  <div className="bg-[#0a0a12] border border-cyan-500/15 rounded-xl p-3 sm:p-4 space-y-3">
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1.5 block">Transaction ID (optional)</label>
+                      <input
+                        type="text"
+                        value={txid}
+                        onChange={(e) => setTxid(e.target.value)}
+                        placeholder="Paste TXID / Hash"
+                        className="w-full px-3 py-2 sm:py-2.5 bg-black/50 border border-cyan-500/20 rounded-lg focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 text-xs sm:text-sm text-white placeholder-gray-600 outline-none transition-all"
+                      />
+                    </div>
 
-                  <div className="mb-3">
-                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Payment Proof (required)</label>
-                    <div className="flex items-center gap-2">
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1.5 block">Payment Proof (required)</label>
                       <input
                         type="file"
                         accept="image/*,application/pdf"
@@ -2700,39 +2751,53 @@ export default function DashboardHome() {
                         className="hidden"
                         id="proofUpload"
                       />
-                      <label
-                        htmlFor="proofUpload"
-                        className="flex-1 cursor-pointer inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-cyan-300 border border-cyan-500/30 px-4 py-2 rounded-lg font-bold text-xs sm:text-sm"
-                        style={{ fontFamily: 'Orbitron, sans-serif' }}
-                      >
-                        <Upload className="w-4 h-4" /> {proofFile ? 'Change Proof File' : 'Upload Proof'}
-                      </label>
                       {proofFile ? (
-                        <span className="text-[10px] sm:text-xs text-gray-400 truncate max-w-[140px]">{proofFile.name}</span>
-                      ) : null}
+                        <div className="flex items-center gap-2 bg-green-500/5 border border-green-500/30 rounded-lg px-3 py-2.5">
+                          <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                          <span className="text-green-300 text-xs truncate flex-1">{proofFile.name}</span>
+                          <label htmlFor="proofUpload" className="text-[10px] text-cyan-400 hover:text-cyan-300 cursor-pointer flex-shrink-0">Change</label>
+                          <button
+                            type="button"
+                            onClick={() => { setProofFile(null); const el = document.getElementById('proofUpload') as HTMLInputElement; if (el) el.value = ''; }}
+                            className="p-1 rounded hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all flex-shrink-0"
+                            title="Remove file"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor="proofUpload"
+                          className="flex items-center justify-center gap-2 w-full bg-black/30 border border-dashed border-cyan-500/25 hover:border-cyan-500/50 rounded-lg px-3 py-3 cursor-pointer transition-all"
+                        >
+                          <Upload className="w-4 h-4 text-gray-500" />
+                          <span className="text-gray-400 text-xs">Click to upload screenshot / PDF</span>
+                        </label>
+                      )}
                     </div>
-                    <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Screenshot / PDF of transfer confirmation</p>
-                  </div>
 
-                  <div className="mb-3">
-                    <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1">Note (optional)</label>
-                    <textarea
-                      value={userNote}
-                      onChange={(e) => setUserNote(e.target.value)}
-                      placeholder="Any note for admin (optional)"
-                      rows={2}
-                      className="w-full px-3 py-2 bg-[#0a0a0f] border border-cyan-500/30 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-xs sm:text-sm text-white placeholder-gray-600"
-                    />
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1.5 block">Note (optional)</label>
+                      <textarea
+                        value={userNote}
+                        onChange={(e) => setUserNote(e.target.value)}
+                        placeholder="Any note for admin (optional)"
+                        rows={2}
+                        className="w-full px-3 py-2 bg-black/50 border border-cyan-500/20 rounded-lg focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 text-xs sm:text-sm text-white placeholder-gray-600 outline-none transition-all resize-none"
+                      />
+                    </div>
                   </div>
 
                   {message.type === 'error' && (
-                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 rounded-lg text-xs sm:text-sm mb-3">
+                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2.5 rounded-lg text-xs sm:text-sm flex items-center gap-2">
+                      <X className="w-4 h-4 flex-shrink-0" />
                       {message.text}
                     </div>
                   )}
 
                   {message.type === 'success' && (
-                    <div className="bg-green-500/10 border border-green-500/30 text-green-300 px-3 py-2 rounded-lg text-xs sm:text-sm mb-3">
+                    <div className="bg-green-500/10 border border-green-500/30 text-green-300 px-3 py-2.5 rounded-lg text-xs sm:text-sm flex items-center gap-2">
+                      <Check className="w-4 h-4 flex-shrink-0" />
                       {message.text}
                     </div>
                   )}
@@ -2740,12 +2805,12 @@ export default function DashboardHome() {
                   <button
                     onClick={handlePurchase}
                     disabled={purchasing || !selectedPlan || !mt5Account.trim() || !selectedNetworkId || !proofFile}
-                    className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none"
+                    className="w-full bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 sm:py-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none flex items-center justify-center gap-2"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
-                    {purchasing ? 'SUBMITTING...' : 'SUBMIT PAYMENT PROOF'}
+                    {purchasing ? <><Loader2 className="w-4 h-4 animate-spin" /> SUBMITTING...</> : <><Upload className="w-4 h-4" /> SUBMIT PAYMENT PROOF</>}
                   </button>
-                </>
+                </div>
               ) : null}
 
               {/* Step 3: Complete - Free Subscription */}
@@ -2823,6 +2888,18 @@ export default function DashboardHome() {
 
                         <div className="space-y-2">
                           <div>
+                            <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Select Plan Duration *</label>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {plans.map((plan: any) => (
+                                <button key={plan.id} type="button" onClick={() => setFreeClaimPlanId(String(plan.id))}
+                                  className={`px-2 py-2 rounded-lg text-center transition-all border ${String(freeClaimPlanId) === String(plan.id) ? 'bg-green-500/20 border-green-400 text-green-300' : 'bg-[#0a0a0f] border-green-500/15 text-gray-400 hover:border-green-500/40'}`}>
+                                  <p className="text-[10px] sm:text-xs font-bold">{plan.name}</p>
+                                  <p className="text-[9px] text-gray-500">{plan.duration_days} days</p>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
                             <label className="block text-[10px] sm:text-xs text-gray-400 mb-1">Exness MT5 Account Number *</label>
                             <input
                               type="text"
@@ -2856,7 +2933,7 @@ export default function DashboardHome() {
 
                         <button
                           onClick={handleFreeExnessClaim}
-                          disabled={claimingFree || !freeExnessMt5.trim()}
+                          disabled={claimingFree || !freeExnessMt5.trim() || !freeClaimPlanId}
                           className="mt-3 w-full bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-400 hover:to-emerald-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-lg shadow-green-500/20 disabled:shadow-none"
                           style={{ fontFamily: 'Orbitron, sans-serif' }}
                         >
@@ -2868,9 +2945,14 @@ export default function DashboardHome() {
                 </>
               ) : null}
 
+              {pendingPaymentRequests.length > 0 && (
               <div className="mt-4 border-t border-cyan-500/10 pt-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs sm:text-sm font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>MY PAYMENT REQUESTS</p>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+                        <p className="text-xs sm:text-sm font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>PENDING REQUESTS</p>
+                        <span className="text-[10px] text-gray-500 bg-yellow-500/10 border border-yellow-500/20 px-1.5 py-0.5 rounded-full">{pendingPaymentRequests.length}</span>
+                      </div>
                       <button
                         onClick={async () => {
                           setRefreshing(true);
@@ -2882,57 +2964,38 @@ export default function DashboardHome() {
                           }
                         }}
                         disabled={refreshing}
-                        className="inline-flex items-center gap-2 text-cyan-300 hover:text-cyan-200 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
+                        className="inline-flex items-center gap-1.5 text-cyan-300 hover:text-cyan-200 disabled:opacity-50 disabled:cursor-not-allowed text-[10px] sm:text-xs font-medium"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
+                        <RefreshCw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Checking...' : 'Refresh'}
                       </button>
                     </div>
 
-                    {loadingRequests ? (
-                      <div className="text-gray-500 text-xs">Loading requests...</div>
-                    ) : pendingPaymentRequests.length === 0 ? (
-                      <div className="text-gray-600 text-xs">No pending requests.</div>
-                    ) : (
-                      <div className="space-y-2">
-                        {pendingPaymentRequests.slice(0, 10).map((r) => (
-                          <div key={r.id} className="bg-black/30 border border-cyan-500/10 rounded-lg p-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <div>
-                                <p className="text-white text-xs font-semibold">
-                                  #{r.request_number || r.id}
-                                  {r.request_type === 'extension' && <span className="text-yellow-400 ml-1">🔄 EXT</span>}
-                                  {' • '}{r.plan} • ${r.amount_usd}
-                                </p>
-                                <p className="text-gray-500 text-[10px]">{r.network?.name} • {new Date(r.created_at).toLocaleString()}</p>
-                              </div>
-                              <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
-                                r.status === 'approved'
-                                  ? 'bg-green-500/10 text-green-300 border-green-500/30'
-                                  : r.status === 'rejected'
-                                    ? 'bg-red-500/10 text-red-300 border-red-500/30'
-                                    : 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30'
-                              }`}>{String(r.status || '').toUpperCase()}</span>
+                    <div className="space-y-2">
+                      {pendingPaymentRequests.slice(0, 10).map((r) => (
+                        <div key={r.id} className="bg-yellow-500/[0.03] border border-yellow-500/15 rounded-lg p-3 hover:border-yellow-500/30 transition-colors">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-white text-xs font-semibold truncate">
+                                #{r.request_number || r.id}
+                                {r.request_type === 'extension' && <span className="text-yellow-400 ml-1">🔄 EXT</span>}
+                                {' • '}{r.plan} • ${r.amount_usd}
+                              </p>
+                              <p className="text-gray-500 text-[10px] mt-0.5">{r.network?.name ? `${r.network.name} • ` : ''}{new Date(r.created_at).toLocaleString()}</p>
                             </div>
-                            {r.issued_license_key ? (
-                              <div className="mt-2 flex items-center gap-2">
-                                <code className="flex-1 font-mono text-[10px] text-cyan-300 bg-black/40 px-2 py-1.5 rounded border border-cyan-500/20 truncate">
-                                  {r.issued_license_key}
-                                </code>
-                                <button
-                                  type="button"
-                                  onClick={() => navigator.clipboard.writeText(r.issued_license_key)}
-                                  className="p-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30"
-                                  title="Copy license key"
-                                >
-                                  <Copy className="w-4 h-4 text-cyan-300" />
-                                </button>
-                              </div>
-                            ) : null}
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-400"></span>
+                              </span>
+                              <span className="text-[10px] font-bold text-yellow-300">PENDING</span>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-gray-600 text-[10px] mt-2 text-center">Requests are reviewed within 24 hours. Click Refresh to check for updates.</p>
               </div>
+              )}
             </div>
           )}
         </div>
@@ -3232,7 +3295,7 @@ export default function DashboardHome() {
               )}
               
               {/* License Expiry Warning */}
-              {getDaysRemaining(lic) <= 7 && (
+              {getDaysRemaining(lic) <= ((purchaseRequests || []).some((r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status === 'approved' && r.issued_license_key === lic.license_key) ? 10 : 7) && (
                 <div className={`px-3 sm:px-5 py-2 border-b border-cyan-500/10 ${
                   getDaysRemaining(lic) <= 0 
                     ? 'bg-red-500/10' 
@@ -3260,7 +3323,7 @@ export default function DashboardHome() {
                           ? 'License Expired!' 
                           : getDaysRemaining(lic) <= 3 
                             ? 'Expiring Soon!' 
-                            : 'Expires in 7 Days!'}
+                            : `Expires in ${getDaysRemaining(lic)} Days`}
                       </p>
                       <p className="text-[10px] sm:text-xs text-gray-400">
                         {getDaysRemaining(lic) <= 0 
@@ -3367,9 +3430,9 @@ export default function DashboardHome() {
               {/* Header */}
               <div className="px-5 py-4 border-b border-red-500/20 bg-red-500/5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center border border-red-500/30">
+                  <button onClick={() => { setShowDeactivateModal(false); setDeactivatePassword(''); setDeactivateError(''); }} className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center border border-red-500/30 hover:bg-red-500/30 transition-colors cursor-pointer">
                     <X className="w-5 h-5 text-red-400" />
-                  </div>
+                  </button>
                   <div>
                     <h3 className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>DEACTIVATE LICENSE</h3>
                     <p className="text-gray-500 text-[10px] sm:text-xs">This action will stop all trading</p>

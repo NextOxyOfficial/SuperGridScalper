@@ -733,7 +733,7 @@ def password_reset_request(request):
             from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
             from django.core.mail import EmailMultiAlternatives
 
-            subject = 'Access Key Reset Request'
+            subject = '🔑 Access Key Reset Request'
 
             text_message = (
                 f"Hi {user.first_name or 'Trader'},\n\n"
@@ -749,14 +749,19 @@ def password_reset_request(request):
 
             html_message = render_email_template(
                 subject=subject,
-                heading='Access Key Reset',
+                heading='🔑 Access Key Reset',
                 message=f"""
                     <p>Hi <strong>{user.first_name or 'Trader'}</strong>,</p>
-                    <p>We received a request to reset your access key for your MarksTrades account.</p>
+                    <p>We received a request to reset the access key for your <strong>MarksTrades</strong> account.</p>
                     <p>Click the button below to set a new access key:</p>
-                    <div style="background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.2); border-radius: 8px; padding: 12px 16px; margin: 16px 0;">
-                        <p style="margin: 0; color: #facc15; font-size: 12px;">⏱ This link will expire in <strong>24 hours</strong></p>
+
+                    <div style="background-color: rgba(6, 182, 212, 0.1); border-left: 3px solid #06b6d4; padding: 14px; margin: 16px 0; border-radius: 4px;">
+                        <p style="margin: 0 0 6px 0; color: #06b6d4; font-weight: 600; font-size: 13px;">Request Details:</p>
+                        <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>Account:</strong> {user.email}</p>
+                        <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>Request Type:</strong> Access Key Reset</p>
+                        <p style="margin: 3px 0; color: #facc15; font-size: 13px;"><strong>⏱ Expires in:</strong> 24 hours</p>
                     </div>
+
                     <p style="color: #6b7280; font-size: 13px;">If you did not request this reset, you can safely ignore this email. Your access key will remain unchanged.</p>
                 """,
                 cta_text='RESET ACCESS KEY',
@@ -1895,6 +1900,7 @@ def claim_free_exness_license(request):
     email = (data.get('email') or '').strip()
     mt5_account = (data.get('mt5_account') or '').strip()
     exness_uid = (data.get('exness_uid') or '').strip()
+    plan_id = data.get('plan_id')
 
     if not email:
         return JsonResponse({'success': False, 'message': 'Email is required'}, status=400)
@@ -1916,8 +1922,15 @@ def claim_free_exness_license(request):
             'message': 'You already have a free Exness license claim. Please wait for admin verification or contact support.'
         }, status=400)
 
-    # Use the cheapest active plan as the free plan
-    plan = SubscriptionPlan.objects.filter(is_active=True).order_by('price').first()
+    # Use user-selected plan, fallback to cheapest active plan
+    plan = None
+    if plan_id:
+        try:
+            plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+        except SubscriptionPlan.DoesNotExist:
+            pass
+    if not plan:
+        plan = SubscriptionPlan.objects.filter(is_active=True).order_by('price').first()
     if not plan:
         return JsonResponse({'success': False, 'message': 'No plans available'}, status=500)
 
@@ -2037,6 +2050,7 @@ def request_free_extension(request):
 
     email = (data.get('email') or '').strip()
     license_key = (data.get('license_key') or '').strip().upper()
+    plan_id = data.get('plan_id')
 
     if not email:
         return JsonResponse({'success': False, 'message': 'Email is required'}, status=400)
@@ -2093,8 +2107,15 @@ def request_free_extension(request):
             'message': 'You already have a pending free extension request for this license. Please wait for admin verification.'
         }, status=400)
 
-    # Use the same plan as the original claim
-    plan = original_claim.plan or SubscriptionPlan.objects.filter(is_active=True).order_by('price').first()
+    # Use the user-selected plan, fallback to original claim's plan, then cheapest
+    plan = None
+    if plan_id:
+        try:
+            plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+        except SubscriptionPlan.DoesNotExist:
+            pass
+    if not plan:
+        plan = original_claim.plan or SubscriptionPlan.objects.filter(is_active=True).order_by('price').first()
     if not plan:
         return JsonResponse({'success': False, 'message': 'No plans available'}, status=500)
 
