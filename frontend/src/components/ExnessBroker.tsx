@@ -27,8 +27,8 @@ export default function ExnessBroker({ variant = 'full' }: ExnessBrokerProps) {
         {/* Top Accent Line */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-yellow-500 via-orange-400 to-yellow-500" />
         
-        <div className="relative p-4 sm:p-5">
-          <div className="flex items-center gap-3 sm:gap-4">
+        <div className="relative p-2 sm:p-5">
+          <div className="flex items-center gap-2 sm:gap-4">
             {/* Logo */}
             <div className="relative">
               <div className="absolute inset-0 bg-yellow-400/30 rounded-xl blur-md" />

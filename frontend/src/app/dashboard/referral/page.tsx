@@ -492,7 +492,7 @@ export default function ReferralPage() {
                               <p className="text-white text-sm sm:text-base font-bold">${payout.amount.toFixed(2)}</p>
                               <span className="text-gray-400 text-[10px] sm:text-xs capitalize bg-gray-800/60 px-2 py-0.5 rounded">{payout.payment_method}</span>
                             </div>
-                            <div className="flex items-center gap-3 sm:gap-4">
+                            <div className="flex items-center gap-2 sm:gap-4">
                               <span className={`inline-block px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${ps.bg} ${ps.text} capitalize`}>
                                 {payout.status}
                               </span>

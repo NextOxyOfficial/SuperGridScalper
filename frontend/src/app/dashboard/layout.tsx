@@ -99,7 +99,7 @@ function DashboardNav() {
             
             {/* Row 1: Logo + Logout (mobile) */}
             <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
-              <div className="flex items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <SiteLogo size="sm" />
               </div>
               {/* Mobile only: Logout on right */}
@@ -172,7 +172,7 @@ function DashboardNav() {
           
           {/* Row 1: Back + License Info + Days */}
           <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
-            <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <button 
                 onClick={() => clearSelectedLicense()}
                 className="text-cyan-300 hover:text-white text-sm sm:text-sm flex items-center gap-1 transition px-3 sm:px-3 py-2 sm:py-2 hover:bg-cyan-500/10 rounded-lg border border-cyan-500/30"

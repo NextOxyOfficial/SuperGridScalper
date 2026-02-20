@@ -241,7 +241,7 @@ export default function GuidelinePage() {
               <>
                 {/* Logged In: Dashboard Style Header */}
                 <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
-                  <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="flex items-center gap-2 sm:gap-4">
                     <SiteLogo size="sm" />
                   </div>
                 </div>
