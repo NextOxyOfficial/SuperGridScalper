@@ -3062,8 +3062,15 @@ export default function DashboardHome() {
         </div>
         {/* Portfolio Summary */}
         {licenses.length > 0 && (() => {
-          const currentKeys = new Set(licenses.map(l => l.license_key));
-          const relevantData = Object.entries(allTradeData).filter(([k]) => currentKeys.has(k)).map(([, v]) => v);
+          const now = new Date().getTime();
+          const activeLicenseKeys = new Set(licenses.filter(l => l.status === 'active').map(l => l.license_key));
+          const relevantData = Object.entries(allTradeData)
+            .filter(([k, v]: [string, any]) => {
+              if (!activeLicenseKeys.has(k)) return false;
+              const isConnected = v?.last_update && (Math.abs(now - new Date(v.last_update).getTime()) / 1000) < 60;
+              return !!isConnected;
+            })
+            .map(([, v]) => v);
           const totalBalance = relevantData.reduce((sum: number, td: any) => sum + (td?.account_balance || 0), 0);
           const totalProfit = relevantData.reduce((sum: number, td: any) => sum + (td?.account_profit || 0), 0);
           const totalPositions = relevantData.reduce((sum: number, td: any) => sum + (td?.total_buy_positions || 0) + (td?.total_sell_positions || 0), 0);
