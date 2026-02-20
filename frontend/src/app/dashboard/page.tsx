@@ -2576,7 +2576,7 @@ export default function DashboardHome() {
                       const isApproved = existingFreeClaim?.status === 'approved';
                       return (
                         <button
-                          onClick={() => { setPurchaseMethod('free'); setPurchaseStep(3); }}
+                          onClick={() => { setPurchaseMethod('free'); setPurchaseStep(3); if (selectedPlan) setFreeClaimPlanId(String(selectedPlan.id)); }}
                           disabled={!!existingFreeClaim}
                           className={`relative overflow-hidden rounded-xl border-2 p-4 sm:p-5 text-left transition-all ${
                             existingFreeClaim
@@ -2822,11 +2822,17 @@ export default function DashboardHome() {
                   </div>
 
                   {/* Selected Plan Summary */}
-                  <div className="mb-4 bg-[#0a0a0f] border border-green-500/20 rounded-lg px-3 py-2 flex items-center gap-2">
-                    <Gift className="w-4 h-4 text-green-400" />
-                    <span className="text-white text-xs sm:text-sm font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>{selectedPlan?.name}</span>
-                    <span className="text-green-400 text-xs sm:text-sm font-bold">FREE</span>
-                  </div>
+                  {(() => {
+                    const displayPlan = plans.find((p: any) => String(p.id) === String(freeClaimPlanId)) || selectedPlan;
+                    return (
+                      <div className="mb-4 bg-[#0a0a0f] border border-green-500/20 rounded-lg px-3 py-2 flex items-center gap-2">
+                        <Gift className="w-4 h-4 text-green-400" />
+                        <span className="text-white text-xs sm:text-sm font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>{displayPlan?.name}</span>
+                        <span className="text-gray-500 text-[10px] sm:text-xs">{displayPlan?.duration_days} days</span>
+                        <span className="text-green-400 text-xs sm:text-sm font-bold">FREE</span>
+                      </div>
+                    );
+                  })()}
 
                   {(() => {
                     const pendingFreeClaim = (purchaseRequests || []).find(
@@ -3245,25 +3251,6 @@ export default function DashboardHome() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 sm:gap-3">
-                  {(lic.status === 'active' || lic.status === 'suspended') && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (lic.status === 'active') {
-                          selectLicense(lic);
-                        }
-                        handleToggleLicense(lic.license_key, lic.status);
-                      }}
-                      disabled={togglingLicense === lic.license_key || (lic.status === 'active' && deactivateCooldown > 0)}
-                      className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all border ${
-                        lic.status === 'active'
-                          ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
-                          : 'bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20'
-                      } ${(togglingLicense === lic.license_key || (lic.status === 'active' && deactivateCooldown > 0)) ? 'opacity-50 cursor-wait' : ''}`}
-                    >
-                      {togglingLicense === lic.license_key ? '...' : lic.status === 'active' ? (deactivateCooldown > 0 ? `${deactivateCooldown}s` : 'Deactivate') : 'Activate'}
-                    </button>
-                  )}
                   <div className="flex items-center gap-1 sm:gap-2 text-cyan-400 group-hover:text-cyan-300 font-semibold text-xs sm:text-sm">
                     <span>Open</span>
                     <span className="group-hover:translate-x-1 transition-transform">→</span>
@@ -3335,21 +3322,40 @@ export default function DashboardHome() {
                 </div>
               )}
               
-              {/* Symbol & Price Row */}
-              {symbol && (
-                <div className="px-3 sm:px-5 py-2 bg-gradient-to-r from-yellow-500/5 to-transparent border-b border-yellow-500/10">
+              {/* MT5 & Price Row - always visible */}
+              <div className="px-3 sm:px-5 py-2 bg-gradient-to-r from-yellow-500/5 to-transparent border-b border-yellow-500/10 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] sm:text-xs text-gray-500">MT5:</span>
+                  <span className="text-[10px] sm:text-xs font-medium text-gray-300">{lic.mt5_account || '-'}</span>
+                  {lic.mt5_account && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(lic.mt5_account);
+                        const btn = e.currentTarget;
+                        btn.classList.add('copied');
+                        setTimeout(() => btn.classList.remove('copied'), 1500);
+                      }}
+                      className="group p-0.5 rounded hover:bg-cyan-500/20 transition-all text-gray-500 hover:text-cyan-400 [&.copied]:text-green-400 [&.copied]:bg-green-500/20"
+                      title="Copy MT5 account"
+                    >
+                      <Copy className="w-3 h-3 group-[.copied]:hidden" />
+                      <Check className="w-3 h-3 hidden group-[.copied]:block" />
+                    </button>
+                  )}
+                </div>
+                {symbol && (
                   <span className="text-xs sm:text-sm text-yellow-400 font-semibold">
                     {symbol} @ {currentPrice || ''}
                   </span>
-                </div>
-              )}
+                )}
+              </div>
               
-              {/* License Key Row - Simplified for mobile */}
+              {/* License Key Row */}
               <div className="px-3 sm:px-5 py-2 bg-[#0a0a0f]/50 border-b border-cyan-500/10">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] sm:text-xs text-gray-500">License:</span>
-                    <code className="text-[10px] sm:text-xs font-mono text-cyan-400 bg-[#0a0a0f] px-1.5 sm:px-2 py-0.5 rounded border border-cyan-500/20 truncate max-w-[150px] sm:max-w-none">
+                <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] sm:text-xs text-gray-500 shrink-0">License:</span>
+                    <code className="text-[10px] sm:text-xs font-mono text-cyan-400 bg-[#0a0a0f] px-1.5 sm:px-2 py-0.5 rounded border border-cyan-500/20 truncate max-w-[200px] sm:max-w-xs">
                       {lic.license_key}
                     </code>
                     <button
@@ -3360,33 +3366,31 @@ export default function DashboardHome() {
                         btn.classList.add('copied');
                         setTimeout(() => btn.classList.remove('copied'), 1500);
                       }}
-                      className="group p-1 rounded hover:bg-cyan-500/20 transition-all text-gray-400 hover:text-cyan-400 [&.copied]:text-green-400 [&.copied]:bg-green-500/20"
+                      className="group p-1 rounded hover:bg-cyan-500/20 transition-all text-gray-400 hover:text-cyan-400 [&.copied]:text-green-400 [&.copied]:bg-green-500/20 shrink-0"
                       title="Copy license key"
                     >
                       <Copy className="w-3.5 h-3.5 group-[.copied]:hidden" />
                       <Check className="w-3.5 h-3.5 hidden group-[.copied]:block" />
                     </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] sm:text-xs text-gray-500">MT5:</span>
-                    <span className="text-[10px] sm:text-xs font-medium text-gray-400">{lic.mt5_account || '-'}</span>
-                    {lic.mt5_account && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(lic.mt5_account);
-                          const btn = e.currentTarget;
-                          btn.classList.add('copied');
-                          setTimeout(() => btn.classList.remove('copied'), 1500);
-                        }}
-                        className="group p-0.5 rounded hover:bg-cyan-500/20 transition-all text-gray-500 hover:text-cyan-400 [&.copied]:text-green-400 [&.copied]:bg-green-500/20"
-                        title="Copy MT5 account"
-                      >
-                        <Copy className="w-3 h-3 group-[.copied]:hidden" />
-                        <Check className="w-3 h-3 hidden group-[.copied]:block" />
-                      </button>
-                    )}
-                  </div>
+                  {(lic.status === 'active' || lic.status === 'suspended') && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (lic.status === 'active') {
+                          selectLicense(lic);
+                        }
+                        handleToggleLicense(lic.license_key, lic.status);
+                      }}
+                      disabled={togglingLicense === lic.license_key || (lic.status === 'active' && deactivateCooldown > 0)}
+                      className={`shrink-0 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all border ${
+                        lic.status === 'active'
+                          ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
+                          : 'bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20'
+                      } ${(togglingLicense === lic.license_key || (lic.status === 'active' && deactivateCooldown > 0)) ? 'opacity-50 cursor-wait' : ''}`}
+                    >
+                      {togglingLicense === lic.license_key ? '...' : lic.status === 'active' ? (deactivateCooldown > 0 ? `${deactivateCooldown}s` : 'Deactivate') : 'Activate'}
+                    </button>
+                  )}
                 </div>
               </div>
               

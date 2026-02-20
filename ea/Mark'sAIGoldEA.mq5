@@ -87,6 +87,8 @@ int totalBuyOrders = 0;           // Positions + Pending (for grid limit)
 int totalSellOrders = 0;          // Positions + Pending (for grid limit)
 bool buyInRecovery = false;
 bool sellInRecovery = false;
+ulong buyRecoveryBreakevenTrailTickets[];
+ulong sellRecoveryBreakevenTrailTickets[];
 
 // Trading Log
 struct LogEntry
@@ -364,6 +366,76 @@ ulong GetLongDistancePositionTicket(bool isBuy)
     }
     
     return bestTicket;
+}
+
+bool IsTicketInList(const ulong &tickets[], ulong ticket)
+{
+    for(int i = 0; i < ArraySize(tickets); i++)
+    {
+        if(tickets[i] == ticket) return true;
+    }
+    return false;
+}
+
+void AddTicketToList(ulong &tickets[], ulong ticket)
+{
+    if(ticket <= 0) return;
+    if(IsTicketInList(tickets, ticket)) return;
+
+    int size = ArraySize(tickets);
+    ArrayResize(tickets, size + 1);
+    tickets[size] = ticket;
+}
+
+bool IsRecoveryBreakevenTrailTicket(bool isBuy, ulong ticket)
+{
+    return isBuy ? IsTicketInList(buyRecoveryBreakevenTrailTickets, ticket)
+                 : IsTicketInList(sellRecoveryBreakevenTrailTickets, ticket);
+}
+
+int GetRecoveryBreakevenTrailCount(bool isBuy)
+{
+    return isBuy ? ArraySize(buyRecoveryBreakevenTrailTickets)
+                 : ArraySize(sellRecoveryBreakevenTrailTickets);
+}
+
+void AddRecoveryBreakevenTrailTicket(bool isBuy, ulong ticket)
+{
+    if(isBuy)
+        AddTicketToList(buyRecoveryBreakevenTrailTickets, ticket);
+    else
+        AddTicketToList(sellRecoveryBreakevenTrailTickets, ticket);
+}
+
+void CleanupRecoveryBreakevenTrailTickets()
+{
+    int write = 0;
+    for(int i = 0; i < ArraySize(buyRecoveryBreakevenTrailTickets); i++)
+    {
+        ulong ticket = buyRecoveryBreakevenTrailTickets[i];
+        if(!PositionSelectByTicket(ticket)) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) != POSITION_TYPE_BUY) continue;
+
+        buyRecoveryBreakevenTrailTickets[write] = ticket;
+        write++;
+    }
+    ArrayResize(buyRecoveryBreakevenTrailTickets, write);
+
+    write = 0;
+    for(int i = 0; i < ArraySize(sellRecoveryBreakevenTrailTickets); i++)
+    {
+        ulong ticket = sellRecoveryBreakevenTrailTickets[i];
+        if(!PositionSelectByTicket(ticket)) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) != POSITION_TYPE_SELL) continue;
+
+        sellRecoveryBreakevenTrailTickets[write] = ticket;
+        write++;
+    }
+    ArrayResize(sellRecoveryBreakevenTrailTickets, write);
 }
 
 bool IsTesterMode()
@@ -1929,11 +2001,14 @@ void ManageRecoveryGrid(bool isBuy)
 
 //+------------------------------------------------------------------+
 //| Ensure Recovery Mode TP - Worker Function                         |
-//| Recovery Mode এ শুধুমাত্র long-distance position + profitable      |
-//| positions কে breakeven এ close করে। অন্য loss positions থাকে।    |
+//| Recovery Mode এ long-distance + profitable basket breakeven hit    |
+//| করলে close না করে trailing-এ arm করা হয় (specific tickets only)। |
 //+------------------------------------------------------------------+
 void EnsureRecoveryModeTP()
 {
+    // Keep tracked recovery baskets clean (remove already-closed tickets)
+    CleanupRecoveryBreakevenTrailTickets();
+
     // BUY Recovery Mode Management
     if(buyInRecovery)
     {
@@ -1948,12 +2023,15 @@ void EnsureRecoveryModeTP()
 }
 
 //+------------------------------------------------------------------+
-//| Check and Close Recovery Breakeven Group                          |
+//| Check and Arm Recovery Breakeven Group                            |
 //| যখন (long-distance loss + profitable positions) এর net profit    |
-//| >= RecoveryBreakevenPips হয়, তখন close করে।                      |
+//| >= RecoveryBreakevenPips হয়, তখন selected basket trailing arm।  |
 //+------------------------------------------------------------------+
 void CheckAndCloseRecoveryBreakeven(bool isBuy)
 {
+    // Already armed for trailing on this side, don't arm again until basket is closed
+    if(GetRecoveryBreakevenTrailCount(isBuy) > 0) return;
+
     // Get long-distance position ticket
     ulong longDistanceTicket = GetLongDistancePositionTicket(isBuy);
     if(longDistanceTicket <= 0) return;
@@ -1963,9 +2041,9 @@ void CheckAndCloseRecoveryBreakeven(bool isBuy)
     double profitableSum = 0.0;
     double totalLots = 0.0;
     
-    // Collect tickets to close and calculate profits
-    ulong ticketsToClose[];
-    int closeCount = 0;
+    // Collect tickets to trail and calculate profits
+    ulong ticketsToTrail[];
+    int trailCount = 0;
     
     for(int i = 0; i < PositionsTotal(); i++)
     {
@@ -1985,9 +2063,9 @@ void CheckAndCloseRecoveryBreakeven(bool isBuy)
         {
             longDistanceLoss = floatingProfit; // This will be negative (loss)
             totalLots += lots;
-            ArrayResize(ticketsToClose, closeCount + 1);
-            ticketsToClose[closeCount] = ticket;
-            closeCount++;
+            ArrayResize(ticketsToTrail, trailCount + 1);
+            ticketsToTrail[trailCount] = ticket;
+            trailCount++;
             continue;
         }
         
@@ -1996,11 +2074,13 @@ void CheckAndCloseRecoveryBreakeven(bool isBuy)
         {
             profitableSum += floatingProfit;
             totalLots += lots;
-            ArrayResize(ticketsToClose, closeCount + 1);
-            ticketsToClose[closeCount] = ticket;
-            closeCount++;
+            ArrayResize(ticketsToTrail, trailCount + 1);
+            ticketsToTrail[trailCount] = ticket;
+            trailCount++;
         }
     }
+
+    if(trailCount <= 0 || totalLots <= 0.0) return;
     
     // Calculate net profit
     double netProfit = longDistanceLoss + profitableSum;
@@ -2035,46 +2115,125 @@ void CheckAndCloseRecoveryBreakeven(bool isBuy)
     
     AddToLog(StringFormat("%s Recovery Breakeven HIT! Net=%.2f >= Target=%.2f", 
         isBuy ? "BUY" : "SELL", netProfit, targetProfit), "RECOVERY");
-    
-    // Close only the selected positions
-    for(int i = 0; i < closeCount; i++)
+
+    // Arm trailing only for this specific breakeven basket
+    for(int i = 0; i < trailCount; i++)
     {
-        if(trade.PositionClose(ticketsToClose[i]))
+        AddRecoveryBreakevenTrailTicket(isBuy, ticketsToTrail[i]);
+    }
+
+    // Calculate basket weighted average open price for common initial SL
+    double wOpen = 0.0, wLots = 0.0;
+    for(int i = 0; i < trailCount; i++)
+    {
+        ulong ticket = ticketsToTrail[i];
+        if(!PositionSelectByTicket(ticket)) continue;
+        double lots = PositionGetDouble(POSITION_VOLUME);
+        wOpen += PositionGetDouble(POSITION_PRICE_OPEN) * lots;
+        wLots += lots;
+    }
+    if(wLots > 0.0)
+    {
+        double basketBase = wOpen / wLots;
+        double commonSL = isBuy ?
+            NormalizeDouble(basketBase - (RecoveryInitialSLPips * pip), _Digits) :
+            NormalizeDouble(basketBase + (RecoveryInitialSLPips * pip), _Digits);
+
+        // Set the same initial SL on every basket position immediately
+        for(int i = 0; i < trailCount; i++)
         {
-            AddToLog(StringFormat("%s Recovery: Closed position #%I64u", 
-                isBuy ? "BUY" : "SELL", ticketsToClose[i]), "RECOVERY");
-        }
-        else
-        {
-            AddToLog(StringFormat("%s Recovery: Failed to close #%I64u | Error: %d", 
-                isBuy ? "BUY" : "SELL", ticketsToClose[i], GetLastError()), "RECOVERY");
+            ulong ticket = ticketsToTrail[i];
+            if(!PositionSelectByTicket(ticket)) continue;
+            double currentSL = PositionGetDouble(POSITION_SL);
+            double currentTP = PositionGetDouble(POSITION_TP);
+            // Only set if no SL yet or new SL is better (tighter / safer)
+            bool needsSet = (currentSL == 0) ||
+                (isBuy  && commonSL > currentSL) ||
+                (!isBuy && commonSL < currentSL);
+            if(needsSet)
+                trade.PositionModify(ticket, commonSL, currentTP);
         }
     }
-    
-    AddToLog(StringFormat("%s Recovery: Closed %d positions at breakeven (Net: %.2f)", 
-        isBuy ? "BUY" : "SELL", closeCount, netProfit), "RECOVERY");
-    
-    // Delete ALL pending orders for this side (both normal and recovery)
-    // This ensures grid will recreate orders at correct positions
-    for(int i = OrdersTotal() - 1; i >= 0; i--)
+
+    AddToLog(StringFormat("%s Recovery: Armed trailing for %d basket positions (Net: %.2f) — common SL set", 
+        isBuy ? "BUY" : "SELL", trailCount, netProfit), "RECOVERY");
+}
+
+//+------------------------------------------------------------------+
+//| Apply Recovery Breakeven Trailing (only selected basket)          |
+//+------------------------------------------------------------------+
+void ApplyRecoveryBreakevenTrailingForSide(bool isBuy)
+{
+    ulong trackedTickets[];
+    if(isBuy)
+        ArrayCopy(trackedTickets, buyRecoveryBreakevenTrailTickets);
+    else
+        ArrayCopy(trackedTickets, sellRecoveryBreakevenTrailTickets);
+
+    int trackedCount = ArraySize(trackedTickets);
+    if(trackedCount <= 0) return;
+
+    double weightedOpen = 0.0;
+    double totalLots = 0.0;
+
+    for(int i = 0; i < trackedCount; i++)
     {
-        ulong ticket = OrderGetTicket(i);
-        if(ticket <= 0) continue;
-        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-        
-        ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-        bool isThisSide = (isBuy && orderType == ORDER_TYPE_BUY_LIMIT) || 
-                          (!isBuy && orderType == ORDER_TYPE_SELL_LIMIT);
-        
-        if(isThisSide)
-        {
-            if(trade.OrderDelete(ticket))
-            {
-                AddToLog(StringFormat("%s Recovery: Deleted pending order #%I64u after breakeven", 
-                    isBuy ? "BUY" : "SELL", ticket), "RECOVERY");
-            }
-        }
+        ulong ticket = trackedTickets[i];
+        if(!PositionSelectByTicket(ticket)) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+
+        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+        double lots = PositionGetDouble(POSITION_VOLUME);
+        weightedOpen += openPrice * lots;
+        totalLots += lots;
+    }
+
+    if(totalLots <= 0.0) return;
+
+    double basePrice = weightedOpen / totalLots;
+    double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    double profitPips = isBuy ?
+        (currentPrice - basePrice) / pip :
+        (basePrice - currentPrice) / pip;
+
+    if(profitPips < RecoveryTrailingStartPips) return;
+
+    double priceMovement = profitPips - RecoveryTrailingStartPips;
+    double slMovement = priceMovement * RecoveryTrailingRatio;
+    double newSL = isBuy ?
+        NormalizeDouble(basePrice + (RecoveryInitialSLPips * pip) + (slMovement * pip), _Digits) :
+        NormalizeDouble(basePrice - (RecoveryInitialSLPips * pip) - (slMovement * pip), _Digits);
+
+    int updateCount = 0;
+    for(int i = 0; i < trackedCount; i++)
+    {
+        ulong ticket = trackedTickets[i];
+        if(!PositionSelectByTicket(ticket)) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+
+        double currentSL = PositionGetDouble(POSITION_SL);
+        double currentTP = PositionGetDouble(POSITION_TP);
+
+        bool needsUpdate = (currentSL == 0) ||
+            (isBuy && newSL > currentSL + (0.5 * pip)) ||
+            (!isBuy && newSL < currentSL - (0.5 * pip));
+
+        if(needsUpdate && trade.PositionModify(ticket, newSL, currentTP))
+            updateCount++;
+    }
+
+    if(updateCount > 0)
+    {
+        AddToLog(StringFormat("%s Recovery BE Trail: Updated %d positions | Profit: %.1f pips",
+            isBuy ? "BUY" : "SELL", updateCount, profitPips), "TRAILING");
     }
 }
 
@@ -2089,6 +2248,8 @@ void CheckAndCloseRecoveryBreakeven(bool isBuy)
 //+------------------------------------------------------------------+
 void ApplyTrailing()
 {
+    CleanupRecoveryBreakevenTrailTickets();
+
     // Recovery mode এ average price calculate করি
     // কারণ recovery mode এ সব positions একসাথে close হবে
     double buyAvgPrice = 0, sellAvgPrice = 0;
@@ -2104,6 +2265,11 @@ void ApplyTrailing()
         double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
         double lots = PositionGetDouble(POSITION_VOLUME);
         ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+
+        bool isTrackedTicket = (type == POSITION_TYPE_BUY) ?
+            IsRecoveryBreakevenTrailTicket(true, ticket) :
+            IsRecoveryBreakevenTrailTicket(false, ticket);
+        if(isTrackedTicket) continue;
         
         if(type == POSITION_TYPE_BUY)
         {
@@ -2129,6 +2295,12 @@ void ApplyTrailing()
         if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
         
         ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+
+        bool isTrackedTicket = (type == POSITION_TYPE_BUY) ?
+            IsRecoveryBreakevenTrailTicket(true, ticket) :
+            IsRecoveryBreakevenTrailTicket(false, ticket);
+        if(isTrackedTicket) continue;
+
         double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
         double currentPrice = type == POSITION_TYPE_BUY ? 
             SymbolInfoDouble(_Symbol, SYMBOL_BID) : 
@@ -2188,6 +2360,10 @@ void ApplyTrailing()
             }
         }
     }
+
+    // Apply isolated trailing for breakeven-selected recovery baskets
+    ApplyRecoveryBreakevenTrailingForSide(true);
+    ApplyRecoveryBreakevenTrailingForSide(false);
 }
 
 //+------------------------------------------------------------------+

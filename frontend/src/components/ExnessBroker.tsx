@@ -57,14 +57,13 @@ export default function ExnessBroker({ variant = 'full' }: ExnessBrokerProps) {
                 Exness Standard Cent
               </h4>
               <p className="text-gray-400 text-[10px] sm:text-xs mt-0.5">Low spreads • Instant deposit & withdrawal</p>
-            </div>
-            
-            {/* CTA Button */}
-            <div className="flex-shrink-0">
-              <div className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg shadow-lg shadow-yellow-500/30 group-hover:shadow-yellow-500/50 group-hover:scale-105 transition-all duration-300">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] sm:text-xs font-bold text-black whitespace-nowrap">Open Account</span>
-                  <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-black" />
+              {/* CTA Button - below description */}
+              <div className="mt-2">
+                <div className="inline-flex bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg shadow-lg shadow-yellow-500/30 group-hover:shadow-yellow-500/50 group-hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] sm:text-xs font-bold text-black whitespace-nowrap">Open Account</span>
+                    <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-black" />
+                  </div>
                 </div>
               </div>
             </div>
