@@ -3150,14 +3150,17 @@ export default function DashboardHome() {
             const bBalance = bTradeData?.account_balance ?? 0;
             const aActive = a.status === 'active';
             const bActive = b.status === 'active';
-            
-            // Primary: Active licenses on top, deactivated/expired below
-            if (aActive && !bActive) return -1;
-            if (!aActive && bActive) return 1;
-            
-            // Secondary: Within same group, sort by balance high→low
+            const aConnected = !!(aTradeData?.last_update && (Math.abs(new Date().getTime() - new Date(aTradeData.last_update).getTime()) / 1000) < 60);
+            const bConnected = !!(bTradeData?.last_update && (Math.abs(new Date().getTime() - new Date(bTradeData.last_update).getTime()) / 1000) < 60);
+
+            // Tier 1: connected + active (highest priority)
+            const aTier = aActive && aConnected ? 0 : aActive ? 1 : 2;
+            const bTier = bActive && bConnected ? 0 : bActive ? 1 : 2;
+            if (aTier !== bTier) return aTier - bTier;
+
+            // Within same tier: sort by balance high→low
             if (aBalance !== bBalance) return bBalance - aBalance;
-            
+
             // Tertiary: by expiry date
             const aExpiry = new Date(a.expires_at || 0).getTime();
             const bExpiry = new Date(b.expires_at || 0).getTime();
