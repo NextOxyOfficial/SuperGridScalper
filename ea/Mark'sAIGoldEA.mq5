@@ -20,15 +20,15 @@ input int       CachedLicenseMaxAgeHours = 24;
 #define BuyRangeStart       2001.0
 #define BuyRangeEnd         8801.0
 #define BuyGapPips          5.0
-#define MaxBuyOrders        5
-#define BuyTakeProfitPips   15
+#define MaxBuyOrders        6
+#define BuyTakeProfitPips   25
 #define BuyStopLossPips     0.0
 
 #define SellRangeStart      8802.0
 #define SellRangeEnd        2002.0
 #define SellGapPips         6.0
-#define MaxSellOrders       5
-#define SellTakeProfitPips  15
+#define MaxSellOrders       6
+#define SellTakeProfitPips  25
 #define SellStopLossPips    0.0
 
 #define BuyRecoveryGapPips   6
@@ -62,16 +62,16 @@ input int       CachedLicenseMaxAgeHours = 24;
 // Recovery mode activates when positions >= MaxOrders
 
 #define EnableRecovery          true   // Recovery mode enable/disable
-#define RecoveryTakeProfitPips  2.50  // Recovery mode এ TP (average price থেকে) - NOT USED for breakeven
-#define RecoveryBreakevenPips   2.50  // Breakeven close এ profit pips (long-distance + profitable positions)
-#define RecoveryTrailingStartPips 3.0  // Recovery mode এ trailing শুরু threshold
-#define RecoveryInitialSLPips   4.5    // Recovery mode এ initial SL
+#define RecoveryTakeProfitPips  25.0  // Recovery mode এ TP (average price থেকে) - NOT USED for breakeven
+#define RecoveryBreakevenPips   3.5  // Breakeven close এ profit pips (long-distance + profitable positions)
+#define RecoveryTrailingStartPips 3.5  // Recovery mode এ trailing শুরু threshold
+#define RecoveryInitialSLPips   2.75    // Recovery mode এ initial SL
 #define RecoveryTrailingRatio   0.5    // Recovery mode এ trailing ratio
 #define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
-#define MaxRecoveryLotSize      0.30    // Recovery mode এ সর্বোচ্চ lot size (এর বেশি হবে না)
+#define MaxRecoveryLotSize      0.26    // Recovery mode এ সর্বোচ্চ lot size (এর বেশি হবে না)
 #define MaxRecoveryOrders       200
 
-#define LotSize         0.15
+#define LotSize         0.10
 #define MagicNumber     999888
 #define OrderComment    "CleanGrid"
 #define ManageAllTrades false

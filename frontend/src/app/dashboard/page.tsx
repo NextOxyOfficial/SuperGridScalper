@@ -3258,8 +3258,8 @@ export default function DashboardHome() {
                 </div>
               </div>
               
-              {/* Trading Mode Row - Show when tradingMode data exists (stable, no flicker) */}
-              {tradingMode && (
+              {/* Trading Mode Row - only show when connected */}
+              {isConnected && tradingMode && (
                 <div className="px-3 sm:px-5 py-2 border-b border-cyan-500/10">
                   <span className={`inline-flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold border ${
                     isRecoveryMode 
@@ -3344,7 +3344,7 @@ export default function DashboardHome() {
                     </button>
                   )}
                 </div>
-                {symbol && (
+                {isConnected && symbol && (
                   <span className="text-xs sm:text-sm text-yellow-400 font-semibold">
                     {symbol} @ {currentPrice || ''}
                   </span>
@@ -3398,17 +3398,17 @@ export default function DashboardHome() {
               <div className="px-3 sm:px-5 py-3 sm:py-4 grid grid-cols-4 gap-2 sm:gap-4">
                 <div className="text-center sm:text-left">
                   <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Balance</p>
-                  <p className="text-sm sm:text-lg font-bold text-white">${balance?.toLocaleString() || '-'}</p>
+                  <p className="text-sm sm:text-lg font-bold text-white">{isConnected && balance !== undefined ? `$${balance?.toLocaleString()}` : '-'}</p>
                 </div>
                 <div className="text-center sm:text-left">
                   <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">P/L</p>
-                  <p className={`text-sm sm:text-lg font-bold ${(profit || 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
-                    {profit !== undefined ? `${profit >= 0 ? '+' : ''}$${profit?.toFixed(0)}` : '-'}
+                  <p className={`text-sm sm:text-lg font-bold ${isConnected && profit !== undefined ? ((profit || 0) >= 0 ? 'text-cyan-400' : 'text-red-400') : 'text-gray-600'}`}>
+                    {isConnected && profit !== undefined ? `${profit >= 0 ? '+' : ''}$${profit?.toFixed(0)}` : '-'}
                   </p>
                 </div>
                 <div className="text-center sm:text-left">
                   <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Pos</p>
-                  <p className="text-sm sm:text-lg font-bold text-white">{totalPositions}</p>
+                  <p className="text-sm sm:text-lg font-bold text-white">{isConnected ? totalPositions : '-'}</p>
                 </div>
                 <div className="text-center sm:text-left">
                   <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Expires</p>
