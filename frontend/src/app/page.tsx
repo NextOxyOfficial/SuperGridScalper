@@ -469,15 +469,25 @@ export default function Home() {
       })
 
       if (response.data.success) {
-        localStorage.setItem('user', JSON.stringify(response.data.user))
-        localStorage.setItem('licenses', JSON.stringify(response.data.licenses || []))
-        setShowRegisterModal(false)
-        clearAuthParam()
-        setEmail('')
-        setPassword('')
-        setConfirmPassword('')
-        setFirstName('')
-        router.push('/dashboard')
+        if (response.data.requires_verification) {
+          setShowRegisterModal(false)
+          clearAuthParam()
+          setEmail('')
+          setPassword('')
+          setConfirmPassword('')
+          setFirstName('')
+          alert('Registration successful! Please check your email (including spam folder) to verify your account before logging in.')
+        } else {
+          localStorage.setItem('user', JSON.stringify(response.data.user))
+          localStorage.setItem('licenses', JSON.stringify(response.data.licenses || []))
+          setShowRegisterModal(false)
+          clearAuthParam()
+          setEmail('')
+          setPassword('')
+          setConfirmPassword('')
+          setFirstName('')
+          router.push('/dashboard')
+        }
       } else {
         setError(response.data.message || 'Registration failed')
       }
@@ -752,10 +762,18 @@ export default function Home() {
                     clearAuthParam()
                     router.push('/dashboard')
                   } else {
-                    setError(response.data.message || 'Login failed')
+                    if (response.data.requires_verification) {
+                      setError('Please verify your email first. Check your inbox/spam for the verification link.')
+                    } else {
+                      setError(response.data.message || 'Login failed')
+                    }
                   }
                 } catch (err: any) {
-                  setError(err.response?.data?.message || 'Invalid credentials')
+                  if (err.response?.data?.requires_verification) {
+                    setError('Please verify your email first. Check your inbox/spam for the verification link.')
+                  } else {
+                    setError(err.response?.data?.message || 'Invalid credentials')
+                  }
                 }
                 setSubmitting(false)
               }} className="space-y-3 sm:space-y-3.5 relative">
