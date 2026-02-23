@@ -1737,13 +1737,11 @@ void ManageRecoveryGrid(bool isBuy)
         }
     }
     
-    // Calculate what the correct recovery lot should be (based on closest position)
-    double correctRecoveryLot = closestLotForCheck + RecoveryLotIncrement;
     double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
     if(lotStep <= 0) lotStep = 0.01;
-    correctRecoveryLot = MathFloor(correctRecoveryLot / lotStep) * lotStep;
     
     // Calculate expected recovery price based on CLOSEST position
+    // Then find first empty slot (skip prices where positions already exist)
     double gapPips = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
     double expectedRecoveryPrice = isBuy ?
         NormalizeDouble(closestPriceForCheck - (gapPips * pip), _Digits) :
@@ -1755,8 +1753,35 @@ void ManageRecoveryGrid(bool isBuy)
     if(!isBuy && expectedRecoveryPrice <= currentPriceForCheck)
         expectedRecoveryPrice = NormalizeDouble(currentPriceForCheck + (gapPips * pip), _Digits);
     
-    // Count recovery PENDING orders - simplified check, just count valid ones
+    // Find first empty slot (skip prices where positions already exist)
+    double gapPriceForSlot = gapPips * pip;
+    for(int slotAttempt = 0; slotAttempt < 50; slotAttempt++)
+    {
+        bool occupied = false;
+        for(int p = 0; p < PositionsTotal(); p++)
+        {
+            ulong pTicket = PositionGetTicket(p);
+            if(pTicket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            ENUM_POSITION_TYPE pType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if((isBuy && pType != POSITION_TYPE_BUY) || (!isBuy && pType != POSITION_TYPE_SELL)) continue;
+            if(MathAbs(PositionGetDouble(POSITION_PRICE_OPEN) - expectedRecoveryPrice) < gapPriceForSlot * 0.5)
+            {
+                occupied = true;
+                break;
+            }
+        }
+        if(!occupied) break;
+        if(isBuy) expectedRecoveryPrice = NormalizeDouble(expectedRecoveryPrice - gapPriceForSlot, _Digits);
+        else expectedRecoveryPrice = NormalizeDouble(expectedRecoveryPrice + gapPriceForSlot, _Digits);
+    }
+    
+    // Count recovery PENDING orders AND relocate if too far from expected price
     int recoveryPendingCount = 0;
+    double gapPipsForRelocate = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
+    double relocateThreshold = gapPipsForRelocate * pip * 1.5; // If order is >1.5x gap away from expected, relocate
+    
     for(int i = OrdersTotal() - 1; i >= 0; i--)
     {
         ulong ticket = OrderGetTicket(i);
@@ -1770,6 +1795,46 @@ void ManageRecoveryGrid(bool isBuy)
             ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
             if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
             {
+                double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
+                double orderLot = OrderGetDouble(ORDER_VOLUME_CURRENT);
+                double orderTP = OrderGetDouble(ORDER_TP);
+                
+                // Check if this pending order is too far from expected recovery price
+                double distFromExpected = MathAbs(orderPrice - expectedRecoveryPrice);
+                
+                if(distFromExpected > relocateThreshold)
+                {
+                    // Order is stale/far away - relocate it to the correct price
+                    double newPrice = expectedRecoveryPrice;
+                    
+                    // Validate new price for pending order
+                    if(isBuy && newPrice >= currentPriceForCheck)
+                        newPrice = NormalizeDouble(currentPriceForCheck - (gapPipsForRelocate * pip), _Digits);
+                    if(!isBuy && newPrice <= currentPriceForCheck)
+                        newPrice = NormalizeDouble(currentPriceForCheck + (gapPipsForRelocate * pip), _Digits);
+                    
+                    // Recalculate TP based on new avg if positions changed
+                    double newTP = breakevenTP;
+                    
+                    if(trade.OrderModify(ticket, newPrice, 0, newTP, ORDER_TIME_GTC, 0))
+                    {
+                        AddToLog(StringFormat("%s Recovery RELOCATED pending order #%I64u: %.2f -> %.2f (was %.1f pips from expected)", 
+                            isBuy ? "BUY" : "SELL", ticket, orderPrice, newPrice, distFromExpected / pip), "RECOVERY");
+                    }
+                    else
+                    {
+                        // If modify fails (e.g. price too close to market), delete and let it re-place
+                        int err = GetLastError();
+                        if(err == 10016 || err == 10015 || err == 10014) // Invalid stops/price
+                        {
+                            trade.OrderDelete(ticket);
+                            AddToLog(StringFormat("%s Recovery DELETED stale order #%I64u (modify failed err=%d, will re-place)", 
+                                isBuy ? "BUY" : "SELL", ticket, err), "RECOVERY");
+                            continue; // Don't count this deleted order
+                        }
+                    }
+                }
+                
                 recoveryPendingCount++;
             }
         }
@@ -1822,6 +1887,7 @@ void ManageRecoveryGrid(bool isBuy)
         double closestPrice = isBuy ? 999999 : 0;      // Closest to current market
         double closestLot = LotSize;
         double closestDistance = 999999;
+        double maxLotInPositions = LotSize;              // Track highest lot for recovery lot calc
         
         for(int i = 0; i < PositionsTotal(); i++)
         {
@@ -1835,6 +1901,10 @@ void ManageRecoveryGrid(bool isBuy)
             
             double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
             double lots = PositionGetDouble(POSITION_VOLUME);
+            
+            // Track highest lot size among all positions
+            if(lots > maxLotInPositions)
+                maxLotInPositions = lots;
             
             // Find TOP DISTANCE position (highest loss)
             // BUY: highest price = most loss when price goes down
@@ -1881,66 +1951,88 @@ void ManageRecoveryGrid(bool isBuy)
             recoveryPrice = NormalizeDouble(currentPrice + (gapPips * pip), _Digits);
         }
         
-        // Use closest position for reference, lot = closest lot + increment
+        // Use closest position for price reference, highest lot for lot calculation
         double extremePrice = closestPrice;
-        double extremeLot = closestLot;
+        double extremeLot = maxLotInPositions;
+        
+        // ===== FIND EMPTY SLOT for recovery order =====
+        // If recoveryPrice already has a position/order, keep moving further until empty slot found
+        double gapPrice = gapPips * pip;
+        int maxAttempts = 50; // Safety limit
+        
+        for(int attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            bool slotOccupied = false;
+            
+            // Check recovery pending orders at this price
+            for(int k = 0; k < OrdersTotal(); k++)
+            {
+                ulong ticket = OrderGetTicket(k);
+                if(ticket <= 0) continue;
+                if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+                if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+                
+                string comment = OrderGetString(ORDER_COMMENT);
+                if(StringFind(comment, "Recovery") < 0) continue;
+                
+                ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+                if((isBuy && type != ORDER_TYPE_BUY_LIMIT) || (!isBuy && type != ORDER_TYPE_SELL_LIMIT)) continue;
+                
+                double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
+                if(MathAbs(orderPrice - recoveryPrice) < gapPrice * 0.5)
+                {
+                    slotOccupied = true;
+                    break;
+                }
+            }
+            
+            // Check all positions at this price
+            if(!slotOccupied)
+            {
+                for(int k = 0; k < PositionsTotal(); k++)
+                {
+                    ulong ticket = PositionGetTicket(k);
+                    if(ticket <= 0) continue;
+                    if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+                    if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+                    
+                    ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+                    if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+                    
+                    double posPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+                    if(MathAbs(posPrice - recoveryPrice) < gapPrice * 0.5)
+                    {
+                        slotOccupied = true;
+                        break;
+                    }
+                }
+            }
+            
+            if(!slotOccupied)
+                break; // Found empty slot
+            
+            // Move to next slot: BUY goes lower, SELL goes higher
+            if(isBuy)
+                recoveryPrice = NormalizeDouble(recoveryPrice - gapPrice, _Digits);
+            else
+                recoveryPrice = NormalizeDouble(recoveryPrice + gapPrice, _Digits);
+        }
+        
+        // Re-validate recovery price after slot search
+        if(isBuy && recoveryPrice >= currentPrice)
+        {
+            AddToLog(StringFormat("BUY Recovery: No valid slot found below price %.2f", currentPrice), "RECOVERY");
+            return;
+        }
+        if(!isBuy && recoveryPrice <= currentPrice)
+        {
+            AddToLog(StringFormat("SELL Recovery: No valid slot found above price %.2f", currentPrice), "RECOVERY");
+            return;
+        }
         
         // Debug log
         AddToLog(StringFormat("%s Recovery: TopLoss=%.2f | Closest=%.2f | Target=%.2f | Current=%.2f", 
             isBuy ? "BUY" : "SELL", topDistancePrice, closestPrice, recoveryPrice, currentPrice), "RECOVERY");
-        
-        // ===== DUPLICATE CHECK for recovery order =====
-        double gapPrice = gapPips * pip;
-        bool duplicateExists = false;
-        
-        // Check ONLY recovery pending orders (ignore normal orders as they will be deleted)
-        for(int k = 0; k < OrdersTotal(); k++)
-        {
-            ulong ticket = OrderGetTicket(k);
-            if(ticket <= 0) continue;
-            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-            
-            string comment = OrderGetString(ORDER_COMMENT);
-            if(StringFind(comment, "Recovery") < 0) continue; // Skip normal orders
-            
-            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-            if((isBuy && type != ORDER_TYPE_BUY_LIMIT) || (!isBuy && type != ORDER_TYPE_SELL_LIMIT)) continue;
-            
-            double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
-            if(MathAbs(orderPrice - recoveryPrice) < gapPrice * 0.5)
-            {
-                duplicateExists = true;
-                AddToLog(StringFormat("%s Recovery order already exists @ %.2f", isBuy ? "BUY" : "SELL", orderPrice), "RECOVERY");
-                break;
-            }
-        }
-        
-        // Check all positions (to avoid placing order too close to existing position)
-        if(!duplicateExists)
-        {
-            for(int k = 0; k < PositionsTotal(); k++)
-            {
-                ulong ticket = PositionGetTicket(k);
-                if(ticket <= 0) continue;
-                if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-                if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-                
-                ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-                if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
-                
-                double posPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-                if(MathAbs(posPrice - recoveryPrice) < gapPrice * 0.5)
-                {
-                    duplicateExists = true;
-                    AddToLog(StringFormat("%s Recovery skipped - position exists @ %.2f", isBuy ? "BUY" : "SELL", posPrice), "RECOVERY");
-                    break;
-                }
-            }
-        }
-        
-        // Skip if duplicate found
-        if(duplicateExists) return;
         
         // Recovery lot = extreme position lot + increment
         // This ensures lot increases based on the last filled position's lot
@@ -1949,10 +2041,8 @@ void ManageRecoveryGrid(bool isBuy)
         // Ensure lot is within broker limits AND MaxRecoveryLotSize
         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
         double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-        double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
         if(minLot <= 0) minLot = 0.01;
         if(maxLot <= 0) maxLot = 100.0;
-        if(lotStep <= 0) lotStep = 0.01;
         
         // Apply MaxRecoveryLotSize limit
         double effectiveMaxLot = MathMin(maxLot, MaxRecoveryLotSize);

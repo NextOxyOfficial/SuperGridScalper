@@ -1213,9 +1213,13 @@ void ManageNormalGrid(bool isBuy)
     AddToLog(StringFormat("%s Grid: Price %.5f in range, managing grid...", 
         isBuy ? "BUY" : "SELL", currentPrice), "GRID");
     
-    // ===== STEP 1: Collect ONLY NORMAL positions for this side =====
-    double positionPrices[];
+    // ===== STEP 1: Collect positions for this side =====
+    // allPositionPrices[] = ALL positions (for gap checking - avoid placing near recovery positions)
+    // normalPositionPrices[] = NORMAL only (for grid level calculation)
+    double allPositionPrices[];
+    double normalPositionPrices[];
     int normalPositionCount = 0;
+    int allPositionCount = 0;
     
     for(int i = 0; i < PositionsTotal(); i++)
     {
@@ -1227,13 +1231,21 @@ void ManageNormalGrid(bool isBuy)
         ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
         if((isBuy && posType != POSITION_TYPE_BUY) || (!isBuy && posType != POSITION_TYPE_SELL)) continue;
         
-        // ONLY count NORMAL positions (skip recovery positions)
-        string comment = PositionGetString(POSITION_COMMENT);
-        if(StringFind(comment, "Recovery") >= 0) continue;
+        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
         
-        ArrayResize(positionPrices, normalPositionCount + 1);
-        positionPrices[normalPositionCount] = PositionGetDouble(POSITION_PRICE_OPEN);
-        normalPositionCount++;
+        // Collect ALL position prices for gap checking
+        ArrayResize(allPositionPrices, allPositionCount + 1);
+        allPositionPrices[allPositionCount] = openPrice;
+        allPositionCount++;
+        
+        // Collect only normal positions for grid level calculation
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "Recovery") < 0)
+        {
+            ArrayResize(normalPositionPrices, normalPositionCount + 1);
+            normalPositionPrices[normalPositionCount] = openPrice;
+            normalPositionCount++;
+        }
     }
     
     // If already at max NORMAL positions, delete all normal pending orders and return
@@ -1281,13 +1293,13 @@ void ManageNormalGrid(bool isBuy)
         existingOrderCount++;
     }
     
-    // Delete orders that are too close to NORMAL positions
+    // Delete orders that are too close to ANY positions (normal + recovery)
     for(int i = existingOrderCount - 1; i >= 0; i--)
     {
         bool tooClose = false;
-        for(int j = 0; j < normalPositionCount; j++)
+        for(int j = 0; j < allPositionCount; j++)
         {
-            if(MathAbs(existingOrderPrices[i] - positionPrices[j]) < minGap)
+            if(MathAbs(existingOrderPrices[i] - allPositionPrices[j]) < minGap)
             {
                 tooClose = true;
                 break;
@@ -1322,14 +1334,14 @@ void ManageNormalGrid(bool isBuy)
         double startLevel = baseLevel;
         if(startLevel >= currentPrice) startLevel -= gapPrice;
         
-        // If we have positions, start from the LOWEST position instead
+        // If we have NORMAL positions, start from the LOWEST normal position
         if(normalPositionCount > 0)
         {
-            double lowestPos = positionPrices[0];
+            double lowestPos = normalPositionPrices[0];
             for(int i = 1; i < normalPositionCount; i++)
             {
-                if(positionPrices[i] < lowestPos)
-                    lowestPos = positionPrices[i];
+                if(normalPositionPrices[i] < lowestPos)
+                    lowestPos = normalPositionPrices[i];
             }
             // Next pending should be below the lowest position
             double nextLevel = NormalizeDouble(lowestPos - gapPrice, _Digits);
@@ -1352,14 +1364,14 @@ void ManageNormalGrid(bool isBuy)
         double startLevel = baseLevel + gapPrice;
         if(startLevel <= currentPrice) startLevel += gapPrice;
         
-        // If we have positions, start from the HIGHEST position instead
+        // If we have NORMAL positions, start from the HIGHEST normal position
         if(normalPositionCount > 0)
         {
-            double highestPos = positionPrices[0];
+            double highestPos = normalPositionPrices[0];
             for(int i = 1; i < normalPositionCount; i++)
             {
-                if(positionPrices[i] > highestPos)
-                    highestPos = positionPrices[i];
+                if(normalPositionPrices[i] > highestPos)
+                    highestPos = normalPositionPrices[i];
             }
             // Next pending should be above the highest position
             double nextLevel = NormalizeDouble(highestPos + gapPrice, _Digits);
@@ -1386,12 +1398,12 @@ void ManageNormalGrid(bool isBuy)
     ArrayResize(orderUsed, existingOrderCount);
     ArrayInitialize(orderUsed, false);
     
-    // First, mark targets occupied by NORMAL positions
-    for(int i = 0; i < normalPositionCount; i++)
+    // First, mark targets occupied by ALL positions (normal + recovery)
+    for(int i = 0; i < allPositionCount; i++)
     {
         for(int j = 0; j < maxOrders; j++)
         {
-            if(MathAbs(positionPrices[i] - targetLevels[j]) < minGap)
+            if(MathAbs(allPositionPrices[i] - targetLevels[j]) < minGap)
             {
                 targetOccupied[j] = true;
             }
@@ -1678,8 +1690,11 @@ void ManageRecoveryGrid(bool isBuy)
     if(!isBuy && expectedRecoveryPrice <= currentPriceForCheck)
         expectedRecoveryPrice = NormalizeDouble(currentPriceForCheck + (gapPips * pip), _Digits);
     
-    // Count recovery PENDING orders - simplified check, just count valid ones
+    // Count recovery PENDING orders AND relocate if too far from expected price
     int recoveryPendingCount = 0;
+    double gapPipsForRelocate = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
+    double relocateThreshold = gapPipsForRelocate * pip * 1.5; // If order is >1.5x gap away from expected, relocate
+    
     for(int i = OrdersTotal() - 1; i >= 0; i--)
     {
         ulong ticket = OrderGetTicket(i);
@@ -1693,6 +1708,55 @@ void ManageRecoveryGrid(bool isBuy)
             ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
             if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
             {
+                double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
+                double orderLot = OrderGetDouble(ORDER_VOLUME_CURRENT);
+                double orderTP = OrderGetDouble(ORDER_TP);
+                
+                // Check if lot size is wrong (needs delete+re-place since OrderModify can't change lot)
+                if(MathAbs(orderLot - correctRecoveryLot) > lotStep * 0.5)
+                {
+                    trade.OrderDelete(ticket);
+                    AddToLog(StringFormat("%s Recovery DELETED order #%I64u (lot mismatch: %.2f should be %.2f, will re-place)", 
+                        isBuy ? "BUY" : "SELL", ticket, orderLot, correctRecoveryLot), "RECOVERY");
+                    continue; // Don't count - will be re-placed with correct lot
+                }
+                
+                // Check if this pending order is too far from expected recovery price
+                double distFromExpected = MathAbs(orderPrice - expectedRecoveryPrice);
+                
+                if(distFromExpected > relocateThreshold)
+                {
+                    // Order is stale/far away - relocate it to the correct price
+                    double newPrice = expectedRecoveryPrice;
+                    
+                    // Validate new price for pending order
+                    if(isBuy && newPrice >= currentPriceForCheck)
+                        newPrice = NormalizeDouble(currentPriceForCheck - (gapPipsForRelocate * pip), _Digits);
+                    if(!isBuy && newPrice <= currentPriceForCheck)
+                        newPrice = NormalizeDouble(currentPriceForCheck + (gapPipsForRelocate * pip), _Digits);
+                    
+                    // Recalculate TP based on new avg if positions changed
+                    double newTP = breakevenTP;
+                    
+                    if(trade.OrderModify(ticket, newPrice, 0, newTP, ORDER_TIME_GTC, 0))
+                    {
+                        AddToLog(StringFormat("%s Recovery RELOCATED pending order #%I64u: %.2f -> %.2f (was %.1f pips from expected)", 
+                            isBuy ? "BUY" : "SELL", ticket, orderPrice, newPrice, distFromExpected / pip), "RECOVERY");
+                    }
+                    else
+                    {
+                        // If modify fails (e.g. price too close to market), delete and let it re-place
+                        int err = GetLastError();
+                        if(err == 10016 || err == 10015 || err == 10014) // Invalid stops/price
+                        {
+                            trade.OrderDelete(ticket);
+                            AddToLog(StringFormat("%s Recovery DELETED stale order #%I64u (modify failed err=%d, will re-place)", 
+                                isBuy ? "BUY" : "SELL", ticket, err), "RECOVERY");
+                            continue; // Don't count this deleted order
+                        }
+                    }
+                }
+                
                 recoveryPendingCount++;
             }
         }
@@ -1872,10 +1936,8 @@ void ManageRecoveryGrid(bool isBuy)
         // Ensure lot is within broker limits AND MaxRecoveryLotSize
         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
         double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-        double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
         if(minLot <= 0) minLot = 0.01;
         if(maxLot <= 0) maxLot = 100.0;
-        if(lotStep <= 0) lotStep = 0.01;
         
         // Apply MaxRecoveryLotSize limit
         double effectiveMaxLot = MathMin(maxLot, MaxRecoveryLotSize);
