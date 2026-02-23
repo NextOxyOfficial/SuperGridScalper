@@ -8,7 +8,8 @@ import ExnessBroker from '@/components/ExnessBroker';
 import QRCode from 'qrcode';
 
 const EXNESS_REFERRAL_LINK = 'https://one.exnessonelink.com/a/ustbuprn';
-const POLLING_INTERVAL = 2000; // Faster polling for real-time updates
+const POLLING_INTERVAL = 10000; // Fallback polling (slower since WebSocket handles real-time)
+const ALL_LICENSES_POLL_INTERVAL = 15000; // Fallback polling for all licenses overview
 const EA_CONNECTED_TIMEOUT_SECONDS = 120; // Allow up to 2min between heartbeats before marking disconnected
 
 export default function DashboardHome() {
@@ -24,6 +25,12 @@ export default function DashboardHome() {
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const tradeDataRef = useRef<any>(null);
+
+  // WebSocket refs
+  const wsRef = useRef<WebSocket | null>(null);
+  const wsAllRef = useRef<WebSocket | null>(null);
+  const wsReconnectRef = useRef<NodeJS.Timeout | null>(null);
+  const wsAllReconnectRef = useRef<NodeJS.Timeout | null>(null);
   
   // Purchase state
   const [plans, setPlans] = useState<any[]>([]);
@@ -94,6 +101,16 @@ export default function DashboardHome() {
 
   const nicknameInputRef = useRef<HTMLInputElement>(null);
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper: derive WebSocket URL from API_URL
+  const getWsUrl = (path: string) => {
+    if (!API_URL) return '';
+    try {
+      const url = new URL(API_URL);
+      const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${protocol}//${url.host}${path}`;
+    } catch { return ''; }
+  };
   
   // Keep closed positions scroll at top (latest positions shown first via reverse order)
 
@@ -104,11 +121,11 @@ export default function DashboardHome() {
     // Fetch trade data for all licenses initially
     fetchAllLicensesTradeData();
     
-    // Start polling for all licenses data (only when no license is selected)
+    // Start fallback polling for all licenses data (only when no license is selected)
     if (!selectedLicense && licenses.length > 0) {
       allLicensesPollingRef.current = setInterval(() => {
         fetchAllLicensesTradeData();
-      }, 3000); // Poll every 3 seconds
+      }, ALL_LICENSES_POLL_INTERVAL);
     }
     
     return () => {
@@ -117,6 +134,41 @@ export default function DashboardHome() {
       }
     };
   }, [licenses, selectedLicense, user?.email]);
+
+  // WebSocket for all licenses overview (dashboard list)
+  useEffect(() => {
+    const email = user?.email || (user as any)?.username;
+    if (!email || !licenses.length || selectedLicense) {
+      if (wsAllRef.current) { wsAllRef.current.close(); wsAllRef.current = null; }
+      return;
+    }
+    const wsUrl = getWsUrl(`/ws/trades/all/${encodeURIComponent(email)}/`);
+    if (!wsUrl) return;
+
+    const connect = () => {
+      if (wsAllRef.current && wsAllRef.current.readyState <= 1) return;
+      const ws = new WebSocket(wsUrl);
+      wsAllRef.current = ws;
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.license_key) {
+            setAllTradeData(prev => ({ ...prev, [data.license_key]: data }));
+          }
+        } catch {}
+      };
+      ws.onclose = () => {
+        wsAllReconnectRef.current = setTimeout(connect, 3000);
+      };
+      ws.onerror = () => ws.close();
+    };
+    connect();
+
+    return () => {
+      if (wsAllReconnectRef.current) clearTimeout(wsAllReconnectRef.current);
+      if (wsAllRef.current) { wsAllRef.current.close(); wsAllRef.current = null; }
+    };
+  }, [user?.email, licenses.length, selectedLicense, API_URL]);
 
   useEffect(() => {
     setTradeData(null);
@@ -299,15 +351,39 @@ export default function DashboardHome() {
     setAllTradeData(prev => ({ ...prev, ...updates }));
   };
 
-  // Polling for trade data when license is selected
+  // WebSocket + fallback polling for selected license trade data
   useEffect(() => {
     const isPurchaseRequest = selectedLicense && selectedLicense._type === 'purchase_request';
     if (!selectedLicense || isPurchaseRequest || selectedLicense.status !== 'active') return;
 
-    // Initial fetch
+    // Initial fetch via HTTP
     fetchTradeData(selectedLicense.license_key);
+
+    // WebSocket connection
+    const wsUrl = getWsUrl(`/ws/trade/${selectedLicense.license_key}/`);
+    const connectWs = () => {
+      if (!wsUrl) return;
+      if (wsRef.current && wsRef.current.readyState <= 1) return;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          const prevData = tradeDataRef.current;
+          setTradeData(data);
+          tradeDataRef.current = data;
+          setLastUpdate(new Date());
+          setEaConnected(true);
+        } catch {}
+      };
+      ws.onclose = () => {
+        wsReconnectRef.current = setTimeout(connectWs, 3000);
+      };
+      ws.onerror = () => ws.close();
+    };
+    connectWs();
     
-    // Start polling
+    // Fallback polling (slower interval since WS handles real-time)
     pollingRef.current = setInterval(() => {
       if (isPolling) {
         fetchTradeData(selectedLicense.license_key);
@@ -315,9 +391,9 @@ export default function DashboardHome() {
     }, POLLING_INTERVAL);
 
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (wsReconnectRef.current) clearTimeout(wsReconnectRef.current);
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     };
   }, [selectedLicense, isPolling]);
 
