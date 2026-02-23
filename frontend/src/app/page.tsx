@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift } from 'lucide-react'
+import { Check, CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift } from 'lucide-react'
 import axios from 'axios'
 import ExnessBroker from '@/components/ExnessBroker'
 import Header from '@/components/Header'
@@ -289,6 +289,13 @@ export default function Home() {
   const settings = useSiteSettings()
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showRegisterModal, setShowRegisterModal] = useState(false)
+  const [showVerifyModal, setShowVerifyModal] = useState(false)
+  const [verifyEmail, setVerifyEmail] = useState('')
+  const [verifyCode, setVerifyCode] = useState('')
+  const [verifyError, setVerifyError] = useState('')
+  const [verifySuccess, setVerifySuccess] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [resending, setResending] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -470,13 +477,16 @@ export default function Home() {
 
       if (response.data.success) {
         if (response.data.requires_verification) {
+          setVerifyEmail(email)
           setShowRegisterModal(false)
+          setShowVerifyModal(true)
+          setVerifyCode('')
+          setVerifyError('')
+          setVerifySuccess('')
           clearAuthParam()
-          setEmail('')
           setPassword('')
           setConfirmPassword('')
           setFirstName('')
-          alert('Registration successful! Please check your email (including spam folder) to verify your account before logging in.')
         } else {
           localStorage.setItem('user', JSON.stringify(response.data.user))
           localStorage.setItem('licenses', JSON.stringify(response.data.licenses || []))
@@ -701,6 +711,149 @@ export default function Home() {
         </div>
       )}
 
+      {/* Email Verification Modal */}
+      {showVerifyModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="relative max-w-md w-full">
+            <div className="absolute -inset-[1px] bg-gradient-to-r from-cyan-500/30 via-cyan-400/10 to-cyan-500/30 rounded-2xl blur-[2px]" />
+            <div className="relative bg-[#0c0c14] border border-cyan-500/20 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-cyan-500/10">
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, #06b6d4 1px, transparent 1px), radial-gradient(circle at 75% 75%, #06b6d4 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+
+              <button
+                onClick={() => { setShowVerifyModal(false); setVerifyError(''); setVerifySuccess(''); }}
+                className="absolute top-3 right-3 sm:top-4 sm:right-4 w-8 h-8 flex items-center justify-center rounded-lg border border-gray-700/50 text-gray-500 hover:text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all z-10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="text-center mb-5 sm:mb-7 relative">
+                <div className="relative inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 mb-3">
+                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/20 to-cyan-400/10 rounded-2xl rotate-45" />
+                  <div className="absolute inset-[2px] bg-[#0a0a12] rounded-[14px] rotate-45" />
+                  <div className="absolute inset-[3px] bg-gradient-to-br from-cyan-500/10 to-transparent rounded-[13px] rotate-45" />
+                  <Check className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-400 relative z-10" />
+                </div>
+                <h3 className="text-xl sm:text-2xl font-bold text-white tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  VERIFY EMAIL
+                </h3>
+                <div className="flex items-center justify-center gap-2 mt-1.5">
+                  <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-cyan-500/50" />
+                  <p className="text-cyan-500/70 text-[10px] sm:text-xs tracking-[0.2em] uppercase">Confirm Your Identity</p>
+                  <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-cyan-500/50" />
+                </div>
+              </div>
+
+              <div className="relative z-10 mb-5">
+                <div className="bg-cyan-500/5 border border-cyan-500/15 rounded-xl px-4 py-3 text-center">
+                  <p className="text-gray-400 text-xs sm:text-sm">We sent a verification code to</p>
+                  <p className="text-cyan-400 font-semibold text-sm sm:text-base mt-1">{verifyEmail}</p>
+                  <p className="text-gray-500 text-[10px] sm:text-xs mt-1">Check your inbox & spam folder</p>
+                </div>
+              </div>
+
+              {verifySuccess ? (
+                <div className="relative z-10 text-center">
+                  <div className="flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-3 text-green-400 text-sm mb-4">
+                    <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                    {verifySuccess}
+                  </div>
+                  <button
+                    onClick={() => { setShowVerifyModal(false); setShowLoginModal(true); setVerifySuccess(''); }}
+                    className="w-full py-3 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-black rounded-xl font-bold text-sm transition-all shadow-lg shadow-cyan-500/25"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    LOGIN NOW
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={async (e) => {
+                  e.preventDefault()
+                  setVerifyError('')
+                  setVerifying(true)
+                  try {
+                    const res = await axios.post(`${API_URL}/verify-email/`, { code: verifyCode, email: verifyEmail })
+                    if (res.data.success) {
+                      setVerifySuccess(res.data.message || 'Email verified successfully!')
+                    } else {
+                      setVerifyError(res.data.message || 'Invalid code')
+                    }
+                  } catch (err: any) {
+                    setVerifyError(err.response?.data?.message || 'Verification failed. Please try again.')
+                  }
+                  setVerifying(false)
+                }} className="space-y-4 relative z-10">
+                  <div>
+                    <label className="flex items-center gap-1.5 text-gray-500 text-[10px] sm:text-xs mb-2 uppercase tracking-wider">
+                      <Sparkles className="w-3 h-3 text-cyan-500/50" />
+                      6-Digit Verification Code
+                    </label>
+                    <input
+                      type="text"
+                      value={verifyCode}
+                      onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="w-full text-center text-2xl sm:text-3xl tracking-[12px] py-3 sm:py-4 bg-[#06060a] border border-cyan-500/15 rounded-xl text-cyan-400 placeholder-gray-700 focus:outline-none focus:border-cyan-400/60 focus:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all font-mono font-bold"
+                      placeholder="000000"
+                      maxLength={6}
+                      required
+                      autoFocus
+                    />
+                  </div>
+
+                  {verifyError && (
+                    <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-xl px-3 py-2.5 text-red-400 text-xs sm:text-sm">
+                      <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse flex-shrink-0" />
+                      {verifyError}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={verifying || verifyCode.length !== 6}
+                    className="relative w-full py-3 sm:py-3.5 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 text-black rounded-xl font-bold text-sm sm:text-base transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25 overflow-hidden group"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                    {verifying ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> VERIFYING...</>
+                    ) : (
+                      <><Check className="w-4 h-4" /> VERIFY EMAIL</>
+                    )}
+                  </button>
+
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      disabled={resending}
+                      onClick={async () => {
+                        setResending(true)
+                        setVerifyError('')
+                        try {
+                          await axios.post(`${API_URL}/resend-verification/`, { email: verifyEmail })
+                          setVerifyError('')
+                          setVerifySuccess('')
+                          setVerifyCode('')
+                          alert('Verification code resent! Check your email.')
+                        } catch (e) {}
+                        setResending(false)
+                      }}
+                      className="text-cyan-500/60 hover:text-cyan-400 text-[10px] sm:text-xs font-medium transition-colors uppercase tracking-wider disabled:opacity-50"
+                    >
+                      {resending ? 'Sending...' : "Didn't receive code? Resend"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              <div className="relative z-10 mt-4 pt-3 border-t border-cyan-500/10 text-center">
+                <p className="text-gray-600 text-[10px] sm:text-xs">
+                  Also check your email for a <span className="text-cyan-500/70">verification link</span> you can click directly
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Login Modal */}
       {showLoginModal && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -763,14 +916,24 @@ export default function Home() {
                     router.push('/dashboard')
                   } else {
                     if (response.data.requires_verification) {
-                      setError('Please verify your email first. Check your inbox/spam for the verification link.')
+                      setVerifyEmail(response.data.email || email)
+                      setShowLoginModal(false)
+                      setShowVerifyModal(true)
+                      setVerifyCode('')
+                      setVerifyError('')
+                      setVerifySuccess('')
                     } else {
                       setError(response.data.message || 'Login failed')
                     }
                   }
                 } catch (err: any) {
                   if (err.response?.data?.requires_verification) {
-                    setError('Please verify your email first. Check your inbox/spam for the verification link.')
+                    setVerifyEmail(err.response?.data?.email || email)
+                    setShowLoginModal(false)
+                    setShowVerifyModal(true)
+                    setVerifyCode('')
+                    setVerifyError('')
+                    setVerifySuccess('')
                   } else {
                     setError(err.response?.data?.message || 'Invalid credentials')
                   }
