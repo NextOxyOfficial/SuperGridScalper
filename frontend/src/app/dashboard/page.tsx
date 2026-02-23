@@ -109,7 +109,7 @@ export default function DashboardHome() {
       const url = new URL(API_URL);
       const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
       return `${protocol}//${url.host}${path}`;
-    } catch { return ''; }
+    } catch (e) { return ''; }
   };
   
   // Keep closed positions scroll at top (latest positions shown first via reverse order)
