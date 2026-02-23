@@ -16,6 +16,9 @@ input string    TesterAccountOverride = "";
 input bool      UseCachedLicenseInTester = true;
 input int       CachedLicenseMaxAgeHours = 24;
 
+//--- Max Drawdown Protection
+input double    MaxDrawdownAmount = 0.0;  // Max loss in $ (0 = disabled). e.g. 200 means close all if loss >= $200
+
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       2001.0
 #define BuyRangeEnd         8801.0
@@ -68,7 +71,7 @@ input int       CachedLicenseMaxAgeHours = 24;
 #define RecoveryInitialSLPips   2.75    // Recovery mode এ initial SL
 #define RecoveryTrailingRatio   0.5    // Recovery mode এ trailing ratio
 #define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
-#define MaxRecoveryLotSize      0.26    // Recovery mode এ সর্বোচ্চ lot size (এর বেশি হবে না)
+#define MaxRecoveryLotSize      0.25    // Recovery mode এ সর্বোচ্চ lot size (এর বেশি হবে না)
 #define MaxRecoveryOrders       200
 
 #define LotSize         0.10
@@ -239,6 +242,9 @@ void OnTick()
     
     // Clear comment when license is valid
     Comment("");
+    
+    // Max Drawdown Protection — close all if loss exceeds limit
+    if(CheckMaxDrawdown()) return;
     
     // Count current positions
     CountPositions();
@@ -2967,6 +2973,58 @@ void SendTradeDataToServer()
     int timeout = 2000;
     int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
     
+}
+
+//+------------------------------------------------------------------+
+//| Max Drawdown Protection                                           |
+//| Returns true if drawdown limit hit (caller should return early)   |
+//+------------------------------------------------------------------+
+bool CheckMaxDrawdown()
+{
+    if(MaxDrawdownAmount <= 0.0) return false; // Disabled
+
+    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+    double equity  = AccountInfoDouble(ACCOUNT_EQUITY);
+    double drawdown = balance - equity; // Positive = loss
+
+    if(drawdown < MaxDrawdownAmount) return false; // Limit not hit
+
+    // --- Drawdown limit hit ---
+    static datetime lastDrawdownLog = 0;
+    if(TimeCurrent() - lastDrawdownLog > 5)
+    {
+        lastDrawdownLog = TimeCurrent();
+        AddToLog(StringFormat("MAX DRAWDOWN HIT: Loss=%.2f / Limit=%.2f | Balance=%.2f Equity=%.2f — Closing all positions",
+            drawdown, MaxDrawdownAmount, balance, equity), "DRAWDOWN");
+    }
+
+    // Close all pending orders first
+    int totalOrders = OrdersTotal();
+    for(int i = totalOrders - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        trade.OrderDelete(ticket);
+    }
+
+    // Close all open positions
+    int totalPositions = PositionsTotal();
+    for(int i = totalPositions - 1; i >= 0; i--)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        trade.PositionClose(ticket);
+    }
+
+    // Reset recovery basket tracking
+    ArrayFree(buyRecoveryBreakevenTrailTickets);
+    ArrayFree(sellRecoveryBreakevenTrailTickets);
+
+    return true; // Signal caller to skip trading this tick
 }
 
 //+------------------------------------------------------------------+
