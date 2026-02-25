@@ -73,6 +73,7 @@ input double    MaxDrawdownAmount = 0.0;  // Max loss in $ (0 = disabled). e.g. 
 #define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
 #define MaxRecoveryLotSize      0.25    // Recovery mode এ সর্বোচ্চ lot size (এর বেশি হবে না)
 #define MaxRecoveryOrders       200
+#define RecoveryCleanupThreshold 4  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
 
 #define LotSize         0.10
 #define MagicNumber     999888
@@ -90,8 +91,16 @@ int totalBuyOrders = 0;           // Positions + Pending (for grid limit)
 int totalSellOrders = 0;          // Positions + Pending (for grid limit)
 bool buyInRecovery = false;
 bool sellInRecovery = false;
-ulong buyRecoveryBreakevenTrailTickets[];
-ulong sellRecoveryBreakevenTrailTickets[];
+// Multi-bundle system: each bundle has unique ID and tracks its own positions
+struct BundleEntry
+{
+    int bundleId;
+    ulong ticket;
+};
+BundleEntry buyBundles[];
+BundleEntry sellBundles[];
+int nextBuyBundleId = 1;
+int nextSellBundleId = 1;
 
 // Trading Log
 struct LogEntry
@@ -279,6 +288,9 @@ void OnTick()
     else if(!buyInRecovery && prevBuyInRecovery)
     {
         AddToLog("BUY NORMAL MODE RESTORED", "MODE");
+        // Clear BUY bundles when exiting recovery mode
+        ArrayFree(buyBundles);
+        nextBuyBundleId = 1;
     }
     
     if(sellInRecovery && !prevSellInRecovery)
@@ -288,6 +300,9 @@ void OnTick()
     else if(!sellInRecovery && prevSellInRecovery)
     {
         AddToLog("SELL NORMAL MODE RESTORED", "MODE");
+        // Clear SELL bundles when exiting recovery mode
+        ArrayFree(sellBundles);
+        nextSellBundleId = 1;
     }
     
     prevBuyInRecovery = buyInRecovery;
@@ -298,6 +313,10 @@ void OnTick()
     
     // Auto-correction worker - ensures grid is always correct
     AutoCorrectGridOrders();
+    
+    // Recovery Cleanup Worker - close remaining recovery positions when normal positions gone
+    // and recovery count <= threshold, allowing fresh normal mode restart
+    RecoveryCleanupWorker();
     
     // Manage grids based on mode
     if(!buyInRecovery)
@@ -345,103 +364,167 @@ void OnTick()
     }
 }
 
-ulong GetLongDistancePositionTicket(bool isBuy)
-{
-    double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-    ulong bestTicket = 0;
-    double bestDist = -1.0;
-    
-    for(int i = 0; i < PositionsTotal(); i++)
-    {
-        ulong ticket = PositionGetTicket(i);
-        if(ticket <= 0) continue;
-        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-        
-        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
-        
-        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-        double dist = MathAbs(openPrice - currentPrice);
-        
-        if(dist > bestDist)
-        {
-            bestDist = dist;
-            bestTicket = ticket;
-        }
-    }
-    
-    return bestTicket;
-}
+// ===== Multi-Bundle Helper Functions =====
 
-bool IsTicketInList(const ulong &tickets[], ulong ticket)
+// Check if a ticket is in ANY bundle (for this side)
+bool IsTicketInAnyBundle(bool isBuy, ulong ticket)
 {
-    for(int i = 0; i < ArraySize(tickets); i++)
+    if(isBuy)
     {
-        if(tickets[i] == ticket) return true;
+        for(int i = 0; i < ArraySize(buyBundles); i++)
+            if(buyBundles[i].ticket == ticket) return true;
+    }
+    else
+    {
+        for(int i = 0; i < ArraySize(sellBundles); i++)
+            if(sellBundles[i].ticket == ticket) return true;
     }
     return false;
 }
 
-void AddTicketToList(ulong &tickets[], ulong ticket)
-{
-    if(ticket <= 0) return;
-    if(IsTicketInList(tickets, ticket)) return;
-
-    int size = ArraySize(tickets);
-    ArrayResize(tickets, size + 1);
-    tickets[size] = ticket;
-}
-
-bool IsRecoveryBreakevenTrailTicket(bool isBuy, ulong ticket)
-{
-    return isBuy ? IsTicketInList(buyRecoveryBreakevenTrailTickets, ticket)
-                 : IsTicketInList(sellRecoveryBreakevenTrailTickets, ticket);
-}
-
-int GetRecoveryBreakevenTrailCount(bool isBuy)
-{
-    return isBuy ? ArraySize(buyRecoveryBreakevenTrailTickets)
-                 : ArraySize(sellRecoveryBreakevenTrailTickets);
-}
-
-void AddRecoveryBreakevenTrailTicket(bool isBuy, ulong ticket)
+// Get the bundle ID for a specific ticket (-1 if not found)
+int GetTicketBundleId(bool isBuy, ulong ticket)
 {
     if(isBuy)
-        AddTicketToList(buyRecoveryBreakevenTrailTickets, ticket);
+    {
+        for(int i = 0; i < ArraySize(buyBundles); i++)
+            if(buyBundles[i].ticket == ticket) return buyBundles[i].bundleId;
+    }
     else
-        AddTicketToList(sellRecoveryBreakevenTrailTickets, ticket);
+    {
+        for(int i = 0; i < ArraySize(sellBundles); i++)
+            if(sellBundles[i].ticket == ticket) return sellBundles[i].bundleId;
+    }
+    return -1;
 }
 
-void CleanupRecoveryBreakevenTrailTickets()
+// Add a ticket to a specific bundle
+void AddTicketToBundle(bool isBuy, int bundleId, ulong ticket)
 {
-    int write = 0;
-    for(int i = 0; i < ArraySize(buyRecoveryBreakevenTrailTickets); i++)
+    if(ticket <= 0) return;
+    if(IsTicketInAnyBundle(isBuy, ticket)) return; // Already in a bundle
+    
+    if(isBuy)
     {
-        ulong ticket = buyRecoveryBreakevenTrailTickets[i];
+        int size = ArraySize(buyBundles);
+        ArrayResize(buyBundles, size + 1);
+        buyBundles[size].bundleId = bundleId;
+        buyBundles[size].ticket = ticket;
+    }
+    else
+    {
+        int size = ArraySize(sellBundles);
+        ArrayResize(sellBundles, size + 1);
+        sellBundles[size].bundleId = bundleId;
+        sellBundles[size].ticket = ticket;
+    }
+}
+
+// Get all unique bundle IDs for a side
+int GetUniqueBundleIds(bool isBuy, int &ids[])
+{
+    ArrayResize(ids, 0);
+    int total = isBuy ? ArraySize(buyBundles) : ArraySize(sellBundles);
+    
+    for(int i = 0; i < total; i++)
+    {
+        int bid = isBuy ? buyBundles[i].bundleId : sellBundles[i].bundleId;
+        bool found = false;
+        for(int j = 0; j < ArraySize(ids); j++)
+        {
+            if(ids[j] == bid) { found = true; break; }
+        }
+        if(!found)
+        {
+            int s = ArraySize(ids);
+            ArrayResize(ids, s + 1);
+            ids[s] = bid;
+        }
+    }
+    return ArraySize(ids);
+}
+
+// Get all tickets for a specific bundle
+int GetBundleTickets(bool isBuy, int bundleId, ulong &tickets[])
+{
+    ArrayResize(tickets, 0);
+    int total = isBuy ? ArraySize(buyBundles) : ArraySize(sellBundles);
+    
+    for(int i = 0; i < total; i++)
+    {
+        int bid = isBuy ? buyBundles[i].bundleId : sellBundles[i].bundleId;
+        ulong tk = isBuy ? buyBundles[i].ticket : sellBundles[i].ticket;
+        if(bid == bundleId)
+        {
+            int s = ArraySize(tickets);
+            ArrayResize(tickets, s + 1);
+            tickets[s] = tk;
+        }
+    }
+    return ArraySize(tickets);
+}
+
+// Get total number of bundled tickets for a side
+int GetTotalBundledCount(bool isBuy)
+{
+    return isBuy ? ArraySize(buyBundles) : ArraySize(sellBundles);
+}
+
+// Create a new bundle and return its ID
+int CreateNewBundle(bool isBuy)
+{
+    int id;
+    if(isBuy)
+    {
+        id = nextBuyBundleId;
+        nextBuyBundleId++;
+    }
+    else
+    {
+        id = nextSellBundleId;
+        nextSellBundleId++;
+    }
+    return id;
+}
+
+// Cleanup: remove closed positions from bundles, remove empty bundles
+void CleanupBundles()
+{
+    // Cleanup BUY bundles
+    int write = 0;
+    for(int i = 0; i < ArraySize(buyBundles); i++)
+    {
+        ulong ticket = buyBundles[i].ticket;
         if(!PositionSelectByTicket(ticket)) continue;
         if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
         if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
         if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) != POSITION_TYPE_BUY) continue;
-
-        buyRecoveryBreakevenTrailTickets[write] = ticket;
+        
+        buyBundles[write] = buyBundles[i];
         write++;
     }
-    ArrayResize(buyRecoveryBreakevenTrailTickets, write);
-
+    ArrayResize(buyBundles, write);
+    
+    // Cleanup SELL bundles
     write = 0;
-    for(int i = 0; i < ArraySize(sellRecoveryBreakevenTrailTickets); i++)
+    for(int i = 0; i < ArraySize(sellBundles); i++)
     {
-        ulong ticket = sellRecoveryBreakevenTrailTickets[i];
+        ulong ticket = sellBundles[i].ticket;
         if(!PositionSelectByTicket(ticket)) continue;
         if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
         if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
         if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) != POSITION_TYPE_SELL) continue;
-
-        sellRecoveryBreakevenTrailTickets[write] = ticket;
+        
+        sellBundles[write] = sellBundles[i];
         write++;
     }
-    ArrayResize(sellRecoveryBreakevenTrailTickets, write);
+    ArrayResize(sellBundles, write);
+}
+
+// Legacy compatibility wrapper
+bool IsRecoveryBreakevenTrailTicket(bool isBuy, ulong ticket)
+{
+    return IsTicketInAnyBundle(isBuy, ticket);
 }
 
 bool IsTesterMode()
@@ -1057,201 +1140,350 @@ void CleanupInvalidOrders()
 }
 
 //+------------------------------------------------------------------+
-//| Auto-Correction Worker - Ensures Grid is Always Correct          |
+//| Recovery Cleanup Worker - Close remaining recovery positions      |
+//| when normal positions are all gone and recovery count <= threshold|
+//| This allows normal mode to restart fresh from 0.10 lot           |
+//+------------------------------------------------------------------+
+void RecoveryCleanupWorker()
+{
+    // Check BUY side
+    RecoveryCleanupForSide(true);
+    // Check SELL side
+    RecoveryCleanupForSide(false);
+}
+
+void RecoveryCleanupForSide(bool isBuy)
+{
+    // Count normal and recovery positions for this side
+    int normalCount = 0;
+    int recoveryCount = 0;
+    
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+        
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0)
+            recoveryCount++;
+        else
+            normalCount++;
+    }
+    
+    // Condition: NO normal positions left AND only recovery positions remain at or below threshold
+    if(normalCount == 0 && recoveryCount > 0 && recoveryCount <= RecoveryCleanupThreshold)
+    {
+        AddToLog(StringFormat("%s Recovery Cleanup: Normal=%d, Recovery=%d (threshold=%d) - CLOSING ALL to restart normal mode", 
+            isBuy ? "BUY" : "SELL", normalCount, recoveryCount, RecoveryCleanupThreshold), "CLEANUP");
+        
+        // First: Delete all recovery pending orders for this side
+        for(int i = OrdersTotal() - 1; i >= 0; i--)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+            
+            string comment = OrderGetString(ORDER_COMMENT);
+            if(StringFind(comment, "Recovery") < 0) continue;
+            
+            ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            if((isBuy && orderType == ORDER_TYPE_BUY_LIMIT) || (!isBuy && orderType == ORDER_TYPE_SELL_LIMIT))
+            {
+                if(trade.OrderDelete(ticket))
+                {
+                    AddToLog(StringFormat("%s Recovery Cleanup: Deleted pending order #%I64u", 
+                        isBuy ? "BUY" : "SELL", ticket), "CLEANUP");
+                }
+            }
+        }
+        
+        // Then: Close all recovery positions for this side
+        for(int i = PositionsTotal() - 1; i >= 0; i--)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+            
+            string comment = PositionGetString(POSITION_COMMENT);
+            if(StringFind(comment, "Recovery") >= 0)
+            {
+                double posLot = PositionGetDouble(POSITION_VOLUME);
+                double posPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+                double posProfit = PositionGetDouble(POSITION_PROFIT);
+                
+                if(trade.PositionClose(ticket))
+                {
+                    AddToLog(StringFormat("%s Recovery Cleanup: Closed position #%I64u | Lot=%.2f | Price=%.2f | Profit=%.2f", 
+                        isBuy ? "BUY" : "SELL", ticket, posLot, posPrice, posProfit), "CLEANUP");
+                }
+            }
+        }
+        
+        AddToLog(StringFormat("%s Recovery Cleanup COMPLETE - Normal mode will restart with fresh 0.10 lot grid", 
+            isBuy ? "BUY" : "SELL"), "CLEANUP");
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Self-Healing Grid Worker - Detects and fixes grid issues         |
+//| after reconnect, EA restart, or any disruption                   |
 //+------------------------------------------------------------------+
 void AutoCorrectGridOrders()
 {
-    // This worker runs every tick and ensures:
-    // 1. Correct number of orders exist
-    // 2. Orders are at correct grid levels
-    // 3. Orders match current mode (normal/recovery)
-    // 4. No gaps in the grid
+    // Run every 5 seconds to avoid overloading (not every tick)
+    static datetime lastHealCheck = 0;
+    if(TimeCurrent() - lastHealCheck < 5) return;
+    lastHealCheck = TimeCurrent();
     
     double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
     double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     
-    // Check BUY side
-    if(!buyInRecovery)
+    // ===== FIX 1: Delete invalid pending orders (wrong side of market) =====
+    for(int i = OrdersTotal() - 1; i >= 0; i--)
     {
-        // Normal mode: Should have (MaxBuyOrders - positions) pending orders
-        int normalBuyPos = 0;
-        int normalBuyOrders = 0;
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
         
-        // Count normal positions
-        for(int i = 0; i < PositionsTotal(); i++)
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
+        
+        bool invalid = false;
+        string reason = "";
+        
+        // BUY LIMIT must be BELOW current ask
+        if(type == ORDER_TYPE_BUY_LIMIT && orderPrice > currentAsk + 50 * pip)
         {
-            ulong ticket = PositionGetTicket(i);
-            if(ticket <= 0) continue;
-            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-            
-            string comment = PositionGetString(POSITION_COMMENT);
-            if(StringFind(comment, "Recovery") >= 0) continue;
-            
-            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-            if(type == POSITION_TYPE_BUY) normalBuyPos++;
+            invalid = true;
+            reason = StringFormat("BUY LIMIT @ %.2f is way above Ask %.2f", orderPrice, currentAsk);
+        }
+        // SELL LIMIT must be ABOVE current bid
+        if(type == ORDER_TYPE_SELL_LIMIT && orderPrice < currentBid - 50 * pip)
+        {
+            invalid = true;
+            reason = StringFormat("SELL LIMIT @ %.2f is way below Bid %.2f", orderPrice, currentBid);
         }
         
-        // Count normal pending orders
-        for(int i = 0; i < OrdersTotal(); i++)
+        if(invalid)
         {
-            ulong ticket = OrderGetTicket(i);
-            if(ticket <= 0) continue;
-            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-            
-            string comment = OrderGetString(ORDER_COMMENT);
-            if(StringFind(comment, "Recovery") >= 0) continue;
-            
-            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-            if(type == ORDER_TYPE_BUY_LIMIT) normalBuyOrders++;
-        }
-        
-        int expectedOrders = MaxBuyOrders - normalBuyPos;
-        int currentTotal = normalBuyPos + normalBuyOrders;
-        
-        // Check if we're within buy range
-        double buyRangeHigh = MathMax(BuyRangeStart, BuyRangeEnd);
-        double buyRangeLow = MathMin(BuyRangeStart, BuyRangeEnd);
-        bool inBuyRange = (currentBid >= buyRangeLow && currentBid <= buyRangeHigh);
-        
-        // Log correction status every 60 seconds
-        static datetime lastBuyCorrection = 0;
-        if(TimeCurrent() - lastBuyCorrection > 60)
-        {
-            if(inBuyRange && currentTotal < MaxBuyOrders)
+            if(trade.OrderDelete(ticket))
             {
-                AddToLog(StringFormat("BUY Auto-Correct: Have %d/%d (Pos:%d Orders:%d) - Need %d more orders", 
-                    currentTotal, MaxBuyOrders, normalBuyPos, normalBuyOrders, expectedOrders - normalBuyOrders), "WORKER");
-                lastBuyCorrection = TimeCurrent();
-            }
-            else if(!inBuyRange)
-            {
-                AddToLog(StringFormat("BUY Auto-Correct: Price %.2f outside range [%.2f-%.2f]", 
-                    currentBid, buyRangeLow, buyRangeHigh), "WORKER");
-                lastBuyCorrection = TimeCurrent();
+                AddToLog(StringFormat("SelfHeal: Deleted invalid order #%I64u - %s", ticket, reason), "HEAL");
             }
         }
     }
     
-    // Check SELL side
-    if(!sellInRecovery)
+    // ===== FIX 2: Normal mode - ensure correct number of pending orders =====
+    GridHealthCheckNormal(true,  currentBid, currentAsk);  // BUY side
+    GridHealthCheckNormal(false, currentBid, currentAsk);  // SELL side
+    
+    // ===== FIX 3: Recovery mode - ensure recovery pending order exists =====
+    GridHealthCheckRecovery(true,  currentBid, currentAsk);  // BUY side
+    GridHealthCheckRecovery(false, currentBid, currentAsk);  // SELL side
+    
+    // ===== FIX 4: Ensure all recovery positions have correct TP =====
+    FixMissingRecoveryTP(true);   // BUY side
+    FixMissingRecoveryTP(false);  // SELL side
+}
+
+//+------------------------------------------------------------------+
+//| Normal mode health check - detect and log missing orders         |
+//+------------------------------------------------------------------+
+void GridHealthCheckNormal(bool isBuy, double currentBid, double currentAsk)
+{
+    bool inRecovery = isBuy ? buyInRecovery : sellInRecovery;
+    if(inRecovery) return;  // Skip if in recovery mode
+    
+    int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
+    double rangeHigh = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
+    double rangeLow  = isBuy ? MathMin(BuyRangeStart, BuyRangeEnd) : MathMin(SellRangeStart, SellRangeEnd);
+    double checkPrice = isBuy ? currentBid : currentAsk;
+    
+    if(checkPrice < rangeLow || checkPrice > rangeHigh) return; // Outside range
+    
+    // Count normal positions
+    int normalPosCount = 0;
+    for(int i = 0; i < PositionsTotal(); i++)
     {
-        // Normal mode: Should have (MaxSellOrders - positions) pending orders
-        int normalSellPos = 0;
-        int normalSellOrders = 0;
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
         
-        // Count normal positions
-        for(int i = 0; i < PositionsTotal(); i++)
-        {
-            ulong ticket = PositionGetTicket(i);
-            if(ticket <= 0) continue;
-            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-            
-            string comment = PositionGetString(POSITION_COMMENT);
-            if(StringFind(comment, "Recovery") >= 0) continue;
-            
-            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-            if(type == POSITION_TYPE_SELL) normalSellPos++;
-        }
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue;
         
-        // Count normal pending orders
-        for(int i = 0; i < OrdersTotal(); i++)
-        {
-            ulong ticket = OrderGetTicket(i);
-            if(ticket <= 0) continue;
-            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-            
-            string comment = OrderGetString(ORDER_COMMENT);
-            if(StringFind(comment, "Recovery") >= 0) continue;
-            
-            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-            if(type == ORDER_TYPE_SELL_LIMIT) normalSellOrders++;
-        }
-        
-        int expectedOrders = MaxSellOrders - normalSellPos;
-        int currentTotal = normalSellPos + normalSellOrders;
-        
-        // Check if we're within sell range
-        double sellRangeHigh = MathMax(SellRangeStart, SellRangeEnd);
-        double sellRangeLow = MathMin(SellRangeStart, SellRangeEnd);
-        bool inSellRange = (currentAsk >= sellRangeLow && currentAsk <= sellRangeHigh);
-        
-        // Log correction status every 60 seconds
-        static datetime lastSellCorrection = 0;
-        if(TimeCurrent() - lastSellCorrection > 60)
-        {
-            if(inSellRange && currentTotal < MaxSellOrders)
-            {
-                AddToLog(StringFormat("SELL Auto-Correct: Have %d/%d (Pos:%d Orders:%d) - Need %d more orders", 
-                    currentTotal, MaxSellOrders, normalSellPos, normalSellOrders, expectedOrders - normalSellOrders), "WORKER");
-                lastSellCorrection = TimeCurrent();
-            }
-            else if(!inSellRange)
-            {
-                AddToLog(StringFormat("SELL Auto-Correct: Price %.2f outside range [%.2f-%.2f]", 
-                    currentAsk, sellRangeLow, sellRangeHigh), "WORKER");
-                lastSellCorrection = TimeCurrent();
-            }
-        }
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
+            normalPosCount++;
     }
     
-    // Check recovery mode orders
-    if(buyInRecovery)
+    // Count normal pending orders
+    int normalOrderCount = 0;
+    for(int i = 0; i < OrdersTotal(); i++)
     {
-        int recoveryBuyOrders = 0;
-        for(int i = 0; i < OrdersTotal(); i++)
-        {
-            ulong ticket = OrderGetTicket(i);
-            if(ticket <= 0) continue;
-            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-            
-            string comment = OrderGetString(ORDER_COMMENT);
-            if(StringFind(comment, "Recovery") < 0) continue;
-            
-            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-            if(type == ORDER_TYPE_BUY_LIMIT) recoveryBuyOrders++;
-        }
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
         
-        static datetime lastBuyRecoveryCheck = 0;
-        if(TimeCurrent() - lastBuyRecoveryCheck > 60)
-        {
-            if(recoveryBuyOrders == 0)
-            {
-                AddToLog("BUY Recovery Mode: No recovery orders found - will create", "WORKER");
-            }
-            lastBuyRecoveryCheck = TimeCurrent();
-        }
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue;
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
+            normalOrderCount++;
     }
     
-    if(sellInRecovery)
+    int totalGrid = normalPosCount + normalOrderCount;
+    int expectedOrders = maxOrders - normalPosCount;
+    
+    // If orders are missing, log it - ManageNormalGrid will fix on next tick
+    if(normalOrderCount < expectedOrders && expectedOrders > 0)
     {
-        int recoverySellOrders = 0;
-        for(int i = 0; i < OrdersTotal(); i++)
-        {
-            ulong ticket = OrderGetTicket(i);
-            if(ticket <= 0) continue;
-            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-            
-            string comment = OrderGetString(ORDER_COMMENT);
-            if(StringFind(comment, "Recovery") < 0) continue;
-            
-            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-            if(type == ORDER_TYPE_SELL_LIMIT) recoverySellOrders++;
-        }
+        static datetime lastBuyNormalHeal = 0;
+        static datetime lastSellNormalHeal = 0;
+        datetime lastHeal = isBuy ? lastBuyNormalHeal : lastSellNormalHeal;
         
-        static datetime lastSellRecoveryCheck = 0;
-        if(TimeCurrent() - lastSellRecoveryCheck > 60)
+        if(TimeCurrent() - lastHeal > 15)
         {
-            if(recoverySellOrders == 0)
+            AddToLog(StringFormat("%s SelfHeal: Grid incomplete - Pos:%d Orders:%d Total:%d/%d - ManageNormalGrid will re-place %d orders", 
+                isBuy ? "BUY" : "SELL", normalPosCount, normalOrderCount, totalGrid, maxOrders, 
+                expectedOrders - normalOrderCount), "HEAL");
+            
+            if(isBuy) lastBuyNormalHeal = TimeCurrent();
+            else lastSellNormalHeal = TimeCurrent();
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Recovery mode health check - detect missing recovery orders      |
+//+------------------------------------------------------------------+
+void GridHealthCheckRecovery(bool isBuy, double currentBid, double currentAsk)
+{
+    bool inRecovery = isBuy ? buyInRecovery : sellInRecovery;
+    if(!inRecovery) return;  // Skip if not in recovery mode
+    if(!EnableRecovery) return;
+    
+    // Count recovery pending orders
+    int recoveryOrderCount = 0;
+    for(int i = 0; i < OrdersTotal(); i++)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") < 0) continue;
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
+            recoveryOrderCount++;
+    }
+    
+    // Count total positions this side
+    int totalPositions = 0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
+            totalPositions++;
+    }
+    
+    // If no recovery pending order exists and we haven't hit max, log it
+    // ManageRecoveryGrid will place the order on next tick
+    if(recoveryOrderCount == 0 && totalPositions < MaxRecoveryOrders)
+    {
+        static datetime lastBuyRecHeal = 0;
+        static datetime lastSellRecHeal = 0;
+        datetime lastHeal = isBuy ? lastBuyRecHeal : lastSellRecHeal;
+        
+        if(TimeCurrent() - lastHeal > 15)
+        {
+            AddToLog(StringFormat("%s SelfHeal: Recovery mode but NO pending order! Positions:%d/%d - ManageRecoveryGrid will re-place", 
+                isBuy ? "BUY" : "SELL", totalPositions, MaxRecoveryOrders), "HEAL");
+            
+            if(isBuy) lastBuyRecHeal = TimeCurrent();
+            else lastSellRecHeal = TimeCurrent();
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Fix missing TP on recovery positions                             |
+//+------------------------------------------------------------------+
+void FixMissingRecoveryTP(bool isBuy)
+{
+    bool inRecovery = isBuy ? buyInRecovery : sellInRecovery;
+    if(!inRecovery) return;
+    
+    // Calculate breakeven TP
+    double avgPrice = 0, totalLots = 0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+        
+        avgPrice += PositionGetDouble(POSITION_PRICE_OPEN) * PositionGetDouble(POSITION_VOLUME);
+        totalLots += PositionGetDouble(POSITION_VOLUME);
+    }
+    
+    if(totalLots == 0) return;
+    avgPrice = avgPrice / totalLots;
+    
+    double breakevenTP = isBuy ? 
+        NormalizeDouble(avgPrice + (RecoveryTakeProfitPips * pip), _Digits) :
+        NormalizeDouble(avgPrice - (RecoveryTakeProfitPips * pip), _Digits);
+    
+    // Check each NON-BUNDLED recovery position for missing/wrong TP
+    // Bundled positions have their own TP managed by the bundle system
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+        
+        // SKIP bundled positions - they have bundle-specific TP
+        if(IsTicketInAnyBundle(isBuy, ticket)) continue;
+        
+        double currentTP = PositionGetDouble(POSITION_TP);
+        
+        // If TP is missing (0) or significantly wrong (>1 pip difference)
+        if(currentTP == 0 || MathAbs(currentTP - breakevenTP) > 1.0 * pip)
+        {
+            double currentSL = PositionGetDouble(POSITION_SL);
+            if(trade.PositionModify(ticket, currentSL, breakevenTP))
             {
-                AddToLog("SELL Recovery Mode: No recovery orders found - will create", "WORKER");
+                AddToLog(StringFormat("%s SelfHeal: Fixed TP on position #%I64u | Old TP=%.2f | New TP=%.2f", 
+                    isBuy ? "BUY" : "SELL", ticket, currentTP, breakevenTP), "HEAL");
             }
-            lastSellRecoveryCheck = TimeCurrent();
         }
     }
 }
@@ -1519,8 +1751,8 @@ void ManageNormalGrid(bool isBuy)
             {
                 if(!targetValidForPending || nearExecution)
                 {
-                    targetOccupied[i] = true;
-                    orderUsed[closestOrderIdx] = true;
+                    // Don't consume this target with a stale order.
+                    // Leave order unused so strict cleanup can delete/reopen if misaligned.
                     continue;
                 }
 
@@ -1553,7 +1785,7 @@ void ManageNormalGrid(bool isBuy)
         }
     }
     
-    // Delete any unused orders ONLY if they are on wrong side of price or out of range
+    // Delete any unused orders that are invalid OR not aligned with grid targets
     for(int i = 0; i < existingOrderCount; i++)
     {
         if(!orderUsed[i])
@@ -1561,25 +1793,33 @@ void ManageNormalGrid(bool isBuy)
             double orderPrice = existingOrderPrices[i];
             bool validSide = isBuy ? (orderPrice < currentPrice) : (orderPrice > currentPrice);
             bool inRange = (orderPrice >= rangeLow && orderPrice <= rangeHigh);
-            
-            // Only delete if order is on wrong side of price or out of range
-            if(!validSide || !inRange)
+            bool alignedToTarget = false;
+            int alignedTargetIdx = -1;
+
+            for(int j = 0; j < maxOrders; j++)
+            {
+                // Alignment tolerance is half gap to keep grid strict but stable
+                if(MathAbs(orderPrice - targetLevels[j]) < gapPrice * 0.5)
+                {
+                    alignedToTarget = true;
+                    alignedTargetIdx = j;
+                    break;
+                }
+            }
+
+            // Strict cleanup: remove stale/misaligned orders so they can be re-opened correctly
+            if(!validSide || !inRange || !alignedToTarget)
             {
                 trade.OrderDelete(existingOrderTickets[i]);
-                AddToLog(StringFormat("%s order #%I64u deleted - %s", isBuy ? "BUY" : "SELL", 
-                    existingOrderTickets[i], !validSide ? "wrong side" : "out of range"), "MODIFY");
+                string reason = !validSide ? "wrong side" : (!inRange ? "out of range" : "misaligned with grid");
+                AddToLog(StringFormat("%s order #%I64u deleted - %s", isBuy ? "BUY" : "SELL",
+                    existingOrderTickets[i], reason), "MODIFY");
             }
             else
             {
-                // Order is valid, mark target as occupied to prevent placing duplicate
-                for(int j = 0; j < maxOrders; j++)
-                {
-                    if(!targetOccupied[j] && MathAbs(orderPrice - targetLevels[j]) < minGap)
-                    {
-                        targetOccupied[j] = true;
-                        break;
-                    }
-                }
+                // Valid and aligned order occupies its matched target slot
+                if(alignedTargetIdx >= 0)
+                    targetOccupied[alignedTargetIdx] = true;
             }
         }
     }
@@ -1712,7 +1952,6 @@ void ManageRecoveryGrid(bool isBuy)
     // Find CLOSEST position to current market price for pending order validation
     double currentPriceForCheck = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     double closestPriceForCheck = 0;
-    double closestLotForCheck = LotSize;
     double closestDistForCheck = 999999;
     
     for(int i = 0; i < PositionsTotal(); i++)
@@ -1726,14 +1965,12 @@ void ManageRecoveryGrid(bool isBuy)
         if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
         
         double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-        double lots = PositionGetDouble(POSITION_VOLUME);
         double dist = MathAbs(openPrice - currentPriceForCheck);
         
         if(dist < closestDistForCheck)
         {
             closestDistForCheck = dist;
             closestPriceForCheck = openPrice;
-            closestLotForCheck = lots;
         }
     }
     
@@ -1776,11 +2013,57 @@ void ManageRecoveryGrid(bool isBuy)
         if(isBuy) expectedRecoveryPrice = NormalizeDouble(expectedRecoveryPrice - gapPriceForSlot, _Digits);
         else expectedRecoveryPrice = NormalizeDouble(expectedRecoveryPrice + gapPriceForSlot, _Digits);
     }
+
+    // Calculate what recovery pending lot SHOULD be for current expected slot
+    double expectedMinLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+    double expectedMaxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+    if(expectedMinLot <= 0) expectedMinLot = 0.01;
+    if(expectedMaxLot <= 0) expectedMaxLot = 100.0;
+    double expectedEffectiveMaxLot = MathMin(expectedMaxLot, MaxRecoveryLotSize);
+
+    double adjacentLotForExpected = LotSize;
+    double adjacentDistForExpected = 999999;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+
+        double posPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+        double posLot = PositionGetDouble(POSITION_VOLUME);
+
+        if(isBuy && posPrice > expectedRecoveryPrice)
+        {
+            double d = posPrice - expectedRecoveryPrice;
+            if(d < adjacentDistForExpected)
+            {
+                adjacentDistForExpected = d;
+                adjacentLotForExpected = posLot;
+            }
+        }
+        else if(!isBuy && posPrice < expectedRecoveryPrice)
+        {
+            double d = expectedRecoveryPrice - posPrice;
+            if(d < adjacentDistForExpected)
+            {
+                adjacentDistForExpected = d;
+                adjacentLotForExpected = posLot;
+            }
+        }
+    }
+
+    double correctRecoveryLot = adjacentLotForExpected + RecoveryLotIncrement;
+    correctRecoveryLot = MathFloor(correctRecoveryLot / lotStep) * lotStep;
+    correctRecoveryLot = MathMax(expectedMinLot, MathMin(expectedEffectiveMaxLot, correctRecoveryLot));
     
     // Count recovery PENDING orders AND relocate if too far from expected price
     int recoveryPendingCount = 0;
     double gapPipsForRelocate = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
-    double relocateThreshold = gapPipsForRelocate * pip * 1.5; // If order is >1.5x gap away from expected, relocate
+    double relocateThreshold = gapPipsForRelocate * pip * 0.6; // Keep pending tightly snapped to grid
     
     for(int i = OrdersTotal() - 1; i >= 0; i--)
     {
@@ -1797,7 +2080,25 @@ void ManageRecoveryGrid(bool isBuy)
             {
                 double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
                 double orderLot = OrderGetDouble(ORDER_VOLUME_CURRENT);
-                double orderTP = OrderGetDouble(ORDER_TP);
+
+                // Recovery pending must stay on valid side of market
+                bool validSide = isBuy ? (orderPrice < currentPriceForCheck) : (orderPrice > currentPriceForCheck);
+                if(!validSide)
+                {
+                    trade.OrderDelete(ticket);
+                    AddToLog(StringFormat("%s Recovery DELETED order #%I64u (wrong side of market @ %.2f, will re-place)",
+                        isBuy ? "BUY" : "SELL", ticket, orderPrice), "RECOVERY");
+                    continue;
+                }
+
+                // Recovery pending lot must match current expected lot profile
+                if(MathAbs(orderLot - correctRecoveryLot) > lotStep * 0.5)
+                {
+                    trade.OrderDelete(ticket);
+                    AddToLog(StringFormat("%s Recovery DELETED order #%I64u (lot mismatch %.2f vs expected %.2f, will re-place)",
+                        isBuy ? "BUY" : "SELL", ticket, orderLot, correctRecoveryLot), "RECOVERY");
+                    continue;
+                }
                 
                 // Check if this pending order is too far from expected recovery price
                 double distFromExpected = MathAbs(orderPrice - expectedRecoveryPrice);
@@ -1883,11 +2184,8 @@ void ManageRecoveryGrid(bool isBuy)
         // This ensures grid continues from where market is, targeting top loss position
         
         double topDistancePrice = isBuy ? 0 : 999999;  // Top loss position (furthest from profit)
-        double topDistanceLot = LotSize;
         double closestPrice = isBuy ? 999999 : 0;      // Closest to current market
-        double closestLot = LotSize;
         double closestDistance = 999999;
-        double maxLotInPositions = LotSize;              // Track highest lot for recovery lot calc
         
         for(int i = 0; i < PositionsTotal(); i++)
         {
@@ -1900,11 +2198,6 @@ void ManageRecoveryGrid(bool isBuy)
             if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
             
             double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-            double lots = PositionGetDouble(POSITION_VOLUME);
-            
-            // Track highest lot size among all positions
-            if(lots > maxLotInPositions)
-                maxLotInPositions = lots;
             
             // Find TOP DISTANCE position (highest loss)
             // BUY: highest price = most loss when price goes down
@@ -1912,7 +2205,6 @@ void ManageRecoveryGrid(bool isBuy)
             if((isBuy && openPrice > topDistancePrice) || (!isBuy && openPrice < topDistancePrice))
             {
                 topDistancePrice = openPrice;
-                topDistanceLot = lots;
             }
             
             // Find CLOSEST position to current market price
@@ -1921,7 +2213,6 @@ void ManageRecoveryGrid(bool isBuy)
             {
                 closestDistance = distance;
                 closestPrice = openPrice;
-                closestLot = lots;
             }
         }
         
@@ -1950,10 +2241,6 @@ void ManageRecoveryGrid(bool isBuy)
             // If closest position's recovery price is invalid, use current price + gap
             recoveryPrice = NormalizeDouble(currentPrice + (gapPips * pip), _Digits);
         }
-        
-        // Use closest position for price reference, highest lot for lot calculation
-        double extremePrice = closestPrice;
-        double extremeLot = maxLotInPositions;
         
         // ===== FIND EMPTY SLOT for recovery order =====
         // If recoveryPrice already has a position/order, keep moving further until empty slot found
@@ -2030,13 +2317,55 @@ void ManageRecoveryGrid(bool isBuy)
             return;
         }
         
-        // Debug log
-        AddToLog(StringFormat("%s Recovery: TopLoss=%.2f | Closest=%.2f | Target=%.2f | Current=%.2f", 
-            isBuy ? "BUY" : "SELL", topDistancePrice, closestPrice, recoveryPrice, currentPrice), "RECOVERY");
+        // ===== FIND ADJACENT POSITION to recovery price for correct lot calculation =====
+        // For BUY recovery: find position just ABOVE recoveryPrice (next position in grid going up)
+        // For SELL recovery: find position just BELOW recoveryPrice (next position in grid going down)
+        // Recovery lot = adjacent position's lot + increment (ensures sequential: 0.10, 0.11, 0.12...)
+        double adjacentLot = LotSize;  // Default to base lot if no adjacent found
+        double adjacentDist = 999999;
         
-        // Recovery lot = extreme position lot + increment
-        // This ensures lot increases based on the last filled position's lot
-        double recoveryLot = extremeLot + RecoveryLotIncrement;
+        for(int i = 0; i < PositionsTotal(); i++)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(ticket <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+            
+            double posPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            double posLot = PositionGetDouble(POSITION_VOLUME);
+            
+            // For BUY: adjacent = position just ABOVE recovery price (price > recoveryPrice, closest)
+            // For SELL: adjacent = position just BELOW recovery price (price < recoveryPrice, closest)
+            if(isBuy && posPrice > recoveryPrice)
+            {
+                double dist = posPrice - recoveryPrice;
+                if(dist < adjacentDist)
+                {
+                    adjacentDist = dist;
+                    adjacentLot = posLot;
+                }
+            }
+            else if(!isBuy && posPrice < recoveryPrice)
+            {
+                double dist = recoveryPrice - posPrice;
+                if(dist < adjacentDist)
+                {
+                    adjacentDist = dist;
+                    adjacentLot = posLot;
+                }
+            }
+        }
+        
+        // Debug log
+        AddToLog(StringFormat("%s Recovery: TopLoss=%.2f | Closest=%.2f | Target=%.2f | Current=%.2f | AdjLot=%.2f", 
+            isBuy ? "BUY" : "SELL", topDistancePrice, closestPrice, recoveryPrice, currentPrice, adjacentLot), "RECOVERY");
+        
+        // Recovery lot = adjacent position's lot + increment
+        // This ensures sequential lot increase: 0.10 -> 0.11 -> 0.12 -> ...
+        double recoveryLot = adjacentLot + RecoveryLotIncrement;
         
         // Ensure lot is within broker limits AND MaxRecoveryLotSize
         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
@@ -2102,8 +2431,8 @@ void ManageRecoveryGrid(bool isBuy)
 //+------------------------------------------------------------------+
 void EnsureRecoveryModeTP()
 {
-    // Keep tracked recovery baskets clean (remove already-closed tickets)
-    CleanupRecoveryBreakevenTrailTickets();
+    // Keep tracked recovery bundles clean (remove already-closed tickets)
+    CleanupBundles();
 
     // BUY Recovery Mode Management
     if(buyInRecovery)
@@ -2119,27 +2448,34 @@ void EnsureRecoveryModeTP()
 }
 
 //+------------------------------------------------------------------+
-//| Check and Arm Recovery Breakeven Group                            |
-//| যখন (long-distance loss + profitable positions) এর net profit    |
-//| >= RecoveryBreakevenPips হয়, তখন selected basket trailing arm।  |
+//| Check and Arm Recovery Breakeven Bundles (Multi-Bundle)           |
+//| Algorithm (Approach B):                                           |
+//| 1. Find TOP LOSS (farthest unbundled position = most loss)        |
+//| 2. Collect all unbundled PROFITABLE positions                     |
+//| 3. Add profitable positions (most profitable first) to top loss   |
+//| 4. When net profit (loss + profits) >= target → ARM bundle        |
+//| 5. Common TP/SL based on weighted avg of bundle positions         |
+//| 6. Loop: next top loss + remaining profitable = next bundle       |
+//| 7. Prediction log shows status before breakeven is reached        |
 //+------------------------------------------------------------------+
+
+// Struct for position data used in bundle calculations
+struct PositionInfo
+{
+    ulong ticket;
+    double openPrice;
+    double lots;
+    double floatingProfit;
+    double dist; // distance from current price
+};
+
 void CheckAndCloseRecoveryBreakeven(bool isBuy)
 {
-    // Already armed for trailing on this side, don't arm again until basket is closed
-    if(GetRecoveryBreakevenTrailCount(isBuy) > 0) return;
-
-    // Get long-distance position ticket
-    ulong longDistanceTicket = GetLongDistancePositionTicket(isBuy);
-    if(longDistanceTicket <= 0) return;
+    double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     
-    // Calculate combined profit of long-distance + profitable positions
-    double longDistanceLoss = 0.0;
-    double profitableSum = 0.0;
-    double totalLots = 0.0;
-    
-    // Collect tickets to trail and calculate profits
-    ulong ticketsToTrail[];
-    int trailCount = 0;
+    // ===== Step 1: Collect ALL unbundled positions for this side =====
+    PositionInfo allPos[];
+    int posCount = 0;
     
     for(int i = 0; i < PositionsTotal(); i++)
     {
@@ -2151,185 +2487,281 @@ void CheckAndCloseRecoveryBreakeven(bool isBuy)
         ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
         if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
         
-        double floatingProfit = PositionGetDouble(POSITION_PROFIT);
+        // SKIP if already in any active bundle
+        if(IsTicketInAnyBundle(isBuy, ticket)) continue;
+        
+        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
         double lots = PositionGetDouble(POSITION_VOLUME);
+        double dist = MathAbs(openPrice - currentPrice);
+        double profit = PositionGetDouble(POSITION_PROFIT);
         
-        // Long-distance position (always include)
-        if(ticket == longDistanceTicket)
+        ArrayResize(allPos, posCount + 1);
+        allPos[posCount].ticket = ticket;
+        allPos[posCount].openPrice = openPrice;
+        allPos[posCount].lots = lots;
+        allPos[posCount].floatingProfit = profit;
+        allPos[posCount].dist = dist;
+        posCount++;
+    }
+    
+    if(posCount < 2) return; // Need at least 2 unbundled positions
+    
+    // ===== Step 2: Separate into LOSS positions (sorted by distance DESC) 
+    //               and PROFITABLE positions (sorted by profit DESC) =====
+    PositionInfo lossPos[];
+    PositionInfo profitPos[];
+    int lossCount = 0, profitCount = 0;
+    
+    for(int i = 0; i < posCount; i++)
+    {
+        if(allPos[i].floatingProfit > 0.0)
         {
-            longDistanceLoss = floatingProfit; // This will be negative (loss)
-            totalLots += lots;
-            ArrayResize(ticketsToTrail, trailCount + 1);
-            ticketsToTrail[trailCount] = ticket;
-            trailCount++;
-            continue;
+            ArrayResize(profitPos, profitCount + 1);
+            profitPos[profitCount] = allPos[i];
+            profitCount++;
         }
-        
-        // Only include profitable positions
-        if(floatingProfit > 0.0)
+        else
         {
-            profitableSum += floatingProfit;
-            totalLots += lots;
-            ArrayResize(ticketsToTrail, trailCount + 1);
-            ticketsToTrail[trailCount] = ticket;
-            trailCount++;
+            ArrayResize(lossPos, lossCount + 1);
+            lossPos[lossCount] = allPos[i];
+            lossCount++;
         }
     }
-
-    if(trailCount <= 0 || totalLots <= 0.0) return;
     
-    // Calculate net profit
-    double netProfit = longDistanceLoss + profitableSum;
+    // Sort loss positions by distance DESCENDING (farthest = top loss first)
+    for(int i = 0; i < lossCount - 1; i++)
+    {
+        for(int j = i + 1; j < lossCount; j++)
+        {
+            if(lossPos[j].dist > lossPos[i].dist)
+            {
+                PositionInfo temp = lossPos[i];
+                lossPos[i] = lossPos[j];
+                lossPos[j] = temp;
+            }
+        }
+    }
     
-    // Calculate target profit based on RecoveryBreakevenPips
-    // Use OrderCalcProfit to get accurate pip value for the symbol
+    // Sort profitable positions by profit DESCENDING (most profitable first)
+    for(int i = 0; i < profitCount - 1; i++)
+    {
+        for(int j = i + 1; j < profitCount; j++)
+        {
+            if(profitPos[j].floatingProfit > profitPos[i].floatingProfit)
+            {
+                PositionInfo temp = profitPos[i];
+                profitPos[i] = profitPos[j];
+                profitPos[j] = temp;
+            }
+        }
+    }
+    
+    if(lossCount == 0 || profitCount == 0) return; // Need at least 1 loss + 1 profit
+    
+    // Calculate pip value for target calculation
     double pipValue = 0.0;
-    double testLot = 1.0;
     double testOpen = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
     double testClose = isBuy ? testOpen + pip : testOpen - pip;
-    if(!OrderCalcProfit(isBuy ? ORDER_TYPE_BUY : ORDER_TYPE_SELL, _Symbol, testLot, testOpen, testClose, pipValue))
-        pipValue = 10.0; // Fallback for XAUUSD
-    if(pipValue <= 0) pipValue = 10.0; // Fallback for XAUUSD
+    if(!OrderCalcProfit(isBuy ? ORDER_TYPE_BUY : ORDER_TYPE_SELL, _Symbol, 1.0, testOpen, testClose, pipValue))
+        pipValue = 10.0;
+    if(pipValue <= 0) pipValue = 10.0;
     
-    // Target profit = pips * lots * pipValue per lot per pip
-    double targetProfit = RecoveryBreakevenPips * totalLots * pipValue;
+    // ===== Step 3: Build bundles — TOP LOSS + PROFITABLE positions =====
+    // Track which profitable positions are "consumed" by a bundle
+    bool profitUsed[];
+    ArrayResize(profitUsed, profitCount);
+    ArrayInitialize(profitUsed, false);
     
-    // Debug log every 5 seconds (separate for BUY and SELL)
-    static datetime lastBuyDebugLog = 0;
-    static datetime lastSellDebugLog = 0;
-    datetime lastDebugLog = isBuy ? lastBuyDebugLog : lastSellDebugLog;
-    if(TimeCurrent() - lastDebugLog > 5)
-    {
-        AddToLog(StringFormat("%s BE Check: LongDist=%.2f | Profitable=%.2f | Net=%.2f | Target=%.2f | Lots=%.2f", 
-            isBuy ? "BUY" : "SELL", longDistanceLoss, profitableSum, netProfit, targetProfit, totalLots), "RECOVERY");
-        if(isBuy) lastBuyDebugLog = TimeCurrent();
-        else lastSellDebugLog = TimeCurrent();
-    }
+    int activeBundleIds[];
+    int activeBundleCount = GetUniqueBundleIds(isBuy, activeBundleIds);
     
-    // Check if net profit >= target profit
-    if(netProfit < targetProfit) return;
-    
-    AddToLog(StringFormat("%s Recovery Breakeven HIT! Net=%.2f >= Target=%.2f", 
-        isBuy ? "BUY" : "SELL", netProfit, targetProfit), "RECOVERY");
-
-    // Arm trailing only for this specific breakeven basket
-    for(int i = 0; i < trailCount; i++)
+    for(int topIdx = 0; topIdx < lossCount; topIdx++)
     {
-        AddRecoveryBreakevenTrailTicket(isBuy, ticketsToTrail[i]);
-    }
-
-    // Calculate basket weighted average open price for common initial SL
-    double wOpen = 0.0, wLots = 0.0;
-    for(int i = 0; i < trailCount; i++)
-    {
-        ulong ticket = ticketsToTrail[i];
-        if(!PositionSelectByTicket(ticket)) continue;
-        double lots = PositionGetDouble(POSITION_VOLUME);
-        wOpen += PositionGetDouble(POSITION_PRICE_OPEN) * lots;
-        wLots += lots;
-    }
-    if(wLots > 0.0)
-    {
-        double basketBase = wOpen / wLots;
-        double commonSL = isBuy ?
-            NormalizeDouble(basketBase - (RecoveryInitialSLPips * pip), _Digits) :
-            NormalizeDouble(basketBase + (RecoveryInitialSLPips * pip), _Digits);
-
-        // Set the same initial SL on every basket position immediately
-        for(int i = 0; i < trailCount; i++)
+        // This is our top loss candidate (farthest loss position)
+        double topLossProfit = lossPos[topIdx].floatingProfit; // Negative
+        double bundleLots = lossPos[topIdx].lots;
+        double bundleWeightedOpen = lossPos[topIdx].openPrice * lossPos[topIdx].lots;
+        double profitSum = 0.0;
+        
+        // Collect bundle tickets
+        ulong bundleTickets[];
+        ArrayResize(bundleTickets, 1);
+        bundleTickets[0] = lossPos[topIdx].ticket;
+        int bundleSize = 1;
+        
+        // Add profitable positions one by one (most profitable first)
+        bool bundleArmed = false;
+        for(int p = 0; p < profitCount; p++)
         {
-            ulong ticket = ticketsToTrail[i];
-            if(!PositionSelectByTicket(ticket)) continue;
-            double currentSL = PositionGetDouble(POSITION_SL);
-            double currentTP = PositionGetDouble(POSITION_TP);
-            // Only set if no SL yet or new SL is better (tighter / safer)
-            bool needsSet = (currentSL == 0) ||
-                (isBuy  && commonSL > currentSL) ||
-                (!isBuy && commonSL < currentSL);
-            if(needsSet)
-                trade.PositionModify(ticket, commonSL, currentTP);
+            if(profitUsed[p]) continue;
+            
+            // Add this profitable position
+            profitSum += profitPos[p].floatingProfit;
+            bundleLots += profitPos[p].lots;
+            bundleWeightedOpen += profitPos[p].openPrice * profitPos[p].lots;
+            ArrayResize(bundleTickets, bundleSize + 1);
+            bundleTickets[bundleSize] = profitPos[p].ticket;
+            bundleSize++;
+            
+            // Check: net profit (top loss + profitable) >= target?
+            double netProfit = topLossProfit + profitSum;
+            double targetProfit = RecoveryBreakevenPips * bundleLots * pipValue;
+            
+            if(netProfit >= targetProfit)
+            {
+                // ===== BREAKEVEN HIT — Arm this bundle NOW =====
+                int newBundleId = CreateNewBundle(isBuy);
+                double avgPrice = bundleWeightedOpen / bundleLots;
+                
+                // Mark profitable positions as consumed
+                for(int b = 1; b < bundleSize; b++) // b=0 is top loss
+                {
+                    for(int pp = 0; pp < profitCount; pp++)
+                    {
+                        if(profitPos[pp].ticket == bundleTickets[b]) { profitUsed[pp] = true; break; }
+                    }
+                }
+                
+                // Add all tickets to this bundle
+                for(int b = 0; b < bundleSize; b++)
+                    AddTicketToBundle(isBuy, newBundleId, bundleTickets[b]);
+                
+                // Set common SL and TP on all bundle positions
+                double commonSL = isBuy ?
+                    NormalizeDouble(avgPrice - (RecoveryInitialSLPips * pip), _Digits) :
+                    NormalizeDouble(avgPrice + (RecoveryInitialSLPips * pip), _Digits);
+                double commonTP = isBuy ?
+                    NormalizeDouble(avgPrice + (RecoveryBreakevenPips * pip), _Digits) :
+                    NormalizeDouble(avgPrice - (RecoveryBreakevenPips * pip), _Digits);
+                
+                for(int b = 0; b < bundleSize; b++)
+                {
+                    if(!PositionSelectByTicket(bundleTickets[b])) continue;
+                    trade.PositionModify(bundleTickets[b], commonSL, commonTP);
+                }
+                
+                AddToLog(StringFormat("%s BUNDLE #%d ARMED! %d pos (1 loss + %d profit) | TopLoss@%.2f | Net=%.2f >= Target=%.2f | Avg=%.2f | TP=%.2f | SL=%.2f", 
+                    isBuy ? "BUY" : "SELL", newBundleId, bundleSize, bundleSize - 1,
+                    lossPos[topIdx].openPrice, netProfit, targetProfit,
+                    avgPrice, commonTP, commonSL), "BUNDLE");
+                
+                bundleArmed = true;
+                break; // This top loss is done, move to next
+            }
+        }
+        
+        // If NOT armed, log prediction for this top loss (every 10 seconds)
+        if(!bundleArmed)
+        {
+            static datetime lastBuyPredLog = 0;
+            static datetime lastSellPredLog = 0;
+            datetime lastPredLog = isBuy ? lastBuyPredLog : lastSellPredLog;
+            
+            if(TimeCurrent() - lastPredLog > 10)
+            {
+                double netProfit = topLossProfit + profitSum;
+                double targetProfit = RecoveryBreakevenPips * bundleLots * pipValue;
+                double stillNeeded = targetProfit - netProfit;
+                
+                AddToLog(StringFormat("%s PREDICT: TopLoss@%.2f(%.2f lot, PnL=%.2f) + %d profitable = Net %.2f / Target %.2f | Need $%.2f more | Active Bundles=%d", 
+                    isBuy ? "BUY" : "SELL", 
+                    lossPos[topIdx].openPrice, lossPos[topIdx].lots, topLossProfit,
+                    bundleSize - 1, netProfit, targetProfit, stillNeeded,
+                    activeBundleCount), "PREDICT");
+                
+                if(isBuy) lastBuyPredLog = TimeCurrent();
+                else lastSellPredLog = TimeCurrent();
+            }
+            break; // Only predict for the first unarmed top loss — don't predict multiple
         }
     }
-
-    AddToLog(StringFormat("%s Recovery: Armed trailing for %d basket positions (Net: %.2f) — common SL set", 
-        isBuy ? "BUY" : "SELL", trailCount, netProfit), "RECOVERY");
 }
 
 //+------------------------------------------------------------------+
-//| Apply Recovery Breakeven Trailing (only selected basket)          |
+//| Apply Recovery Breakeven Trailing (per-bundle, independent)       |
+//| Each bundle trails independently with its own base price and SL   |
 //+------------------------------------------------------------------+
 void ApplyRecoveryBreakevenTrailingForSide(bool isBuy)
 {
-    ulong trackedTickets[];
-    if(isBuy)
-        ArrayCopy(trackedTickets, buyRecoveryBreakevenTrailTickets);
-    else
-        ArrayCopy(trackedTickets, sellRecoveryBreakevenTrailTickets);
-
-    int trackedCount = ArraySize(trackedTickets);
-    if(trackedCount <= 0) return;
-
-    double weightedOpen = 0.0;
-    double totalLots = 0.0;
-
-    for(int i = 0; i < trackedCount; i++)
-    {
-        ulong ticket = trackedTickets[i];
-        if(!PositionSelectByTicket(ticket)) continue;
-        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-
-        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
-
-        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-        double lots = PositionGetDouble(POSITION_VOLUME);
-        weightedOpen += openPrice * lots;
-        totalLots += lots;
-    }
-
-    if(totalLots <= 0.0) return;
-
-    double basePrice = weightedOpen / totalLots;
+    // Get all unique bundle IDs for this side
+    int bundleIds[];
+    int bundleCount = GetUniqueBundleIds(isBuy, bundleIds);
+    if(bundleCount <= 0) return;
+    
     double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-    double profitPips = isBuy ?
-        (currentPrice - basePrice) / pip :
-        (basePrice - currentPrice) / pip;
-
-    if(profitPips < RecoveryTrailingStartPips) return;
-
-    double priceMovement = profitPips - RecoveryTrailingStartPips;
-    double slMovement = priceMovement * RecoveryTrailingRatio;
-    double newSL = isBuy ?
-        NormalizeDouble(basePrice + (RecoveryInitialSLPips * pip) + (slMovement * pip), _Digits) :
-        NormalizeDouble(basePrice - (RecoveryInitialSLPips * pip) - (slMovement * pip), _Digits);
-
-    int updateCount = 0;
-    for(int i = 0; i < trackedCount; i++)
+    
+    // Trail EACH bundle independently
+    for(int b = 0; b < bundleCount; b++)
     {
-        ulong ticket = trackedTickets[i];
-        if(!PositionSelectByTicket(ticket)) continue;
-        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-
-        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
-
-        double currentSL = PositionGetDouble(POSITION_SL);
-        double currentTP = PositionGetDouble(POSITION_TP);
-
-        bool needsUpdate = (currentSL == 0) ||
-            (isBuy && newSL > currentSL + (0.5 * pip)) ||
-            (!isBuy && newSL < currentSL - (0.5 * pip));
-
-        if(needsUpdate && trade.PositionModify(ticket, newSL, currentTP))
-            updateCount++;
-    }
-
-    if(updateCount > 0)
-    {
-        AddToLog(StringFormat("%s Recovery BE Trail: Updated %d positions | Profit: %.1f pips",
-            isBuy ? "BUY" : "SELL", updateCount, profitPips), "TRAILING");
+        int bundleId = bundleIds[b];
+        
+        // Get tickets for this specific bundle
+        ulong tickets[];
+        int ticketCount = GetBundleTickets(isBuy, bundleId, tickets);
+        if(ticketCount <= 0) continue;
+        
+        // Calculate weighted average open price for THIS bundle only
+        double weightedOpen = 0.0;
+        double totalLots = 0.0;
+        
+        for(int i = 0; i < ticketCount; i++)
+        {
+            ulong ticket = tickets[i];
+            if(!PositionSelectByTicket(ticket)) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+            
+            double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            double lots = PositionGetDouble(POSITION_VOLUME);
+            weightedOpen += openPrice * lots;
+            totalLots += lots;
+        }
+        
+        if(totalLots <= 0.0) continue;
+        
+        double basePrice = weightedOpen / totalLots;
+        double profitPips = isBuy ?
+            (currentPrice - basePrice) / pip :
+            (basePrice - currentPrice) / pip;
+        
+        if(profitPips < RecoveryTrailingStartPips) continue;
+        
+        double priceMovement = profitPips - RecoveryTrailingStartPips;
+        double slMovement = priceMovement * RecoveryTrailingRatio;
+        double newSL = isBuy ?
+            NormalizeDouble(basePrice + (RecoveryInitialSLPips * pip) + (slMovement * pip), _Digits) :
+            NormalizeDouble(basePrice - (RecoveryInitialSLPips * pip) - (slMovement * pip), _Digits);
+        
+        int updateCount = 0;
+        for(int i = 0; i < ticketCount; i++)
+        {
+            ulong ticket = tickets[i];
+            if(!PositionSelectByTicket(ticket)) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            
+            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+            
+            double currentSL = PositionGetDouble(POSITION_SL);
+            double currentTP = PositionGetDouble(POSITION_TP);
+            
+            bool needsUpdate = (currentSL == 0) ||
+                (isBuy && newSL > currentSL + (0.5 * pip)) ||
+                (!isBuy && newSL < currentSL - (0.5 * pip));
+            
+            if(needsUpdate && trade.PositionModify(ticket, newSL, currentTP))
+                updateCount++;
+        }
+        
+        if(updateCount > 0)
+        {
+            AddToLog(StringFormat("%s Bundle #%d Trail: Updated %d/%d positions | Profit: %.1f pips | SL: %.2f",
+                isBuy ? "BUY" : "SELL", bundleId, updateCount, ticketCount, profitPips, newSL), "TRAILING");
+        }
     }
 }
 
@@ -2344,7 +2776,7 @@ void ApplyRecoveryBreakevenTrailingForSide(bool isBuy)
 //+------------------------------------------------------------------+
 void ApplyTrailing()
 {
-    CleanupRecoveryBreakevenTrailTickets();
+    CleanupBundles();
 
     // Recovery mode এ average price calculate করি
     // কারণ recovery mode এ সব positions একসাথে close হবে
@@ -3110,9 +3542,11 @@ bool CheckMaxDrawdown()
         trade.PositionClose(ticket);
     }
 
-    // Reset recovery basket tracking
-    ArrayFree(buyRecoveryBreakevenTrailTickets);
-    ArrayFree(sellRecoveryBreakevenTrailTickets);
+    // Reset recovery bundle tracking
+    ArrayFree(buyBundles);
+    ArrayFree(sellBundles);
+    nextBuyBundleId = 1;
+    nextSellBundleId = 1;
 
     return true; // Signal caller to skip trading this tick
 }
