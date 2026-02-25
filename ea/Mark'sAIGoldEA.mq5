@@ -1569,6 +1569,7 @@ void ManageNormalGrid(bool isBuy)
     // ===== STEP 2: Collect existing pending orders and check if they need modification =====
     ulong existingOrderTickets[];
     double existingOrderPrices[];
+    double existingOrderLots[];
     int existingOrderCount = 0;
     
     for(int i = 0; i < OrdersTotal(); i++)
@@ -1585,10 +1586,23 @@ void ManageNormalGrid(bool isBuy)
         
         ArrayResize(existingOrderTickets, existingOrderCount + 1);
         ArrayResize(existingOrderPrices, existingOrderCount + 1);
+        ArrayResize(existingOrderLots, existingOrderCount + 1);
         existingOrderTickets[existingOrderCount] = ticket;
         existingOrderPrices[existingOrderCount] = OrderGetDouble(ORDER_PRICE_OPEN);
+        existingOrderLots[existingOrderCount] = OrderGetDouble(ORDER_VOLUME_CURRENT);
         existingOrderCount++;
     }
+
+    // Expected lot for normal pending orders (self-heal lot mismatch)
+    double expectedMinLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+    double expectedMaxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+    double expectedLotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+    if(expectedMinLot <= 0) expectedMinLot = 0.01;
+    if(expectedMaxLot <= 0) expectedMaxLot = 100.0;
+    if(expectedLotStep <= 0) expectedLotStep = 0.01;
+    double expectedNormalLot = LotSize;
+    expectedNormalLot = MathFloor(expectedNormalLot / expectedLotStep) * expectedLotStep;
+    expectedNormalLot = MathMax(expectedMinLot, MathMin(expectedMaxLot, expectedNormalLot));
     
     // Delete orders that are too close to NORMAL positions
     for(int i = existingOrderCount - 1; i >= 0; i--)
@@ -1743,8 +1757,12 @@ void ManageNormalGrid(bool isBuy)
             // If order is already at correct level (within 50% of gap), keep it
             if(closestDistance < gapPrice * 0.5)
             {
-                targetOccupied[i] = true;
-                orderUsed[closestOrderIdx] = true;
+                bool lotAligned = MathAbs(existingOrderLots[closestOrderIdx] - expectedNormalLot) <= expectedLotStep * 0.5;
+                if(lotAligned)
+                {
+                    targetOccupied[i] = true;
+                    orderUsed[closestOrderIdx] = true;
+                }
             }
             // If order needs adjustment (more than 50% of gap away), modify it
             else if(closestDistance >= gapPrice * 0.5)
@@ -1791,8 +1809,10 @@ void ManageNormalGrid(bool isBuy)
         if(!orderUsed[i])
         {
             double orderPrice = existingOrderPrices[i];
+            double orderLot = existingOrderLots[i];
             bool validSide = isBuy ? (orderPrice < currentPrice) : (orderPrice > currentPrice);
             bool inRange = (orderPrice >= rangeLow && orderPrice <= rangeHigh);
+            bool lotAligned = MathAbs(orderLot - expectedNormalLot) <= expectedLotStep * 0.5;
             bool alignedToTarget = false;
             int alignedTargetIdx = -1;
 
@@ -1808,10 +1828,10 @@ void ManageNormalGrid(bool isBuy)
             }
 
             // Strict cleanup: remove stale/misaligned orders so they can be re-opened correctly
-            if(!validSide || !inRange || !alignedToTarget)
+            if(!validSide || !inRange || !alignedToTarget || !lotAligned)
             {
                 trade.OrderDelete(existingOrderTickets[i]);
-                string reason = !validSide ? "wrong side" : (!inRange ? "out of range" : "misaligned with grid");
+                string reason = !validSide ? "wrong side" : (!inRange ? "out of range" : (!alignedToTarget ? "misaligned with grid" : "lot mismatch"));
                 AddToLog(StringFormat("%s order #%I64u deleted - %s", isBuy ? "BUY" : "SELL",
                     existingOrderTickets[i], reason), "MODIFY");
             }
