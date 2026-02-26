@@ -55,7 +55,17 @@ def _send_fm_email(to_email, subject, heading, body_lines, cta_text=None, cta_ur
         cta_html = ''
         if cta_text and cta_url:
             full_url = cta_url if cta_url.startswith('http') else f'{base}{cta_url}'
-            cta_html = f'<p style="margin:24px 0 8px;"><a href="{full_url}" style="background:#00d4ff;color:#000;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-family:Arial,sans-serif;">{cta_text}</a></p>'
+            cta_html = f'''
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
+            <tr>
+                <td align="center">
+                    <a href="{full_url}" style="display: inline-block; background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: #000000; font-weight: bold; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; letter-spacing: 0.5px;">
+                        {cta_text}
+                    </a>
+                </td>
+            </tr>
+        </table>
+        '''
 
         body_html = ''.join(f'<p style="margin:0 0 14px;color:#cbd5e1;font-size:15px;line-height:1.6;">{line}</p>' for line in body_lines)
         full_message = body_html + cta_html
