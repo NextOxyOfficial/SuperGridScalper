@@ -15,7 +15,6 @@ export default function ApplyFMPage() {
     display_name: '',
     bio: '',
     trading_style: 'Scalping',
-    trading_pairs: 'XAUUSD',
     monthly_price: '49.99',
     experience_years: '',
     why_apply: '',
@@ -35,7 +34,7 @@ export default function ApplyFMPage() {
       const res = await fetch(`${API_URL}/fund-managers/apply/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email, ...form }),
+        body: JSON.stringify({ email: user.email, ...form, trading_pairs: 'XAUUSD' }),
       });
       const data = await res.json();
       if (data.success) {
@@ -154,15 +153,6 @@ export default function ApplyFMPage() {
               <option value="Hedging">Hedging</option>
               <option value="Mixed">Mixed Strategies</option>
             </select>
-          </div>
-
-          {/* Trading Pairs */}
-          <div>
-            <label className="text-gray-400 text-sm mb-1 block">Trading Pairs</label>
-            <div className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-4 py-3 text-cyan-300 text-sm flex items-center gap-2">
-              <span className="font-bold tracking-wider">XAUUSD</span>
-              <span className="text-gray-600 text-xs">(Gold — only supported pair)</span>
-            </div>
           </div>
 
           {/* Monthly Price */}

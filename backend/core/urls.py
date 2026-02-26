@@ -76,6 +76,7 @@ urlpatterns = [
     path('economic-events/', fm_views.get_economic_events, name='get_economic_events'),
     path('fund-managers/update-avatar/', fm_views.update_fm_avatar, name='update_fm_avatar'),
     path('fund-managers/seed-dummy/', fm_views.seed_dummy_fund_managers, name='seed_dummy_fund_managers'),
+    path('fund-managers/cancel-subscriber/', fm_views.fm_cancel_subscriber, name='fm_cancel_subscriber'),
     path('fund-managers/chat/media/', fm_views.fm_chat_media_upload, name='fm_chat_media_upload'),
     path('fund-managers/chat/profanity-check/', fm_views.check_chat_profanity, name='check_chat_profanity'),
     path('user-badges/', fm_views.get_user_badges, name='get_user_badges'),

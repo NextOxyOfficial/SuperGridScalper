@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useDashboard } from '../context';
 import { useRouter } from 'next/navigation';
-import { Star, Users, TrendingUp, Shield, Crown, Search, Zap, Clock, ChevronLeft, ChevronRight, ArrowUpDown, CheckCircle } from 'lucide-react';
+import { Star, Users, TrendingUp, Shield, Crown, Search, Zap, Clock, ChevronLeft, ChevronRight, ArrowUpDown, CheckCircle, Loader2, X } from 'lucide-react';
 
 const TIER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   standard: { bg: 'bg-gray-500/20', text: 'text-gray-300', border: 'border-gray-500/30' },
@@ -21,8 +21,11 @@ export default function FundManagersPage() {
   const [sortBy, setSortBy] = useState('featured');
   const [searchQuery, setSearchQuery] = useState('');
   const [isApprovedFM, setIsApprovedFM] = useState(false);
-  const [fmStatus, setFmStatus] = useState<string | null>(null); // 'pending' | 'approved' | etc
+  const [fmStatus, setFmStatus] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [subscribedFmIds, setSubscribedFmIds] = useState<Set<number>>(new Set());
+  const [unsubscribingId, setUnsubscribingId] = useState<number | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     fetchFundManagers();
@@ -30,6 +33,7 @@ export default function FundManagersPage() {
 
   useEffect(() => {
     if (!user?.email) return;
+    fetchMySubscriptions();
     const checkFMStatus = async () => {
       try {
         // GET request — returns success:true only for approved FMs
@@ -48,6 +52,44 @@ export default function FundManagersPage() {
     };
     checkFMStatus();
   }, [user]);
+
+  const fetchMySubscriptions = async () => {
+    if (!user?.email) return;
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/my-subscriptions/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const ids = new Set<number>(
+          data.subscriptions
+            .filter((s: any) => s.is_active)
+            .map((s: any) => s.fund_manager.id)
+        );
+        setSubscribedFmIds(ids);
+      }
+    } catch {}
+  };
+
+  const handleUnsubscribeFromList = async (fmId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Cancel your subscription to this fund manager?')) return;
+    setUnsubscribingId(fmId);
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/unsubscribe/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, fund_manager_id: fmId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSubscribedFmIds(prev => { const next = new Set(prev); next.delete(fmId); return next; });
+      }
+    } catch {}
+    finally { setUnsubscribingId(null); }
+  };
 
   // Reset page when search changes
   useEffect(() => { setPage(1); }, [searchQuery]);
@@ -96,37 +138,59 @@ export default function FundManagersPage() {
       </div>
 
       {/* Quick Links */}
-      <div className="flex flex-wrap gap-2 mb-5">
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 mb-5">
         <button
           onClick={() => router.push('/dashboard/fund-managers/leaderboard')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 text-yellow-400 rounded-lg text-xs font-medium border border-yellow-500/20 hover:bg-yellow-500/20 transition"
+          className="flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-yellow-500/10 text-yellow-400 rounded-lg text-xs font-medium border border-yellow-500/20 hover:bg-yellow-500/20 transition"
         >
           <Crown className="w-3.5 h-3.5" /> Leaderboard
         </button>
         {isApprovedFM ? (
           <button
             onClick={() => router.push('/dashboard/fund-managers/dashboard')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-400 rounded-lg text-xs font-medium border border-green-500/20 hover:bg-green-500/20 transition"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-green-500/10 text-green-400 rounded-lg text-xs font-medium border border-green-500/20 hover:bg-green-500/20 transition"
           >
             <CheckCircle className="w-3.5 h-3.5" /> My FM Dashboard
           </button>
         ) : fmStatus === 'pending' ? (
-          <span className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 text-yellow-400 rounded-lg text-xs font-medium border border-yellow-500/20">
+          <span className="flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-yellow-500/10 text-yellow-400 rounded-lg text-xs font-medium border border-yellow-500/20">
             <Clock className="w-3.5 h-3.5" /> Application Pending
           </span>
         ) : (
           <button
             onClick={() => router.push('/dashboard/fund-managers/apply')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs font-medium border border-purple-500/20 hover:bg-purple-500/20 transition"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs font-medium border border-purple-500/20 hover:bg-purple-500/20 transition"
           >
             <Zap className="w-3.5 h-3.5" /> Become an FM
           </button>
         )}
       </div>
 
-      {/* Search & Sort */}
-      <div className="flex flex-col sm:flex-row gap-2 mb-4">
-        <div className="relative flex-1">
+      {/* Search & Sort row */}
+      <div className="flex items-center gap-2 mb-4">
+        {/* Sort select — hidden when chat open */}
+        {!chatOpen && (
+          <>
+            <ArrowUpDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <select
+              value={sortBy}
+              onChange={e => { setSortBy(e.target.value); setPage(1); }}
+              className="bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm px-3 py-2.5 focus:outline-none focus:border-cyan-500/50 flex-shrink-0"
+            >
+              <option value="featured">Featured</option>
+              <option value="rating">Top Rated</option>
+              <option value="subscribers">Most Popular</option>
+              <option value="profit">Highest Profit</option>
+              <option value="price_low">Price: Low → High</option>
+              <option value="price_high">Price: High → Low</option>
+            </select>
+          </>
+        )}
+
+        {/* Search input — shown when chat open, hidden otherwise on mobile */}
+        <div className={`relative transition-all duration-300 ${
+          chatOpen ? 'flex-1' : 'hidden sm:flex flex-1'
+        }`}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             type="text"
@@ -134,23 +198,18 @@ export default function FundManagersPage() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+            autoFocus={chatOpen}
           />
         </div>
-        <div className="flex items-center gap-2">
-          <ArrowUpDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          <select
-            value={sortBy}
-            onChange={e => { setSortBy(e.target.value); setPage(1); }}
-            className="bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm px-3 py-2.5 focus:outline-none focus:border-cyan-500/50"
-          >
-            <option value="featured">Featured</option>
-            <option value="rating">Top Rated</option>
-            <option value="subscribers">Most Popular</option>
-            <option value="profit">Highest Profit</option>
-            <option value="price_low">Price: Low → High</option>
-            <option value="price_high">Price: High → Low</option>
-          </select>
-        </div>
+
+        {/* Chat / Search toggle icon (mobile only) */}
+        <button
+          onClick={() => { setChatOpen(o => !o); if (chatOpen) setSearchQuery(''); }}
+          className="sm:hidden flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg bg-[#1a1a2e] border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition"
+          title={chatOpen ? 'Close search' : 'Search'}
+        >
+          {chatOpen ? <X className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Results count */}
@@ -176,8 +235,7 @@ export default function FundManagersPage() {
           <div className="col-span-1 text-right">Win</div>
           <div className="col-span-2 text-right">Rating</div>
           <div className="col-span-1 text-right">Subs</div>
-          <div className="col-span-1 text-right">Style</div>
-          <div className="col-span-2 text-right">Price</div>
+          <div className="col-span-3 text-right">Price</div>
         </div>
       )}
 
@@ -211,23 +269,23 @@ export default function FundManagersPage() {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-white font-semibold text-sm truncate">{fm.display_name}</span>
+                      {/* Name row — clickable */}
+                      <button
+                        onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
+                        className="flex items-center gap-1.5 mb-0.5 text-left hover:opacity-80 transition"
+                      >
+                        <span className="text-white font-semibold text-sm truncate hover:text-cyan-300 transition">{fm.display_name}</span>
                         {fm.is_verified && <Shield className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />}
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${tier.bg} ${tier.text} border ${tier.border} flex-shrink-0`}>
                           {fm.tier.charAt(0).toUpperCase() + fm.tier.slice(1)}
                         </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {fm.trading_pairs.split(',').slice(0, 3).map((p: string) => (
-                          <span key={p} className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded border border-cyan-500/10">
-                            {p.trim()}
+                        {fm.join_label && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex-shrink-0">
+                            <Clock className="w-2 h-2" />{fm.join_label}
                           </span>
-                        ))}
-                        {fm.trading_pairs.split(',').length > 3 && (
-                          <span className="text-[9px] text-gray-500">+{fm.trading_pairs.split(',').length - 3}</span>
                         )}
-                      </div>
+                      </button>
+                      <div className="text-gray-500 text-[10px]">{fm.trading_style || 'XAUUSD Trader'}</div>
                     </div>
                   </div>
                   {/* Profit */}
@@ -251,71 +309,112 @@ export default function FundManagersPage() {
                   <div className="col-span-1 text-right">
                     <span className="text-purple-400 text-sm font-medium">{fm.subscriber_count}</span>
                   </div>
-                  {/* Style */}
-                  <div className="col-span-1 text-right">
-                    <span className="text-gray-400 text-[10px] truncate">{fm.trading_style || '—'}</span>
-                  </div>
-                  {/* Price + Actions */}
-                  <div className="col-span-2 flex flex-col items-end gap-1">
-                    <div>
-                      <span className="text-white font-bold text-sm">${fm.monthly_price}</span>
-                      <span className="text-gray-500 text-[10px]">/mo</span>
+                  {/* Price + Subscribe inline */}
+                  <div className="col-span-3 flex items-center justify-end gap-3">
+                    <div className="text-right">
+                      <div>
+                        <span className="text-white font-bold text-sm">${fm.monthly_price}</span>
+                        <span className="text-gray-500 text-[10px]">/mo</span>
+                      </div>
+                      {fm.trial_days > 0 && (
+                        <div className="text-green-400 text-[10px] flex items-center justify-end gap-0.5">
+                          <Clock className="w-2.5 h-2.5" />{fm.trial_days}d trial
+                        </div>
+                      )}
                     </div>
-                    {fm.trial_days > 0 && (
-                      <span className="text-green-400 text-[10px] flex items-center gap-0.5">
-                        <Clock className="w-2.5 h-2.5" />{fm.trial_days}d trial
-                      </span>
+                    {subscribedFmIds.has(fm.id) ? (
+                      <button
+                        onClick={(e) => handleUnsubscribeFromList(fm.id, e)}
+                        disabled={unsubscribingId === fm.id}
+                        className="text-red-400 text-[10px] font-medium px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition disabled:opacity-50 whitespace-nowrap flex-shrink-0"
+                      >
+                        {unsubscribingId === fm.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Unsubscribe'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
+                        className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black text-[10px] font-bold px-4 py-2 rounded-lg transition whitespace-nowrap flex-shrink-0"
+                        style={{ fontFamily: 'Orbitron, sans-serif' }}
+                      >
+                        Subscribe
+                      </button>
                     )}
-                    <button
-                      onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
-                      className="mt-1 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black text-[10px] font-bold px-3 py-1 rounded-lg transition whitespace-nowrap"
-                      style={{ fontFamily: 'Orbitron, sans-serif' }}
-                    >
-                      Subscribe
-                    </button>
                   </div>
                 </div>
 
                 {/* Mobile Row */}
-                <div className="sm:hidden flex items-center gap-3 px-3 py-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500/30 to-purple-500/20 flex items-center justify-center flex-shrink-0 border border-cyan-500/20">
-                    {fm.avatar_url ? (
-                      <img src={fm.avatar_url} alt={fm.display_name} className="w-10 h-10 rounded-full object-cover" />
-                    ) : (
-                      <span className="text-base font-bold text-cyan-400">{fm.display_name.charAt(0).toUpperCase()}</span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <span className="text-white font-semibold text-xs truncate">{fm.display_name}</span>
-                      {fm.is_verified && <Shield className="w-3 h-3 text-cyan-400 flex-shrink-0" />}
-                    </div>
-                    <div className="flex items-center gap-2 text-[10px]">
-                      <span className={`font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {profit >= 0 ? '+' : ''}{fm.total_profit_percent}%
-                      </span>
-                      <span className="text-gray-600">·</span>
-                      <span className="text-gray-400">Win {fm.win_rate}%</span>
-                      <span className="text-gray-600">·</span>
-                      <span className="text-white font-bold">${fm.monthly_price}/mo</span>
-                    </div>
-                    <div className="flex items-center gap-1 mt-1">
-                      <div className="flex">{renderStars(fm.average_rating)}</div>
-                      <span className="text-gray-500 text-[9px]">({fm.total_reviews})</span>
-                      {fm.trial_days > 0 && (
-                        <span className="text-green-400 text-[9px] ml-1 flex items-center gap-0.5">
-                          <Clock className="w-2 h-2" />{fm.trial_days}d trial
-                        </span>
+                <div className="sm:hidden px-3 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500/30 to-purple-500/20 flex items-center justify-center flex-shrink-0 border border-cyan-500/20">
+                      {fm.avatar_url ? (
+                        <img src={fm.avatar_url} alt={fm.display_name} className="w-10 h-10 rounded-full object-cover" />
+                      ) : (
+                        <span className="text-base font-bold text-cyan-400">{fm.display_name.charAt(0).toUpperCase()}</span>
                       )}
                     </div>
+                    <div className="flex-1 min-w-0">
+                      {/* Name — clickable */}
+                      <button
+                        onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
+                        className="flex items-center gap-1 mb-0.5 text-left"
+                      >
+                        <span className="text-white font-semibold text-xs truncate hover:text-cyan-300 transition">{fm.display_name}</span>
+                        {fm.is_verified && <Shield className="w-3 h-3 text-cyan-400 flex-shrink-0" />}
+                        {fm.join_label && (
+                          <span className="inline-flex items-center gap-0.5 text-[8px] font-semibold px-1 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex-shrink-0">
+                            <Clock className="w-2 h-2" />{fm.join_label}
+                          </span>
+                        )}
+                      </button>
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <span className={`font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {profit >= 0 ? '+' : ''}{fm.total_profit_percent}%
+                        </span>
+                        <span className="text-gray-600">·</span>
+                        <span className="text-gray-400">Win {fm.win_rate}%</span>
+                        <span className="text-gray-600">·</span>
+                        <span className="text-white font-bold">${fm.monthly_price}/mo</span>
+                      </div>
+                      <div className="flex items-center gap-1 mt-1">
+                        <div className="flex">{renderStars(fm.average_rating)}</div>
+                        <span className="text-gray-500 text-[9px]">({fm.total_reviews})</span>
+                        {fm.trial_days > 0 && (
+                          <span className="text-green-400 text-[9px] ml-1 flex items-center gap-0.5">
+                            <Clock className="w-2 h-2" />{fm.trial_days}d trial
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
-                    className="flex-shrink-0 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 text-black text-[10px] font-bold px-3 py-2 rounded-lg transition"
-                    style={{ fontFamily: 'Orbitron, sans-serif' }}
-                  >
-                    Subscribe
-                  </button>
+                  {/* Action buttons row */}
+                  <div className="mt-2.5 flex items-center gap-2">
+                    {/* View Details — always shown */}
+                    <button
+                      onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
+                      className="flex-1 py-2 text-cyan-400 border border-cyan-500/30 rounded-lg text-[10px] font-semibold hover:bg-cyan-500/10 transition"
+                    >
+                      View Details
+                    </button>
+
+                    {/* Subscribe / Unsubscribe */}
+                    {subscribedFmIds.has(fm.id) ? (
+                      <button
+                        onClick={(e) => handleUnsubscribeFromList(fm.id, e)}
+                        disabled={unsubscribingId === fm.id}
+                        className="flex-1 py-2 text-red-400 text-[10px] font-medium border border-red-500/20 rounded-lg hover:bg-red-500/10 transition disabled:opacity-50"
+                      >
+                        {unsubscribingId === fm.id ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Unsubscribe'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
+                        className="flex-1 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black text-[10px] font-bold rounded-lg transition"
+                        style={{ fontFamily: 'Orbitron, sans-serif' }}
+                      >
+                        Subscribe
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );

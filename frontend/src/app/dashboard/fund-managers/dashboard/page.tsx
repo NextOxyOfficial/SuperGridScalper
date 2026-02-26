@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import {
   Power, PowerOff, Users, DollarSign, TrendingUp, BarChart3,
   Shield, Clock, AlertTriangle, Calendar, Plus, Trash2, Loader2,
-  MessageCircle, ChevronDown, ChevronUp, Zap, ArrowLeft, Camera, Upload
+  MessageCircle, ChevronDown, ChevronUp, Zap, ArrowLeft, Camera, Upload,
+  UserX
 } from 'lucide-react';
 
 export default function FMDashboardPage() {
@@ -19,6 +20,9 @@ export default function FMDashboardPage() {
   const [toggleReason, setToggleReason] = useState('');
   const [showReasonModal, setShowReasonModal] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{ action: string; target: string | number } | null>(null);
+  const [togglePassword, setTogglePassword] = useState('');
+  const [toggleError, setToggleError] = useState('');
+  const [stopConfirmChecked, setStopConfirmChecked] = useState(false);
 
   // Schedule state
   const [schedules, setSchedules] = useState<any[]>([]);
@@ -30,11 +34,35 @@ export default function FMDashboardPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState('');
   const [expandedSub, setExpandedSub] = useState<number | null>(null);
+  const [cancellingSubId, setCancellingSubId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchDashboard();
     fetchSchedules();
   }, []);
+
+  const cancelSubscriber = async (subscriptionId: number, userEmail: string) => {
+    if (!confirm(`Cancel subscription for ${userEmail}? They will lose access immediately.`)) return;
+    setCancellingSubId(subscriptionId);
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/cancel-subscriber/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, subscription_id: subscriptionId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchDashboard();
+        setExpandedSub(null);
+      } else {
+        alert(data.error || 'Failed to cancel subscription');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    } finally {
+      setCancellingSubId(null);
+    }
+  };
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -101,6 +129,9 @@ export default function FMDashboardPage() {
   const initiateToggle = (action: string, target: string | number) => {
     setPendingToggle({ action, target });
     setToggleReason('');
+    setTogglePassword('');
+    setToggleError('');
+    setStopConfirmChecked(false);
     setShowReasonModal(true);
   };
 
@@ -112,29 +143,39 @@ export default function FMDashboardPage() {
     else setTogglingId(target as number);
 
     try {
+      const payload: any = {
+        email: user.email,
+        action,
+        target: String(target),
+        reason: toggleReason,
+      };
+      if (action === 'ea_off') {
+        if (!togglePassword.trim()) {
+          setToggleError('Password is required to stop robots.');
+          if (target === 'all') setTogglingAll(false);
+          else setTogglingId(null);
+          return;
+        }
+        payload.password = togglePassword;
+      }
       const res = await fetch(`${API_URL}/fund-managers/toggle-ea/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: user.email,
-          action,
-          target: String(target),
-          reason: toggleReason,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success) {
         fetchDashboard();
+        setShowReasonModal(false);
+        setPendingToggle(null);
       } else {
-        alert(data.error || 'Failed');
+        setToggleError(data.error || 'Failed');
       }
     } catch (err) {
-      alert('Failed to execute command');
+      setToggleError('Failed to execute command. Please try again.');
     } finally {
       setTogglingAll(false);
       setTogglingId(null);
-      setShowReasonModal(false);
-      setPendingToggle(null);
     }
   };
 
@@ -227,22 +268,27 @@ export default function FMDashboardPage() {
             <p className="text-gray-600 text-[10px] mt-0.5">Hover profile picture to change it</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => initiateToggle('ea_off', 'all')}
-            disabled={togglingAll}
-            className="flex items-center gap-2 bg-red-500/20 text-red-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-red-500/30 hover:bg-red-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50"
-          >
-            <PowerOff className="w-4 h-4" /> All OFF
-          </button>
-          <button
-            onClick={() => initiateToggle('ea_on', 'all')}
-            disabled={togglingAll}
-            className="flex items-center gap-2 bg-green-500/20 text-green-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-green-500/30 hover:bg-green-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50"
-          >
-            <Power className="w-4 h-4" /> All ON
-          </button>
-        </div>
+        {(() => {
+          const allAccounts = subscribers.flatMap((s: any) => s.accounts || []);
+          const allStopped = allAccounts.length > 0 && allAccounts.every((a: any) => !a.is_ea_active);
+          return allStopped ? (
+            <button
+              onClick={() => initiateToggle('ea_on', 'all')}
+              disabled={togglingAll}
+              className="flex items-center gap-2 bg-green-500/20 text-green-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-green-500/30 hover:bg-green-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50"
+            >
+              {togglingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />} Start Robot
+            </button>
+          ) : (
+            <button
+              onClick={() => initiateToggle('ea_off', 'all')}
+              disabled={togglingAll}
+              className="flex items-center gap-2 bg-red-500/20 text-red-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-red-500/30 hover:bg-red-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50"
+            >
+              {togglingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <PowerOff className="w-4 h-4" />} Stop Robot
+            </button>
+          );
+        })()}
       </div>
 
       {/* Stats Grid */}
@@ -339,40 +385,69 @@ export default function FMDashboardPage() {
                   </div>
                 </div>
 
-                {/* Expanded: Account Details */}
+                {/* Expanded: Account Details + Cancel */}
                 {expandedSub === sub.subscription_id && (
                   <div className="border-t border-gray-800 p-4 space-y-3">
-                    {sub.accounts.map((acc: any) => (
-                      <div key={acc.assignment_id} className="flex items-center justify-between bg-[#0a0a0f] rounded-lg p-3">
+                    {/* Accounts list */}
+                    {sub.accounts.length === 0 ? (
+                      <div className="flex items-start gap-3 bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3">
+                        <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
                         <div>
-                          <div className="text-white text-sm font-medium">MT5: {acc.mt5_account}</div>
-                          {acc.balance && (
-                            <div className="text-gray-500 text-xs mt-1">
-                              Balance: ${parseFloat(acc.balance).toLocaleString()} • Equity: ${parseFloat(acc.equity).toLocaleString()} • P/L: <span className={parseFloat(acc.profit) >= 0 ? 'text-green-400' : 'text-red-400'}>${acc.profit}</span>
-                            </div>
-                          )}
-                          {acc.last_toggled_reason && (
-                            <div className="text-yellow-400/70 text-[10px] mt-1">Last: {acc.last_toggled_reason}</div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-medium ${acc.is_ea_active ? 'text-green-400' : 'text-red-400'}`}>
-                            EA {acc.is_ea_active ? 'ON' : 'OFF'}
-                          </span>
-                          <button
-                            onClick={() => initiateToggle(acc.is_ea_active ? 'ea_off' : 'ea_on', acc.assignment_id)}
-                            disabled={togglingId === acc.assignment_id}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                              acc.is_ea_active
-                                ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
-                                : 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
-                            }`}
-                          >
-                            {togglingId === acc.assignment_id ? <Loader2 className="w-3 h-3 animate-spin" /> : acc.is_ea_active ? 'Turn OFF' : 'Turn ON'}
-                          </button>
+                          <div className="text-yellow-300 text-xs font-medium">No MT5 accounts linked</div>
+                          <div className="text-gray-500 text-[10px] mt-0.5">
+                            This subscriber did not assign any active MT5 licenses when subscribing. EA toggle is unavailable until they add accounts.
+                          </div>
                         </div>
                       </div>
-                    ))}
+                    ) : (
+                      sub.accounts.map((acc: any) => (
+                        <div key={acc.assignment_id} className="flex items-center justify-between bg-[#0a0a0f] rounded-lg p-3">
+                          <div>
+                            <div className="text-white text-sm font-medium">MT5: {acc.mt5_account}</div>
+                            {acc.balance && (
+                              <div className="text-gray-500 text-xs mt-1">
+                                Balance: ${parseFloat(acc.balance).toLocaleString()} • Equity: ${parseFloat(acc.equity).toLocaleString()} • P/L: <span className={parseFloat(acc.profit) >= 0 ? 'text-green-400' : 'text-red-400'}>${acc.profit}</span>
+                              </div>
+                            )}
+                            {acc.last_toggled_reason && (
+                              <div className="text-yellow-400/70 text-[10px] mt-1">Last: {acc.last_toggled_reason}</div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium ${acc.is_ea_active ? 'text-green-400' : 'text-red-400'}`}>
+                              EA {acc.is_ea_active ? 'ON' : 'OFF'}
+                            </span>
+                            <button
+                              onClick={() => initiateToggle(acc.is_ea_active ? 'ea_off' : 'ea_on', acc.assignment_id)}
+                              disabled={togglingId === acc.assignment_id}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                                acc.is_ea_active
+                                  ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                                  : 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                              }`}
+                            >
+                              {togglingId === acc.assignment_id ? <Loader2 className="w-3 h-3 animate-spin" /> : acc.is_ea_active ? 'Stop Robot' : 'Start Robot'}
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+
+                    {/* Cancel Subscription */}
+                    <div className="pt-2 border-t border-gray-800 flex justify-end">
+                      <button
+                        onClick={() => cancelSubscriber(sub.subscription_id, sub.user_email)}
+                        disabled={cancellingSubId === sub.subscription_id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg text-xs font-medium hover:bg-red-500/20 transition disabled:opacity-50"
+                      >
+                        {cancellingSubId === sub.subscription_id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <UserX className="w-3 h-3" />
+                        )}
+                        Cancel Subscription
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -534,35 +609,87 @@ export default function FMDashboardPage() {
       {/* Toggle Reason Modal */}
       {showReasonModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl max-w-md w-full p-6">
-            <h3 className="text-white font-bold text-lg mb-2">
-              {pendingToggle?.action === 'ea_on' ? 'Enable EA' : 'Disable EA'}
-              {pendingToggle?.target === 'all' ? ' — All Accounts' : ''}
+          <div className={`bg-[#12121a] border rounded-xl max-w-md w-full p-6 ${
+            pendingToggle?.action === 'ea_off' ? 'border-red-500/30' : 'border-green-500/30'
+          }`}>
+            <h3 className="text-white font-bold text-lg mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              {pendingToggle?.action === 'ea_on' ? 'Start Robot' : 'Stop Robot'}
+              {pendingToggle?.target === 'all' ? ' — All Subscribers' : ''}
             </h3>
-            <p className="text-gray-400 text-sm mb-4">Provide a reason (shown to subscribers):</p>
+
+            {/* Warning for Stop */}
+            {pendingToggle?.action === 'ea_off' && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 my-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-red-300 text-sm font-semibold mb-1">Warning: This will stop all trading!</p>
+                    <p className="text-red-400/70 text-xs">All open orders may be affected. Subscribers will see their robots as stopped. This action requires your password.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <p className="text-gray-400 text-sm mb-3">Provide a reason (shown to subscribers):</p>
             <input
               type="text"
               placeholder="e.g., NFP News Release, High volatility..."
               value={toggleReason}
               onChange={e => setToggleReason(e.target.value)}
-              className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 mb-4"
+              className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 mb-3"
             />
+
+            {/* Password + Confirm checkbox for Stop only */}
+            {pendingToggle?.action === 'ea_off' && (
+              <>
+                <input
+                  type="password"
+                  placeholder="Enter your password to confirm"
+                  value={togglePassword}
+                  onChange={e => { setTogglePassword(e.target.value); setToggleError(''); }}
+                  className="w-full bg-[#0a0a0f] border border-red-500/30 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-400 mb-3"
+                  style={{ fontSize: '16px' }}
+                />
+                <label className="flex items-center gap-2 mb-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={stopConfirmChecked}
+                    onChange={e => setStopConfirmChecked(e.target.checked)}
+                    className="w-4 h-4 accent-red-500"
+                  />
+                  <span className="text-gray-400 text-xs">I understand this will stop trading for subscribers</span>
+                </label>
+              </>
+            )}
+
+            {toggleError && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-red-300 text-xs mb-3">
+                {toggleError}
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
-                onClick={() => { setShowReasonModal(false); setPendingToggle(null); }}
+                onClick={() => { setShowReasonModal(false); setPendingToggle(null); setTogglePassword(''); setToggleError(''); }}
                 className="flex-1 py-2.5 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-800 transition text-sm"
               >
                 Cancel
               </button>
               <button
                 onClick={executeToggle}
-                className={`flex-1 py-2.5 font-bold rounded-lg text-sm transition ${
+                disabled={
+                  pendingToggle?.action === 'ea_off'
+                    ? (!togglePassword.trim() || !stopConfirmChecked)
+                    : false
+                }
+                className={`flex-1 py-2.5 font-bold rounded-lg text-sm transition disabled:opacity-40 disabled:cursor-not-allowed ${
                   pendingToggle?.action === 'ea_on'
                     ? 'bg-green-500 text-black hover:bg-green-400'
                     : 'bg-red-500 text-white hover:bg-red-400'
                 }`}
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
-                Confirm {pendingToggle?.action === 'ea_on' ? 'Enable' : 'Disable'}
+                {pendingToggle?.action === 'ea_on' ? 'Start Robot' : 'Stop Robot'}
               </button>
             </div>
           </div>

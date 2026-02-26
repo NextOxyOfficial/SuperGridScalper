@@ -846,6 +846,20 @@ def get_licenses(request):
     
     # Get all user's licenses with EA settings
     licenses = License.objects.filter(user=user).select_related('plan').prefetch_related('ea_settings')
+
+    # Build a map: license_id -> (is_fm_stopped, fm_name) from active FM assignments
+    from core.models import FMAccountAssignment
+    fm_stopped_map = {}  # license_id -> {'fm_name': str, 'is_ea_active': bool, 'reason': str}
+    fm_assignments = FMAccountAssignment.objects.filter(
+        license__user=user,
+        subscription__status__in=['active', 'trial'],
+    ).select_related('subscription__fund_manager', 'license')
+    for a in fm_assignments:
+        fm_stopped_map[a.license.id] = {
+            'fm_name': a.subscription.fund_manager.display_name,
+            'is_ea_active': a.is_ea_active,
+            'reason': a.last_toggled_reason or '',
+        }
     
     license_list = []
     for lic in licenses:
@@ -864,7 +878,9 @@ def get_licenses(request):
         else:
             ea_settings = None
         
+        fm_info = fm_stopped_map.get(lic.id)
         license_list.append({
+            'id': lic.id,
             'license_key': lic.license_key,
             'plan': lic.plan.name,
             'status': lic.status,
@@ -873,7 +889,11 @@ def get_licenses(request):
             'days_remaining': lic.days_remaining(),
             'mt5_account': lic.mt5_account,
             'nickname': lic.nickname or '',
-            'ea_settings': ea_settings
+            'ea_settings': ea_settings,
+            'fm_controlled': fm_info is not None,
+            'fm_stopped': fm_info is not None and not fm_info['is_ea_active'],
+            'fm_name': fm_info['fm_name'] if fm_info else None,
+            'fm_stop_reason': fm_info['reason'] if fm_info and not fm_info['is_ea_active'] else None,
         })
     
     return JsonResponse({
@@ -1389,7 +1409,52 @@ def update_trade_data(request):
     trade_data.last_update = timezone.now()
     
     trade_data.save()
-    
+
+    # Broadcast to WebSocket consumers
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer is not None:
+            payload = {
+                'license_key': license_key,
+                'account_balance': float(trade_data.account_balance),
+                'account_equity': float(trade_data.account_equity),
+                'account_profit': float(trade_data.account_profit),
+                'account_margin': float(trade_data.account_margin),
+                'account_free_margin': float(trade_data.account_free_margin),
+                'total_buy_positions': trade_data.total_buy_positions,
+                'total_sell_positions': trade_data.total_sell_positions,
+                'total_buy_lots': float(trade_data.total_buy_lots),
+                'total_sell_lots': float(trade_data.total_sell_lots),
+                'total_buy_profit': float(trade_data.total_buy_profit),
+                'total_sell_profit': float(trade_data.total_sell_profit),
+                'symbol': trade_data.symbol,
+                'current_price': float(trade_data.current_price),
+                'open_positions': trade_data.open_positions,
+                'pending_orders': trade_data.pending_orders,
+                'total_pending_orders': trade_data.total_pending_orders,
+                'trading_mode': trade_data.trading_mode,
+                'last_update': trade_data.last_update.isoformat(),
+            }
+            # Broadcast to single-license consumer
+            async_to_sync(channel_layer.group_send)(
+                f'trade_{license_key}',
+                {'type': 'trade_update', 'data': payload},
+            )
+            # Broadcast to all-trades consumer for the license owner
+            try:
+                owner_email = license.user.email
+                group_email = owner_email.replace('@', '_at_').replace('.', '_')
+                async_to_sync(channel_layer.group_send)(
+                    f'trades_all_{group_email}',
+                    {'type': 'trade_update', 'data': payload},
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     return JsonResponse({'success': True, 'message': 'Trade data updated'})
 
 
@@ -2709,6 +2774,16 @@ def toggle_license_status(request):
         # Check if not expired
         if license_obj.expires_at < timezone.now():
             return JsonResponse({'success': False, 'message': 'Cannot activate: license has expired'})
+        # Block reactivation if FM stopped this license
+        from core.models import FMAccountAssignment
+        fm_assignment = FMAccountAssignment.objects.filter(
+            license=license_obj,
+            subscription__status__in=['active', 'trial'],
+            is_ea_active=False,
+        ).select_related('subscription__fund_manager').first()
+        if fm_assignment:
+            fm_name = fm_assignment.subscription.fund_manager.display_name
+            return JsonResponse({'success': False, 'message': f'This license is controlled by Fund Manager "{fm_name}". Only the FM can restart your robot.'}, status=403)
         license_obj.status = 'active'
         license_obj.save(update_fields=['status', 'updated_at'])
 

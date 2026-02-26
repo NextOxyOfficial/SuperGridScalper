@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock, Pencil, Gift } from 'lucide-react';
+import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock, Pencil, Gift, Search } from 'lucide-react';
 import { useDashboard } from './context';
 import axios from 'axios';
 import ExnessBroker from '@/components/ExnessBroker';
@@ -87,6 +87,7 @@ export default function DashboardHome() {
   const [editingNickname, setEditingNickname] = useState<string | null>(null);
   const [nicknameValue, setNicknameValue] = useState('');
   const [savingNickname, setSavingNickname] = useState(false);
+  const [licenseSearchQuery, setLicenseSearchQuery] = useState('');
 
   // Free Exness claim state
   const [freeExnessMt5, setFreeExnessMt5] = useState('');
@@ -647,6 +648,15 @@ export default function DashboardHome() {
 
   const canGoToStep2 = !!selectedPlan;
 
+  const normalizedLicenseSearch = licenseSearchQuery.trim().toLowerCase();
+  const filteredLicenses = licenses.filter((lic: any) => {
+    if (!normalizedLicenseSearch) return true;
+    const mt5 = String(lic?.mt5_account || '').toLowerCase();
+    const nickname = String(lic?.nickname || '').toLowerCase();
+    const plan = String(lic?.plan || '').toLowerCase();
+    return mt5.includes(normalizedLicenseSearch) || nickname.includes(normalizedLicenseSearch) || plan.includes(normalizedLicenseSearch);
+  });
+
   const resetPurchaseForm = () => {
     setSelectedPlan(null);
     setMt5Account('');
@@ -926,20 +936,22 @@ export default function DashboardHome() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-white font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                    {isPurchaseRequest ? 'PENDING ACTIVATION' : selectedLicense.status === 'suspended' ? 'DEACTIVATED' : String(selectedLicense.status || 'INACTIVE').toUpperCase()}
+                    {isPurchaseRequest ? 'PENDING ACTIVATION' : selectedLicense.fm_stopped ? 'STOPPED BY FM' : selectedLicense.status === 'suspended' ? 'ROBOT STOPPED' : String(selectedLicense.status || 'INACTIVE').toUpperCase()}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
                     {isPurchaseRequest
                       ? 'Your purchase is under verification. Once approved, your license will be activated.'
                       : isExpiredLicense
                         ? 'Your license has expired. Extend now to continue trading.'
-                        : selectedLicense.status === 'suspended'
-                          ? 'You have deactivated this license. Click Activate to resume trading.'
-                          : 'This license is not active. Trading dashboard is unavailable.'}
+                        : selectedLicense.fm_stopped
+                          ? `Your robot was stopped by Fund Manager "${selectedLicense.fm_name}".${selectedLicense.fm_stop_reason ? ` Reason: ${selectedLicense.fm_stop_reason}` : ''} Only the FM can restart it.`
+                          : selectedLicense.status === 'suspended'
+                            ? 'Your robot is stopped. Click Start Robot to resume trading.'
+                            : 'This license is not active. Trading dashboard is unavailable.'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {selectedLicense.status === 'suspended' && (
+                  {selectedLicense.status === 'suspended' && !selectedLicense.fm_stopped && (
                     <button
                       type="button"
                       onClick={() => handleToggleLicense(selectedLicense.license_key, selectedLicense.status)}
@@ -947,7 +959,7 @@ export default function DashboardHome() {
                       className={`px-3 py-2 rounded-lg text-xs font-bold bg-green-500/20 hover:bg-green-500/30 text-green-300 border border-green-500/40 ${togglingLicense === selectedLicense.license_key ? 'opacity-50 cursor-wait' : ''}`}
                       style={{ fontFamily: 'Orbitron, sans-serif' }}
                     >
-                      {togglingLicense === selectedLicense.license_key ? 'Activating...' : 'Activate'}
+                      {togglingLicense === selectedLicense.license_key ? 'Starting...' : 'Start Robot'}
                     </button>
                   )}
                   {isExpiredLicense ? (
@@ -1859,14 +1871,20 @@ export default function DashboardHome() {
                         <span className="group-[.copied]:hidden">Copy</span>
                         <span className="hidden group-[.copied]:inline">Copied</span>
                       </button>
-                      <button
-                        onClick={() => handleToggleLicense(selectedLicense.license_key, selectedLicense.status)}
-                        disabled={togglingLicense === selectedLicense.license_key || deactivateCooldown > 0}
-                        className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg transition-all whitespace-nowrap font-bold border bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20 ${(togglingLicense === selectedLicense.license_key || deactivateCooldown > 0) ? 'opacity-50 cursor-wait' : ''}`}
-                      >
-                        <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                        <span>{togglingLicense === selectedLicense.license_key ? '...' : deactivateCooldown > 0 ? `${deactivateCooldown}s` : 'Deactivate'}</span>
-                      </button>
+                      {selectedLicense.fm_controlled ? (
+                        <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg whitespace-nowrap font-semibold border bg-purple-500/10 text-purple-400 border-purple-500/30">
+                          Managed by {selectedLicense.fm_name || 'FM'}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleToggleLicense(selectedLicense.license_key, selectedLicense.status)}
+                          disabled={togglingLicense === selectedLicense.license_key || deactivateCooldown > 0}
+                          className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg transition-all whitespace-nowrap font-bold border bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20 ${(togglingLicense === selectedLicense.license_key || deactivateCooldown > 0) ? 'opacity-50 cursor-wait' : ''}`}
+                        >
+                          <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <span>{togglingLicense === selectedLicense.license_key ? '...' : deactivateCooldown > 0 ? `${deactivateCooldown}s` : 'Stop Robot'}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2312,7 +2330,7 @@ export default function DashboardHome() {
                       <X className="w-5 h-5 text-red-400" />
                     </button>
                     <div>
-                      <h3 className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>DEACTIVATE LICENSE</h3>
+                      <h3 className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>STOP ROBOT</h3>
                       <p className="text-gray-500 text-[10px] sm:text-xs">This action will stop all trading</p>
                     </div>
                   </div>
@@ -2426,7 +2444,7 @@ export default function DashboardHome() {
                       className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-white rounded-lg text-xs sm:text-sm font-bold transition-all shadow-lg shadow-red-500/20 disabled:shadow-none"
                       style={{ fontFamily: 'Orbitron, sans-serif' }}
                     >
-                      {togglingLicense === selectedLicense.license_key ? 'DEACTIVATING...' : 'DEACTIVATE'}
+                      {togglingLicense === selectedLicense.license_key ? 'STOPPING...' : 'STOP ROBOT'}
                     </button>
                   </div>
                 </div>
@@ -3098,7 +3116,7 @@ export default function DashboardHome() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">{licenses.length} license(s)</span>
+            <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">{filteredLicenses.length} license(s)</span>
             {refreshedMsg && (
               <span className="text-[10px] sm:text-xs text-green-400 animate-pulse">Refreshed!</span>
             )}
@@ -3135,6 +3153,17 @@ export default function DashboardHome() {
               {refreshCooldown > 0 && <span className="text-[10px] sm:text-xs tabular-nums">{refreshCooldown}s</span>}
             </button>
           </div>
+        </div>
+
+        <div className="mb-3 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            type="text"
+            value={licenseSearchQuery}
+            onChange={(e) => setLicenseSearchQuery(e.target.value)}
+            placeholder="Search by MT5 account or name..."
+            className="w-full pl-10 pr-3 py-2 bg-[#0f1320] border border-cyan-500/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+          />
         </div>
         {/* Portfolio Summary */}
         {licenses.length > 0 && (() => {
@@ -3218,15 +3247,19 @@ export default function DashboardHome() {
         </div>
       ) : null}
 
-      {licenses.length === 0 ? (
+      {filteredLicenses.length === 0 ? (
         <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl p-4 sm:p-8 text-center">
           <p className="text-2xl sm:text-4xl mb-2 sm:mb-3">🔑</p>
-          <h3 className="text-sm sm:text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>No Active Licenses Found</h3>
-          <p className="text-gray-500 text-xs sm:text-sm">Purchase a plan above to get started.</p>
+          <h3 className="text-sm sm:text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+            {licenseSearchQuery.trim() ? 'No License Match Found' : 'No Active Licenses Found'}
+          </h3>
+          <p className="text-gray-500 text-xs sm:text-sm">
+            {licenseSearchQuery.trim() ? 'Try another MT5 account number or nickname.' : 'Purchase a plan above to get started.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
-          {[...licenses].sort((a, b) => {
+          {[...filteredLicenses].sort((a, b) => {
             const aTradeData = allTradeData[a.license_key];
             const bTradeData = allTradeData[b.license_key];
             const aBalance = aTradeData?.account_balance ?? 0;
@@ -3272,10 +3305,11 @@ export default function DashboardHome() {
                   <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${isConnected ? 'bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50' : 'bg-gray-600'}`}></div>
                   <span className={`px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
                     lic.status === 'active' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
+                    : lic.fm_stopped ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
                     : lic.status === 'suspended' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
                     : 'bg-red-500/20 text-red-400 border border-red-500/30'
                   }`}>
-                    {lic.status === 'suspended' ? 'DEACTIVATED' : lic.status?.toUpperCase()}
+                    {lic.fm_stopped ? 'STOPPED BY FM' : lic.status === 'suspended' ? 'ROBOT STOPPED' : lic.status?.toUpperCase()}
                   </span>
                   <span className="font-bold text-white text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>{lic.plan}</span>
                   {/* Nickname */}
@@ -3459,23 +3493,29 @@ export default function DashboardHome() {
                       <Check className="w-3.5 h-3.5 hidden group-[.copied]:block" />
                     </button>
                   {(lic.status === 'active' || lic.status === 'suspended') && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (lic.status === 'active') {
-                          selectLicense(lic);
-                        }
-                        handleToggleLicense(lic.license_key, lic.status);
-                      }}
-                      disabled={togglingLicense === lic.license_key || (lic.status === 'active' && deactivateCooldown > 0)}
-                      className={`shrink-0 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all border ${
-                        lic.status === 'active'
-                          ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
-                          : 'bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20'
-                      } ${(togglingLicense === lic.license_key || (lic.status === 'active' && deactivateCooldown > 0)) ? 'opacity-50 cursor-wait' : ''}`}
-                    >
-                      {togglingLicense === lic.license_key ? '...' : lic.status === 'active' ? (deactivateCooldown > 0 ? `${deactivateCooldown}s` : 'Deactivate') : 'Activate'}
-                    </button>
+                    lic.fm_controlled ? (
+                      <span className="shrink-0 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold border bg-purple-500/10 text-purple-400 border-purple-500/30">
+                        {lic.fm_stopped ? 'Stopped by FM' : `FM: ${lic.fm_name || 'Managed'}`}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (lic.status === 'active') {
+                            selectLicense(lic);
+                          }
+                          handleToggleLicense(lic.license_key, lic.status);
+                        }}
+                        disabled={togglingLicense === lic.license_key || (lic.status === 'active' && deactivateCooldown > 0)}
+                        className={`shrink-0 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all border ${
+                          lic.status === 'active'
+                            ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
+                            : 'bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20'
+                        } ${(togglingLicense === lic.license_key || (lic.status === 'active' && deactivateCooldown > 0)) ? 'opacity-50 cursor-wait' : ''}`}
+                      >
+                        {togglingLicense === lic.license_key ? '...' : lic.status === 'active' ? (deactivateCooldown > 0 ? `${deactivateCooldown}s` : 'Stop Robot') : 'Start Robot'}
+                      </button>
+                    )
                   )}
                 </div>
               </div>

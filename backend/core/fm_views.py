@@ -66,6 +66,14 @@ def list_fund_managers(request):
     
     results = []
     for fm in fms:
+        days_joined = (timezone.now() - fm.user.date_joined).days
+        if days_joined >= 365:
+            join_label = f'{days_joined // 365}yr'
+        elif days_joined >= 30:
+            join_label = f'{days_joined // 30}mo'
+        else:
+            join_label = f'{days_joined}d'
+
         results.append({
             'id': fm.id,
             'display_name': fm.display_name,
@@ -85,6 +93,7 @@ def list_fund_managers(request):
             'trading_style': fm.trading_style,
             'max_subscribers': fm.max_subscribers,
             'trial_days': fm.trial_days,
+            'join_label': join_label,
         })
     
     return JsonResponse({'success': True, 'fund_managers': results})
@@ -175,11 +184,26 @@ def subscribe_to_fm(request):
     
     email = data.get('email', '').strip()
     fm_id = data.get('fund_manager_id')
-    license_ids = data.get('license_ids', [])  # List of license IDs to assign
+    raw_license_ids = data.get('license_ids', [])  # List of license IDs to assign
+    # Normalize IDs to integers and deduplicate while preserving order
+    license_ids = []
+    seen_ids = set()
+    for raw_id in raw_license_ids if isinstance(raw_license_ids, list) else []:
+        try:
+            lid = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if lid in seen_ids:
+            continue
+        seen_ids.add(lid)
+        license_ids.append(lid)
     
     user = _resolve_user(email)
     if not user:
         return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
+
+    if not license_ids:
+        return JsonResponse({'success': False, 'error': 'Please select at least one valid MT5 license.'}, status=400)
     
     try:
         fm = FundManager.objects.get(id=fm_id, status='approved')
@@ -189,7 +213,14 @@ def subscribe_to_fm(request):
     # Check if already subscribed
     existing = FMSubscription.objects.filter(user=user, fund_manager=fm).first()
     if existing and existing.is_active:
-        return JsonResponse({'success': False, 'error': 'Already subscribed to this fund manager'}, status=400)
+        # Recover from legacy ghost subscriptions (active/trial but no assigned accounts)
+        has_assignments = existing.assigned_accounts.exists()
+        if has_assignments:
+            return JsonResponse({'success': False, 'error': 'Already subscribed to this fund manager'}, status=400)
+        existing.status = 'cancelled'
+        existing.cancelled_at = timezone.now()
+        existing.auto_renew = False
+        existing.save(update_fields=['status', 'cancelled_at', 'auto_renew', 'updated_at'])
     
     # Check max subscribers
     if fm.subscriber_count >= fm.max_subscribers:
@@ -200,7 +231,16 @@ def subscribe_to_fm(request):
     status = 'trial' if is_trial else 'active'
     period_days = fm.trial_days if is_trial else 30
     
+    prev_existing_state = None
     if existing:
+        prev_existing_state = {
+            'status': existing.status,
+            'price_at_subscription': existing.price_at_subscription,
+            'current_period_start': existing.current_period_start,
+            'current_period_end': existing.current_period_end,
+            'cancelled_at': existing.cancelled_at,
+            'auto_renew': existing.auto_renew,
+        }
         # Reactivate
         existing.status = status
         existing.price_at_subscription = fm.monthly_price
@@ -219,11 +259,24 @@ def subscribe_to_fm(request):
             current_period_end=timezone.now() + timedelta(days=period_days),
         )
     
-    # Assign licenses
+    # Assign licenses — strictly enforce 1 license = 1 FM
     assigned = []
+    already_used = []
     for lic_id in license_ids:
         try:
             lic = License.objects.get(id=lic_id, user=user, status='active')
+            # Check if this license is already assigned to a DIFFERENT active FM subscription
+            conflicting = FMAccountAssignment.objects.filter(
+                license=lic,
+                subscription__status__in=['active', 'trial'],
+            ).exclude(subscription=subscription).select_related('subscription__fund_manager').first()
+            if conflicting:
+                already_used.append({
+                    'license_id': lic.id,
+                    'mt5_account': lic.mt5_account,
+                    'fm_name': conflicting.subscription.fund_manager.display_name,
+                })
+                continue
             assignment, created = FMAccountAssignment.objects.get_or_create(
                 subscription=subscription,
                 license=lic,
@@ -237,6 +290,30 @@ def subscribe_to_fm(request):
         except License.DoesNotExist:
             continue
     
+    # If no licenses were successfully assigned, roll back the subscription update
+    if len(assigned) == 0:
+        if prev_existing_state is not None:
+            existing.status = prev_existing_state['status']
+            existing.price_at_subscription = prev_existing_state['price_at_subscription']
+            existing.current_period_start = prev_existing_state['current_period_start']
+            existing.current_period_end = prev_existing_state['current_period_end']
+            existing.cancelled_at = prev_existing_state['cancelled_at']
+            existing.auto_renew = prev_existing_state['auto_renew']
+            existing.save()
+        else:
+            # Don't leave a brand-new empty subscription row
+            subscription.delete()
+
+        if already_used:
+            msg = 'All selected licenses are already assigned to other fund managers. One license can only be managed by one FM at a time.'
+        else:
+            msg = 'No valid active license could be assigned. Please select an active MT5 license.'
+        return JsonResponse({
+            'success': False,
+            'error': msg,
+            'already_used': already_used,
+        }, status=400)
+    
     # Create chat room if not exists
     FMChatRoom.objects.get_or_create(fund_manager=fm, defaults={'name': f"{fm.display_name}'s Community"})
     
@@ -248,6 +325,7 @@ def subscribe_to_fm(request):
             'period_end': subscription.current_period_end.isoformat(),
             'days_remaining': subscription.days_remaining,
             'assigned_accounts': assigned,
+            'already_used': already_used,
         }
     })
 
@@ -279,9 +357,63 @@ def unsubscribe_from_fm(request):
     sub.save()
     
     # Re-enable all assigned accounts (give back control to user)
+    affected_license_ids = list(sub.assigned_accounts.values_list('license_id', flat=True))
     sub.assigned_accounts.update(is_ea_active=True)
+
+    # If FM had stopped subscriber licenses, restore them to active (unless expired)
+    now = timezone.now()
+    if affected_license_ids:
+        License.objects.filter(
+            id__in=affected_license_ids,
+            status='suspended',
+        ).exclude(expires_at__lt=now).update(status='active', updated_at=now)
     
     return JsonResponse({'success': True, 'message': 'Subscription cancelled'})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def fm_cancel_subscriber(request):
+    """FM cancels a specific subscriber's subscription"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    email = data.get('email', '').strip()
+    subscription_id = data.get('subscription_id')
+
+    user = _resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
+
+    fm = _get_fm_from_user(user)
+    if not fm or fm.status != 'approved':
+        return JsonResponse({'success': False, 'error': 'Not an approved fund manager'}, status=403)
+
+    try:
+        sub = FMSubscription.objects.get(id=subscription_id, fund_manager=fm)
+    except FMSubscription.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Subscription not found'}, status=404)
+
+    sub.status = 'cancelled'
+    sub.cancelled_at = timezone.now()
+    sub.auto_renew = False
+    sub.save()
+
+    # Re-enable all assigned accounts (return control to user)
+    affected_license_ids = list(sub.assigned_accounts.values_list('license_id', flat=True))
+    sub.assigned_accounts.update(is_ea_active=True)
+
+    # Restore subscriber licenses if they were FM-stopped (unless expired)
+    now = timezone.now()
+    if affected_license_ids:
+        License.objects.filter(
+            id__in=affected_license_ids,
+            status='suspended',
+        ).exclude(expires_at__lt=now).update(status='active', updated_at=now)
+
+    return JsonResponse({'success': True, 'message': f'Subscription for {sub.user.email} has been cancelled.'})
 
 
 @csrf_exempt
@@ -299,11 +431,23 @@ def get_my_fm_subscriptions(request):
         return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
     
     subs = FMSubscription.objects.filter(user=user).select_related('fund_manager')
-    
+
+    # Collect all license IDs already assigned to an active FM subscription
+    active_assignments = FMAccountAssignment.objects.filter(
+        subscription__user=user,
+        subscription__status__in=['active', 'trial'],
+    ).select_related('license', 'subscription__fund_manager').order_by('-assigned_at')
+    used_license_map = {}  # license_id -> fm_name
+    for a in active_assignments:
+        # Keep the latest assignment as source of truth if legacy conflicts exist
+        if a.license.id not in used_license_map:
+            used_license_map[a.license.id] = a.subscription.fund_manager.display_name
+
     results = []
     for sub in subs:
         fm = sub.fund_manager
         assignments = sub.assigned_accounts.select_related('license')
+        has_assigned_accounts = assignments.exists()
         results.append({
             'id': sub.id,
             'fund_manager': {
@@ -313,7 +457,8 @@ def get_my_fm_subscriptions(request):
                 'tier': fm.tier,
             },
             'status': sub.status,
-            'is_active': sub.is_active,
+            'is_active': sub.is_active and has_assigned_accounts,
+            'has_assigned_accounts': has_assigned_accounts,
             'days_remaining': sub.days_remaining,
             'period_end': sub.current_period_end.isoformat(),
             'assigned_accounts': [{
@@ -324,8 +469,12 @@ def get_my_fm_subscriptions(request):
                 'last_toggled_reason': a.last_toggled_reason,
             } for a in assignments],
         })
-    
-    return JsonResponse({'success': True, 'subscriptions': results})
+
+    return JsonResponse({
+        'success': True,
+        'subscriptions': results,
+        'used_license_map': used_license_map,  # {license_id: fm_name} for active subs
+    })
 
 
 @csrf_exempt
@@ -357,6 +506,15 @@ def assign_license_to_fm(request):
         lic = License.objects.get(id=license_id, user=user, status='active')
     except License.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'License not found'}, status=404)
+    
+    # Check if this license is already assigned to a DIFFERENT active FM subscription
+    conflicting = FMAccountAssignment.objects.filter(
+        license=lic,
+        subscription__status__in=['active', 'trial'],
+    ).exclude(subscription=sub).select_related('subscription__fund_manager').first()
+    if conflicting:
+        fm_name = conflicting.subscription.fund_manager.display_name
+        return JsonResponse({'success': False, 'error': f'This license is already assigned to Fund Manager "{fm_name}". One license can only be managed by one FM at a time.'}, status=400)
     
     assignment, created = FMAccountAssignment.objects.get_or_create(
         subscription=sub,
@@ -512,6 +670,7 @@ def fm_toggle_ea(request):
     action = data.get('action', '')  # 'ea_on' or 'ea_off'
     target = data.get('target', 'all')  # 'all' or assignment_id
     reason = data.get('reason', '').strip()
+    password = data.get('password', '').strip()
     
     if action not in ('ea_on', 'ea_off'):
         return JsonResponse({'success': False, 'error': 'Invalid action'}, status=400)
@@ -519,6 +678,13 @@ def fm_toggle_ea(request):
     user = _resolve_user(email)
     if not user:
         return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
+    
+    # Password required for stopping robots (ea_off)
+    if action == 'ea_off':
+        if not password:
+            return JsonResponse({'success': False, 'error': 'Password is required to stop robots'}, status=400)
+        if not user.check_password(password):
+            return JsonResponse({'success': False, 'error': 'Incorrect password. Action denied.'}, status=403)
     
     fm = _get_fm_from_user(user)
     if not fm:
@@ -538,6 +704,18 @@ def fm_toggle_ea(request):
             last_toggled_at=now,
             last_toggled_reason=reason or ('EA enabled by FM' if new_state else 'EA disabled by FM')
         )
+        # Also update the actual License status for all affected licenses
+        affected_license_ids = list(assignments.values_list('license_id', flat=True))
+        if new_state:
+            # FM starting: re-activate suspended licenses (only if not expired)
+            License.objects.filter(
+                id__in=affected_license_ids, status='suspended'
+            ).exclude(expires_at__lt=now).update(status='active', updated_at=now)
+        else:
+            # FM stopping: suspend active licenses
+            License.objects.filter(
+                id__in=affected_license_ids, status='active'
+            ).update(status='suspended', updated_at=now)
         target_type = 'all'
         target_assignment = None
     else:
@@ -552,6 +730,14 @@ def fm_toggle_ea(request):
             assignment.last_toggled_at = now
             assignment.last_toggled_reason = reason or ('EA enabled by FM' if new_state else 'EA disabled by FM')
             assignment.save()
+            # Also update the actual License status
+            lic = assignment.license
+            if new_state and lic.status == 'suspended' and lic.expires_at >= now:
+                lic.status = 'active'
+                lic.save(update_fields=['status', 'updated_at'])
+            elif not new_state and lic.status == 'active':
+                lic.status = 'suspended'
+                lic.save(update_fields=['status', 'updated_at'])
             affected = 1
             target_type = 'specific'
             target_assignment = assignment
@@ -647,14 +833,27 @@ def check_fm_ea_status(request):
     except License.DoesNotExist:
         return JsonResponse({'success': True, 'ea_allowed': True})  # No license = no FM control
     
-    # Check if any FM has disabled this license's EA
-    assignment = FMAccountAssignment.objects.filter(
+    # Check active FM assignments for this license
+    active_assignments = FMAccountAssignment.objects.filter(
         license=lic,
         subscription__status__in=['active', 'trial']
-    ).first()
+    ).select_related('subscription__fund_manager').order_by('-assigned_at')
+    assignment = active_assignments.first()
     
     if not assignment:
         return JsonResponse({'success': True, 'ea_allowed': True, 'has_fm': False})
+
+    # Fail-safe: conflicting active FM assignments detected for same license
+    conflict_count = active_assignments.count()
+    if conflict_count > 1:
+        return JsonResponse({
+            'success': True,
+            'ea_allowed': False,
+            'has_fm': True,
+            'fm_name': assignment.subscription.fund_manager.display_name,
+            'reason': 'Conflicting FM assignments detected for this license. Trading is blocked until support resolves it.',
+            'conflict_detected': True,
+        })
     
     return JsonResponse({
         'success': True,
@@ -1255,8 +1454,13 @@ def fm_chat_media_upload(request):
         )
     elif media_type == 'voice' and 'file' in request.FILES:
         audio = request.FILES['file']
-        allowed_audio = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a', 'audio/aac']
-        if audio.content_type not in allowed_audio and not audio.name.endswith(('.webm', '.ogg', '.mp3', '.m4a', '.wav', '.aac')):
+        ct = audio.content_type.lower()
+        is_valid_audio = (
+            ct.startswith('audio/') or
+            ct == 'application/octet-stream' or
+            audio.name.endswith(('.webm', '.ogg', '.mp3', '.m4a', '.wav', '.aac'))
+        )
+        if not is_valid_audio:
             return JsonResponse({'success': False, 'error': 'Invalid audio type'}, status=400)
         if audio.size > 20 * 1024 * 1024:
             return JsonResponse({'success': False, 'error': 'Voice file too large. Max 20MB.'}, status=400)

@@ -36,7 +36,7 @@ cd $BACKEND_DIR
 source venv/bin/activate
 
 # Install/update Python dependencies
-pip install -q python-dotenv
+pip install -q -r requirements.txt
 echo -e "${GREEN}✓ Python dependencies updated${NC}"
 
 # Run migrations
@@ -134,6 +134,19 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # WebSocket connections to Django/Daphne
+    location /ws/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
     }
 
     # Unsubscribe page

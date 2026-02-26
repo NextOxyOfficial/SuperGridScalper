@@ -6,7 +6,8 @@ import { useDashboard } from '../../context';
 import {
   Star, Shield, Crown, Users, TrendingUp, Clock, ArrowLeft,
   MessageCircle, Calendar, ChevronDown, ChevronUp, Check, Loader2,
-  Send, Pin, Megaphone, Zap, AlertTriangle, DollarSign, BarChart3
+  Send, Pin, Megaphone, Zap, AlertTriangle, DollarSign, BarChart3,
+  Mic, MicOff, StopCircle
 } from 'lucide-react';
 
 export default function FundManagerDetailPage() {
@@ -24,6 +25,7 @@ export default function FundManagerDetailPage() {
   const [subscribing, setSubscribing] = useState(false);
   const [selectedLicenses, setSelectedLicenses] = useState<number[]>([]);
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+  const [usedLicenseMap, setUsedLicenseMap] = useState<Record<number, string>>({});
 
   // Chat state
   const [messages, setMessages] = useState<any[]>([]);
@@ -31,8 +33,16 @@ export default function FundManagerDetailPage() {
   const [chatMessage, setChatMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
   const [isFm, setIsFm] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [sendingVoice, setSendingVoice] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const chatErrorTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Review state
   const [reviewRating, setReviewRating] = useState(0);
@@ -78,6 +88,12 @@ export default function FundManagerDetailPage() {
       if (data.success) {
         const sub = data.subscriptions.find((s: any) => s.fund_manager.id === Number(fmId));
         setMySubscription(sub || null);
+        // Convert string keys from JSON back to number keys
+        const map: Record<number, string> = {};
+        if (data.used_license_map) {
+          Object.entries(data.used_license_map).forEach(([k, v]) => { map[Number(k)] = v as string; });
+        }
+        setUsedLicenseMap(map);
       }
     } catch (err) {
       console.error(err);
@@ -85,7 +101,11 @@ export default function FundManagerDetailPage() {
   };
 
   const handleSubscribe = async () => {
-    if (!user?.email || selectedLicenses.length === 0) return;
+    const validSelected = selectedLicenses.filter((id) => Number.isFinite(id) && id > 0);
+    if (!user?.email || validSelected.length === 0) {
+      alert('Please select at least one valid MT5 license.');
+      return;
+    }
     setSubscribing(true);
     try {
       const res = await fetch(`${API_URL}/fund-managers/subscribe/`, {
@@ -94,7 +114,7 @@ export default function FundManagerDetailPage() {
         body: JSON.stringify({
           email: user.email,
           fund_manager_id: Number(fmId),
-          license_ids: selectedLicenses,
+          license_ids: validSelected,
         }),
       });
       const data = await res.json();
@@ -102,6 +122,15 @@ export default function FundManagerDetailPage() {
         setShowSubscribeModal(false);
         fetchMySubscription();
       } else {
+        // If conflict, refresh the license map so modal shows updated used-by info
+        if (data.already_used) {
+          const map = { ...usedLicenseMap };
+          data.already_used.forEach((u: any) => { map[u.license_id] = u.fm_name; });
+          setUsedLicenseMap(map);
+          // Deselect conflicting licenses
+          const conflictIds = new Set(data.already_used.map((u: any) => u.license_id));
+          setSelectedLicenses(prev => prev.filter(id => !conflictIds.has(id)));
+        }
         alert(data.error || 'Failed to subscribe');
       }
     } catch (err) {
@@ -163,6 +192,69 @@ export default function FundManagerDetailPage() {
     wsRef.current = ws;
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg' });
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: mr.mimeType });
+        await sendVoiceMessage(blob, mr.mimeType);
+      };
+      mr.start(100);
+      mediaRecorderRef.current = mr;
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000);
+    } catch {
+      showChatError('Microphone access denied. Please allow microphone permission.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    setIsRecording(false);
+    setRecordingSeconds(0);
+  };
+
+  const sendVoiceMessage = async (blob: Blob, mimeType: string) => {
+    setSendingVoice(true);
+    try {
+      const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const formData = new FormData();
+      formData.append('email', user.email);
+      formData.append('fund_manager_id', String(fmId));
+      formData.append('media_type', 'voice');
+      formData.append('file', blob, `voice_${Date.now()}.${ext}`);
+      const res = await fetch(`${API_URL}/fund-managers/chat/media/`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessages(prev => [...prev, data.message]);
+        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      } else {
+        showChatError(data.error || 'Failed to send voice message.');
+      }
+    } catch {
+      showChatError('Failed to send voice message.');
+    } finally {
+      setSendingVoice(false);
+    }
+  };
+
+  const showChatError = (msg: string) => {
+    setChatError(msg);
+    if (chatErrorTimerRef.current) clearTimeout(chatErrorTimerRef.current);
+    chatErrorTimerRef.current = setTimeout(() => setChatError(''), 4000);
+  };
+
   const sendMessage = async (type: string = 'message') => {
     if (!chatMessage.trim()) return;
     setSendingMessage(true);
@@ -181,10 +273,13 @@ export default function FundManagerDetailPage() {
       if (data.success) {
         setMessages(prev => [...prev, data.message]);
         setChatMessage('');
+        setChatError('');
         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      } else {
+        showChatError(data.error || 'Failed to send message.');
       }
     } catch (err) {
-      console.error(err);
+      showChatError('Network error. Please try again.');
     } finally {
       setSendingMessage(false);
     }
@@ -361,7 +456,7 @@ export default function FundManagerDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-[#12121a] p-1 rounded-lg border border-cyan-500/10">
-        {(['overview', 'reviews', 'chat', 'schedule'] as const).map(tab => (
+        {(['overview', 'chat', 'schedule', 'reviews'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -510,60 +605,133 @@ export default function FundManagerDetailPage() {
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {messages.map((m: any) => (
-                  <div key={m.id} className={`flex gap-3 ${m.sender_email === user.email ? 'flex-row-reverse' : ''}`}>
-                    <div className={`max-w-[75%] ${m.sender_email === user.email ? 'items-end' : 'items-start'}`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-xs font-medium ${m.is_fm ? 'text-cyan-400' : 'text-gray-400'}`}>
-                          {m.sender_name} {m.is_fm && '(FM)'}
+                  <div key={m.id} className={`flex gap-2 ${m.sender_email === user.email ? 'flex-row-reverse' : ''}`}>
+                    {/* Avatar */}
+                    <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold mt-1 ${
+                      m.is_fm ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-700 text-gray-300'
+                    }`}>
+                      {m.sender_name?.charAt(0).toUpperCase()}
+                    </div>
+                    <div className={`max-w-[72%] flex flex-col ${m.sender_email === user.email ? 'items-end' : 'items-start'}`}>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className={`text-[10px] font-semibold ${m.is_fm ? 'text-cyan-400' : 'text-gray-400'}`}>
+                          {m.sender_name}{m.is_fm && ' ·FM'}
                         </span>
-                        <span className="text-gray-600 text-[10px]">
+                        <span className="text-gray-600 text-[9px]">
                           {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      <div className={`rounded-lg px-3 py-2 text-sm ${
-                        m.message_type === 'announcement'
-                          ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-200'
-                          : m.message_type === 'signal'
-                          ? 'bg-green-500/10 border border-green-500/20 text-green-200'
-                          : m.sender_email === user.email
-                          ? 'bg-cyan-500/20 text-white'
-                          : 'bg-[#0a0a0f] text-gray-300'
-                      }`}>
-                        {m.message_type === 'announcement' && <Megaphone className="w-3 h-3 inline mr-1" />}
-                        {m.message_type === 'signal' && <Zap className="w-3 h-3 inline mr-1" />}
-                        {m.message}
-                      </div>
+
+                      {/* Voice message */}
+                      {m.message_type === 'voice' && m.voice_url ? (
+                        <div className={`rounded-2xl px-3 py-2.5 flex items-center gap-2 min-w-[200px] ${
+                          m.sender_email === user.email ? 'bg-cyan-500/20 border border-cyan-500/20' : 'bg-[#1a1a2e] border border-gray-700'
+                        }`}>
+                          <Mic className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                          <audio
+                            controls
+                            src={m.voice_url.startsWith('http') ? m.voice_url : `${API_URL.replace('/api', '')}${m.voice_url}`}
+                            className="h-8 flex-1"
+                            style={{ filter: 'invert(0.8) hue-rotate(180deg)', maxWidth: '180px' }}
+                          />
+                        </div>
+                      ) : (
+                        /* Text / announcement / signal message */
+                        <div className={`rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                          m.message_type === 'announcement'
+                            ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 rounded-tl-sm'
+                            : m.message_type === 'signal'
+                            ? 'bg-green-500/10 border border-green-500/20 text-green-200 rounded-tl-sm'
+                            : m.sender_email === user.email
+                            ? 'bg-cyan-600 text-white rounded-tr-sm'
+                            : 'bg-[#1e1e2e] text-gray-200 rounded-tl-sm'
+                        }`}>
+                          {m.message_type === 'announcement' && <Megaphone className="w-3 h-3 inline mr-1.5" />}
+                          {m.message_type === 'signal' && <Zap className="w-3 h-3 inline mr-1.5" />}
+                          {m.message}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
                 <div ref={chatEndRef} />
               </div>
 
-              {/* Input */}
-              <div className="border-t border-gray-800 p-3 flex gap-2">
+              {/* Warning / Error Banner */}
+              {chatError && (
+                <div className="mx-3 mb-1 flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-red-400 text-xs">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{chatError}</span>
+                </div>
+              )}
+
+              {/* Recording indicator bar */}
+              {isRecording && (
+                <div className="mx-3 mb-1 flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                  <span className="text-red-400 text-xs font-semibold flex-1">Recording... {recordingSeconds}s</span>
+                  <button
+                    onClick={stopRecording}
+                    className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition"
+                  >
+                    <StopCircle className="w-3.5 h-3.5" /> Stop & Send
+                  </button>
+                </div>
+              )}
+
+              {/* Input area */}
+              <div className="border-t border-gray-800 p-3 flex gap-2 items-center">
+                {/* Voice record button */}
+                {!isRecording ? (
+                  <button
+                    onClick={startRecording}
+                    disabled={sendingVoice}
+                    title="Record voice message"
+                    className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[#1a1a2e] border border-gray-700 hover:border-cyan-500/50 hover:bg-cyan-500/10 text-gray-400 hover:text-cyan-400 transition disabled:opacity-40"
+                  >
+                    {sendingVoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopRecording}
+                    title="Stop recording"
+                    className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-red-500/20 border border-red-500/40 text-red-400 animate-pulse"
+                  >
+                    <MicOff className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* Text input */}
                 <input
                   type="text"
                   value={chatMessage}
                   onChange={e => setChatMessage(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                  placeholder="Type a message..."
-                  className="flex-1 bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+                  placeholder={isRecording ? 'Recording in progress...' : 'Type a message...'}
+                  disabled={isRecording}
+                  className={`flex-1 bg-[#0a0a0f] border rounded-xl px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none transition ${
+                    chatError ? 'border-red-500/50' : isRecording ? 'border-gray-700 opacity-50' : 'border-cyan-500/20 focus:border-cyan-500/50'
+                  }`}
                 />
-                {isFm && (
+
+                {/* FM announcement button */}
+                {isFm && !isRecording && (
                   <button
                     onClick={() => sendMessage('announcement')}
-                    className="px-3 py-2 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition"
                     title="Send as Announcement"
+                    className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/20 transition"
                   >
                     <Megaphone className="w-4 h-4" />
                   </button>
                 )}
+
+                {/* Send button */}
                 <button
                   onClick={() => sendMessage()}
-                  disabled={!chatMessage.trim() || sendingMessage}
-                  className="px-4 py-2 bg-cyan-500 text-black rounded-lg hover:bg-cyan-400 disabled:opacity-50 transition"
+                  disabled={!chatMessage.trim() || sendingMessage || isRecording}
+                  className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-cyan-500 hover:bg-cyan-400 text-black disabled:opacity-40 transition"
                 >
-                  <Send className="w-4 h-4" />
+                  {sendingMessage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>
               </div>
             </div>
@@ -625,31 +793,53 @@ export default function FundManagerDetailPage() {
             <div className="mb-4">
               <label className="text-gray-300 text-sm font-medium block mb-2">Select MT5 accounts to assign:</label>
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {licenses.filter((l: any) => l.status === 'active').map((lic: any) => (
-                  <label
-                    key={lic.id}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
-                      selectedLicenses.includes(lic.id)
-                        ? 'bg-cyan-500/10 border-cyan-500/30'
-                        : 'bg-[#0a0a0f] border-gray-800 hover:border-gray-700'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedLicenses.includes(lic.id)}
-                      onChange={() => {
-                        setSelectedLicenses(prev =>
-                          prev.includes(lic.id) ? prev.filter(id => id !== lic.id) : [...prev, lic.id]
-                        );
-                      }}
-                      className="accent-cyan-500"
-                    />
-                    <div>
-                      <div className="text-white text-sm font-medium">MT5: {lic.mt5_account || 'Unbound'}</div>
-                      <div className="text-gray-500 text-xs">{lic.plan} • {lic.license_key?.slice(0, 12)}...</div>
-                    </div>
-                  </label>
-                ))}
+                {licenses.filter((l: any) => l.status === 'active').length === 0 ? (
+                  <p className="text-gray-500 text-sm py-3 text-center">No active MT5 licenses found.</p>
+                ) : licenses.filter((l: any) => l.status === 'active').map((lic: any) => {
+                  const licenseId = Number(lic.id);
+                  const hasValidId = Number.isFinite(licenseId) && licenseId > 0;
+                  const usedByFM = usedLicenseMap[lic.id];
+                  const isUsed = !!usedByFM;
+                  const isDisabled = isUsed || !hasValidId;
+                  return (
+                    <label
+                      key={lic.id}
+                      className={`flex items-center gap-3 p-3 rounded-lg border transition ${
+                        isDisabled
+                          ? 'bg-gray-800/40 border-gray-700 opacity-60 cursor-not-allowed'
+                          : selectedLicenses.includes(licenseId)
+                          ? 'bg-cyan-500/10 border-cyan-500/30 cursor-pointer'
+                          : 'bg-[#0a0a0f] border-gray-800 hover:border-gray-700 cursor-pointer'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={isDisabled}
+                        checked={selectedLicenses.includes(licenseId)}
+                        onChange={() => {
+                          if (isDisabled) return;
+                          setSelectedLicenses(prev =>
+                            prev.includes(licenseId) ? prev.filter(id => id !== licenseId) : [...prev, licenseId]
+                          );
+                        }}
+                        className="accent-cyan-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white text-sm font-medium">MT5: {lic.mt5_account || 'Unbound'}</div>
+                        {isUsed ? (
+                          <div className="text-yellow-400 text-[10px] flex items-center gap-1 mt-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
+                            Already assigned to <span className="font-semibold ml-0.5">{usedByFM}</span>
+                          </div>
+                        ) : !hasValidId ? (
+                          <div className="text-red-400 text-[10px] mt-0.5">License metadata missing (refresh required)</div>
+                        ) : (
+                          <div className="text-gray-500 text-xs">{lic.plan} · {lic.license_key?.slice(0, 12)}...</div>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 

@@ -11,15 +11,16 @@ import {
 type SortKey = 'profit' | 'rating' | 'subscribers';
 
 export default function FMLeaderboardPage() {
-  const { API_URL } = useDashboard();
+  const { API_URL, user } = useDashboard();
   const router = useRouter();
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortKey>('profit');
-  const [period, setPeriod] = useState('all');
+  const [subscribedIds, setSubscribedIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchLeaderboard();
+    fetchMySubscriptions();
   }, [sortBy]);
 
   const fetchLeaderboard = async () => {
@@ -32,6 +33,26 @@ export default function FMLeaderboardPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchMySubscriptions = async () => {
+    if (!user?.email) return;
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/my-subscriptions/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const ids = new Set<number>(
+          data.subscriptions
+            .filter((s: any) => s.is_active)
+            .map((s: any) => s.fund_manager.id)
+        );
+        setSubscribedIds(ids);
+      }
+    } catch {}
   };
 
   const getRankIcon = (rank: number) => {
@@ -126,9 +147,14 @@ export default function FMLeaderboardPage() {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-white font-medium text-sm flex items-center gap-1 truncate">
-                        {fm.display_name}
+                      <div className="text-white font-medium text-sm flex items-center gap-1.5 flex-wrap">
+                        <span className="truncate">{fm.display_name}</span>
                         {fm.is_verified && <Award className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />}
+                        {subscribedIds.has(fm.id) && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/20 border border-green-500/30 text-green-400 flex-shrink-0">
+                            ✓ Subscribed
+                          </span>
+                        )}
                       </div>
                       <div className="text-gray-500 text-xs truncate mb-1">{fm.trading_style} · {fm.months_active}mo active</div>
                       {fm.join_label && (
@@ -184,9 +210,14 @@ export default function FMLeaderboardPage() {
                       fm.display_name.charAt(0).toUpperCase()
                     )}
                   </div>
-                  <div className="text-white font-medium text-xs truncate flex items-center gap-1 mb-0.5">
-                    {fm.display_name}
+                  <div className="text-white font-medium text-xs flex items-center gap-1 mb-0.5 flex-wrap">
+                    <span className="truncate">{fm.display_name}</span>
                     {fm.is_verified && <Award className="w-3 h-3 text-cyan-400 flex-shrink-0" />}
+                    {subscribedIds.has(fm.id) && (
+                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1 py-0.5 rounded-full bg-green-500/20 border border-green-500/30 text-green-400 flex-shrink-0">
+                        ✓ Sub
+                      </span>
+                    )}
                   </div>
                   <div className="text-gray-500 text-[10px] mb-2">{fm.trading_style}</div>
 
