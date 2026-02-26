@@ -4,7 +4,7 @@ import { DashboardProvider, useDashboard } from './context';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { Bot, Store, Gift, Download, X, Bell, Users, Star, Flame, Crown, Shield as ShieldIcon, Gem, Rocket, Trophy, Zap, Clock } from 'lucide-react';
+import { Bot, Store, Gift, Download, X, Bell, Users, Star, Flame, Crown, Shield as ShieldIcon, Gem, Rocket, Trophy, Zap, Clock, TrendingUp } from 'lucide-react';
 import SiteLogo from '@/components/SiteLogo';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
@@ -180,7 +180,7 @@ function DashboardNav() {
               }`}
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> FM Engine
+              <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> FM Engine
             </Link>
             <Link
               href="/dashboard/ea-store"
@@ -274,7 +274,7 @@ function DashboardNav() {
               }`}
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> FM Engine
+              <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> FM Engine
             </Link>
             <Link
               href="/dashboard/ea-store"

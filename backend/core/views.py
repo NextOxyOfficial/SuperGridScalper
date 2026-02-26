@@ -2768,6 +2768,43 @@ def toggle_license_status(request):
             return JsonResponse({'success': False, 'message': f'Cannot deactivate: license is {license_obj.status}'})
         license_obj.status = 'suspended'
         license_obj.save(update_fields=['status', 'updated_at'])
+        
+        # Send email notification for robot stop
+        try:
+            from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+            from django.core.mail import EmailMultiAlternatives
+            from django.conf import settings as django_settings
+            
+            if can_send_email_to_user(user, 'transactional'):
+                subject = 'Your Trading Robot Has Been Stopped'
+                heading = 'Robot Deactivated Successfully'
+                body_lines = [
+                    f'You have successfully <strong>stopped your trading robot</strong> for license <strong>{license_key}</strong>.',
+                    'Your MT5 EA has been paused and will not open any new trades.',
+                    'All existing positions remain open and will be managed according to your EA settings.',
+                    'You can restart your robot anytime from your dashboard.',
+                ]
+                
+                body_html = ''.join(f'<p style="margin:0 0 14px;color:#cbd5e1;font-size:15px;line-height:1.6;">{line}</p>' for line in body_lines)
+                
+                html_content = render_email_template(
+                    subject=subject,
+                    heading=heading,
+                    message=body_html,
+                    cta_text='View Dashboard',
+                    cta_url='/dashboard',
+                    footer_note='This is an automated notification from MarksTrades.',
+                    preheader=subject,
+                    unsubscribe_url=get_unsubscribe_url(user),
+                )
+                
+                body_text = '\n'.join(body_lines)
+                msg = EmailMultiAlternatives(subject, body_text, get_email_from_address(), [user.email])
+                msg.attach_alternative(html_content, 'text/html')
+                msg = add_email_headers(msg, 'transactional', user=user)
+                msg.send(fail_silently=True)
+        except Exception:
+            pass  # Email is non-critical
     elif action == 'activate':
         if license_obj.status not in ('suspended',):
             return JsonResponse({'success': False, 'message': f'Cannot activate: license is {license_obj.status}'})
@@ -2786,6 +2823,43 @@ def toggle_license_status(request):
             return JsonResponse({'success': False, 'message': f'This license is controlled by Fund Manager "{fm_name}". Only the FM can restart your robot.'}, status=403)
         license_obj.status = 'active'
         license_obj.save(update_fields=['status', 'updated_at'])
+        
+        # Send email notification for robot start
+        try:
+            from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+            from django.core.mail import EmailMultiAlternatives
+            from django.conf import settings as django_settings
+            
+            if can_send_email_to_user(user, 'transactional'):
+                subject = 'Your Trading Robot Has Been Started'
+                heading = 'Robot Activated Successfully'
+                body_lines = [
+                    f'You have successfully <strong>started your trading robot</strong> for license <strong>{license_key}</strong>.',
+                    'Your MT5 EA is now active and will resume automated trading.',
+                    'The robot will follow your configured settings and risk management rules.',
+                    'You can monitor your trades and stop the robot anytime from your dashboard.',
+                ]
+                
+                body_html = ''.join(f'<p style="margin:0 0 14px;color:#cbd5e1;font-size:15px;line-height:1.6;">{line}</p>' for line in body_lines)
+                
+                html_content = render_email_template(
+                    subject=subject,
+                    heading=heading,
+                    message=body_html,
+                    cta_text='View Dashboard',
+                    cta_url='/dashboard',
+                    footer_note='This is an automated notification from MarksTrades.',
+                    preheader=subject,
+                    unsubscribe_url=get_unsubscribe_url(user),
+                )
+                
+                body_text = '\n'.join(body_lines)
+                msg = EmailMultiAlternatives(subject, body_text, get_email_from_address(), [user.email])
+                msg.attach_alternative(html_content, 'text/html')
+                msg = add_email_headers(msg, 'transactional', user=user)
+                msg.send(fail_silently=True)
+        except Exception:
+            pass  # Email is non-critical
 
     return JsonResponse({
         'success': True,

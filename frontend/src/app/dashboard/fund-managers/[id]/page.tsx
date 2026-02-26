@@ -427,7 +427,7 @@ export default function FundManagerDetailPage() {
             <span className="text-yellow-300 text-xs font-semibold">FEATURED FUND MANAGER</span>
           </div>
         )}
-        <div className="p-6">
+        <div className="p-2">
           <div className="flex flex-col sm:flex-row items-start gap-6">
             {/* Avatar */}
             <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500/30 to-purple-500/30 flex items-center justify-center flex-shrink-0 border-2 border-cyan-500/20">
