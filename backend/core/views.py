@@ -856,6 +856,7 @@ def get_licenses(request):
     ).select_related('subscription__fund_manager', 'license')
     for a in fm_assignments:
         fm_stopped_map[a.license.id] = {
+            'fm_id': a.subscription.fund_manager.id,
             'fm_name': a.subscription.fund_manager.display_name,
             'is_ea_active': a.is_ea_active,
             'reason': a.last_toggled_reason or '',
@@ -892,6 +893,7 @@ def get_licenses(request):
             'ea_settings': ea_settings,
             'fm_controlled': fm_info is not None,
             'fm_stopped': fm_info is not None and not fm_info['is_ea_active'],
+            'fm_id': fm_info['fm_id'] if fm_info else None,
             'fm_name': fm_info['fm_name'] if fm_info else None,
             'fm_stop_reason': fm_info['reason'] if fm_info and not fm_info['is_ea_active'] else None,
         })

@@ -236,10 +236,10 @@ export default function FMDashboardPage() {
   return (
     <div className="max-w-7xl mx-auto px-1 sm:px-4 py-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+      <div className="flex flex-row items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-4">
           {/* Avatar Upload */}
-          <div className="relative group flex-shrink-0">
+          <div className="relative group flex-shrink-0" title="Tap to change profile picture">
             <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-cyan-500/30 to-purple-500/20 border-2 border-cyan-500/30 flex items-center justify-center overflow-hidden">
               {avatarUrl || profile.avatar_url ? (
                 <img src={avatarUrl || profile.avatar_url} alt={profile.display_name} className="w-full h-full object-cover" />
@@ -265,7 +265,6 @@ export default function FMDashboardPage() {
             </h1>
             <p className="text-gray-400 text-xs sm:text-sm">{profile.display_name} • {profile.tier} tier</p>
             {avatarError && <p className="text-red-400 text-xs mt-1">{avatarError}</p>}
-            <p className="text-gray-600 text-[10px] mt-0.5">Hover profile picture to change it</p>
           </div>
         </div>
         {(() => {
@@ -275,7 +274,7 @@ export default function FMDashboardPage() {
             <button
               onClick={() => initiateToggle('ea_on', 'all')}
               disabled={togglingAll}
-              className="flex items-center gap-2 bg-green-500/20 text-green-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-green-500/30 hover:bg-green-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50"
+              className="inline-flex items-center gap-2 w-auto bg-green-500/20 text-green-400 px-4 py-2.5 rounded-lg border border-green-500/30 hover:bg-green-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50 flex-shrink-0"
             >
               {togglingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />} Start Robot
             </button>
@@ -283,7 +282,7 @@ export default function FMDashboardPage() {
             <button
               onClick={() => initiateToggle('ea_off', 'all')}
               disabled={togglingAll}
-              className="flex items-center gap-2 bg-red-500/20 text-red-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-red-500/30 hover:bg-red-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50"
+              className="inline-flex items-center gap-2 w-auto bg-red-500/20 text-red-400 px-4 py-2.5 rounded-lg border border-red-500/30 hover:bg-red-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50 flex-shrink-0"
             >
               {togglingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <PowerOff className="w-4 h-4" />} Stop Robot
             </button>
@@ -310,13 +309,15 @@ export default function FMDashboardPage() {
       </div>
 
       {/* Section Tabs */}
-      <div className="flex gap-1 mb-6 bg-[#12121a] p-1 rounded-lg border border-cyan-500/10">
+      <div className="flex gap-1 mb-6 bg-[#12121a] p-1 rounded-xl border border-cyan-500/10 overflow-x-auto">
         {(['subscribers', 'commands', 'schedules', 'earnings'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveSection(tab)}
-            className={`flex-1 py-2.5 text-sm font-medium rounded-md transition capitalize ${
-              activeSection === tab ? 'bg-cyan-500 text-black' : 'text-gray-400 hover:text-white hover:bg-white/5'
+            className={`flex-shrink-0 flex-1 min-w-0 py-2 sm:py-2.5 px-2 sm:px-3 text-[10px] sm:text-xs font-semibold rounded-lg transition capitalize whitespace-nowrap ${
+              activeSection === tab
+                ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
             }`}
             style={{ fontFamily: 'Orbitron, sans-serif' }}
           >
@@ -401,32 +402,34 @@ export default function FMDashboardPage() {
                       </div>
                     ) : (
                       sub.accounts.map((acc: any) => (
-                        <div key={acc.assignment_id} className="flex items-center justify-between bg-[#0a0a0f] rounded-lg p-3">
-                          <div>
-                            <div className="text-white text-sm font-medium">MT5: {acc.mt5_account}</div>
+                        <div key={acc.assignment_id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-[#0a0a0f] rounded-lg p-3 gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-white text-xs sm:text-sm font-medium">MT5: {acc.mt5_account}</div>
                             {acc.balance && (
-                              <div className="text-gray-500 text-xs mt-1">
-                                Balance: ${parseFloat(acc.balance).toLocaleString()} • Equity: ${parseFloat(acc.equity).toLocaleString()} • P/L: <span className={parseFloat(acc.profit) >= 0 ? 'text-green-400' : 'text-red-400'}>${acc.profit}</span>
+                              <div className="text-gray-500 text-[10px] sm:text-xs mt-1 flex flex-wrap gap-x-2">
+                                <span>Bal: ${parseFloat(acc.balance).toLocaleString()}</span>
+                                <span>Eq: ${parseFloat(acc.equity).toLocaleString()}</span>
+                                <span>P/L: <span className={parseFloat(acc.profit) >= 0 ? 'text-green-400' : 'text-red-400'}>${acc.profit}</span></span>
                               </div>
                             )}
                             {acc.last_toggled_reason && (
-                              <div className="text-yellow-400/70 text-[10px] mt-1">Last: {acc.last_toggled_reason}</div>
+                              <div className="text-yellow-400/70 text-[10px] mt-1 truncate">{acc.last_toggled_reason}</div>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs font-medium ${acc.is_ea_active ? 'text-green-400' : 'text-red-400'}`}>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className={`text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full ${acc.is_ea_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
                               EA {acc.is_ea_active ? 'ON' : 'OFF'}
                             </span>
                             <button
                               onClick={() => initiateToggle(acc.is_ea_active ? 'ea_off' : 'ea_on', acc.assignment_id)}
                               disabled={togglingId === acc.assignment_id}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-medium transition ${
                                 acc.is_ea_active
                                   ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
                                   : 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
                               }`}
                             >
-                              {togglingId === acc.assignment_id ? <Loader2 className="w-3 h-3 animate-spin" /> : acc.is_ea_active ? 'Stop Robot' : 'Start Robot'}
+                              {togglingId === acc.assignment_id ? <Loader2 className="w-3 h-3 animate-spin" /> : acc.is_ea_active ? 'Stop' : 'Start'}
                             </button>
                           </div>
                         </div>
@@ -459,31 +462,31 @@ export default function FMDashboardPage() {
       {/* Commands History */}
       {activeSection === 'commands' && (
         <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl overflow-hidden">
-          <div className="p-4 border-b border-gray-800">
-            <h3 className="text-white font-semibold">Recent Commands</h3>
+          <div className="px-4 py-3 border-b border-gray-800">
+            <h3 className="text-white text-sm sm:text-base font-semibold">Recent Commands</h3>
           </div>
           {recent_commands.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No commands issued yet</div>
+            <div className="p-8 text-center text-gray-500 text-sm">No commands issued yet</div>
           ) : (
             <div className="divide-y divide-gray-800">
               {recent_commands.map((cmd: any) => (
-                <div key={cmd.id} className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-3">
+                <div key={cmd.id} className="flex items-start sm:items-center justify-between p-3 sm:p-4 gap-3">
+                  <div className="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0 flex-1">
                     {cmd.command_type === 'ea_on' ? (
-                      <Power className="w-5 h-5 text-green-400" />
+                      <Power className="w-4 h-4 sm:w-5 sm:h-5 text-green-400 flex-shrink-0 mt-0.5 sm:mt-0" />
                     ) : (
-                      <PowerOff className="w-5 h-5 text-red-400" />
+                      <PowerOff className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 flex-shrink-0 mt-0.5 sm:mt-0" />
                     )}
-                    <div>
-                      <div className="text-white text-sm">
+                    <div className="min-w-0">
+                      <div className="text-white text-xs sm:text-sm truncate">
                         {cmd.command_type === 'ea_on' ? 'EA Enabled' : 'EA Disabled'} — {cmd.target_type === 'all' ? 'All Accounts' : 'Specific Account'}
                       </div>
-                      {cmd.reason && <div className="text-gray-500 text-xs">{cmd.reason}</div>}
+                      {cmd.reason && <div className="text-gray-500 text-[10px] sm:text-xs truncate">{cmd.reason}</div>}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-gray-400 text-xs">{cmd.affected_accounts} affected</div>
-                    <div className="text-gray-600 text-[10px]">{new Date(cmd.created_at).toLocaleString()}</div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-gray-400 text-[10px] sm:text-xs">{cmd.affected_accounts} affected</div>
+                    <div className="text-gray-600 text-[9px] sm:text-[10px]">{new Date(cmd.created_at).toLocaleString()}</div>
                   </div>
                 </div>
               ))}
@@ -584,23 +587,23 @@ export default function FMDashboardPage() {
 
       {/* Earnings Section */}
       {activeSection === 'earnings' && (
-        <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-6">
-          <h3 className="text-white font-semibold mb-6">Earnings Summary</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <div className="bg-[#0a0a0f] rounded-xl p-5 border border-gray-800">
-              <div className="text-gray-500 text-xs mb-2">Monthly Revenue</div>
-              <div className="text-green-400 font-bold text-2xl">${parseFloat(stats.monthly_revenue).toLocaleString()}</div>
-              <div className="text-gray-600 text-xs mt-1">{stats.active_subscribers} active subscribers × ${dashboard.profile.monthly_price || '0'}</div>
+        <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-4 sm:p-6">
+          <h3 className="text-white text-sm sm:text-base font-semibold mb-4 sm:mb-6">Earnings Summary</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
+            <div className="bg-[#0a0a0f] rounded-xl p-4 sm:p-5 border border-gray-800">
+              <div className="text-gray-500 text-xs mb-1.5">Monthly Revenue</div>
+              <div className="text-green-400 font-bold text-xl sm:text-2xl">${parseFloat(stats.monthly_revenue).toLocaleString()}</div>
+              <div className="text-gray-600 text-[10px] sm:text-xs mt-1">{stats.active_subscribers} subs × ${dashboard.profile.monthly_price || '0'}</div>
             </div>
-            <div className="bg-[#0a0a0f] rounded-xl p-5 border border-gray-800">
-              <div className="text-gray-500 text-xs mb-2">Platform Fee</div>
-              <div className="text-red-400 font-bold text-2xl">-${parseFloat(stats.platform_fee).toLocaleString()}</div>
-              <div className="text-gray-600 text-xs mt-1">15% platform commission</div>
+            <div className="bg-[#0a0a0f] rounded-xl p-4 sm:p-5 border border-gray-800">
+              <div className="text-gray-500 text-xs mb-1.5">Platform Fee</div>
+              <div className="text-red-400 font-bold text-xl sm:text-2xl">-${parseFloat(stats.platform_fee).toLocaleString()}</div>
+              <div className="text-gray-600 text-[10px] sm:text-xs mt-1">15% platform commission</div>
             </div>
-            <div className="bg-[#0a0a0f] rounded-xl p-5 border border-gray-800">
-              <div className="text-gray-500 text-xs mb-2">Net Earnings</div>
-              <div className="text-emerald-400 font-bold text-2xl">${parseFloat(stats.net_earnings).toLocaleString()}</div>
-              <div className="text-gray-600 text-xs mt-1">Your monthly take-home</div>
+            <div className="bg-[#0a0a0f] rounded-xl p-4 sm:p-5 border border-gray-800">
+              <div className="text-gray-500 text-xs mb-1.5">Net Earnings</div>
+              <div className="text-emerald-400 font-bold text-xl sm:text-2xl">${parseFloat(stats.net_earnings).toLocaleString()}</div>
+              <div className="text-gray-600 text-[10px] sm:text-xs mt-1">Your monthly take-home</div>
             </div>
           </div>
         </div>

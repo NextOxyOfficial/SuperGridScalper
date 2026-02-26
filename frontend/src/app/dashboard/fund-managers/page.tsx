@@ -169,71 +169,50 @@ export default function FundManagersPage() {
 
       {/* Search & Filter row */}
       <div className="flex items-center gap-2 mb-4">
-        {/* Professional-sized Filter Icon */}
-        <button
-          onClick={() => {
-            setSearchExpanded(false);
-            setSearchQuery('');
-          }}
-          className="flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-lg bg-[#1a1a2e] border border-purple-500/20 text-purple-400 hover:bg-purple-500/10 transition"
-          title="Filter options"
-        >
-          <Filter className="w-5 h-5" />
-        </button>
+        {/* Filter icon + Sort dropdown combined */}
+        <div className="flex items-center bg-[#1a1a2e] border border-cyan-500/20 rounded-lg overflow-hidden flex-shrink-0">
+          <span className="flex items-center justify-center px-3 py-2.5 border-r border-cyan-500/20 text-purple-400">
+            <Filter className="w-4 h-4" />
+          </span>
+          <select
+            value={sortBy}
+            onChange={e => { setSortBy(e.target.value); setPage(1); }}
+            className="bg-[#1a1a2e] text-white text-sm px-3 py-2.5 focus:outline-none"
+          >
+            <option value="featured" className="bg-[#1a1a2e] text-white">Featured</option>
+            <option value="rating" className="bg-[#1a1a2e] text-white">Top Rated</option>
+            <option value="subscribers" className="bg-[#1a1a2e] text-white">Most Popular</option>
+            <option value="profit" className="bg-[#1a1a2e] text-white">Highest Profit</option>
+          </select>
+        </div>
 
+        {/* Search icon or expanded input on the right */}
         {searchExpanded ? (
-          /* Search Input in Same Row */
-          <div className="flex items-center gap-2 flex-1">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <input
-                type="text"
-                placeholder="Search by name, style, or trading pair…"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-10 py-2.5 bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
-                autoFocus={searchExpanded}
-              />
-              <button
-                onClick={() => {
-                  setSearchExpanded(false);
-                  setSearchQuery('');
-                }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center text-gray-500 hover:text-white transition"
-                title="Close search"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Search fund managers…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-9 py-2.5 bg-[#1a1a2e] border border-cyan-500/30 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/60"
+              autoFocus
+            />
+            <button
+              onClick={() => { setSearchExpanded(false); setSearchQuery(''); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         ) : (
-          <>
-            {/* Professional-sized Search Icon */}
-            <button
-              onClick={() => {
-                setSearchExpanded(!searchExpanded);
-                if (searchExpanded) {
-                  setSearchQuery('');
-                }
-              }}
-              className="flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-lg bg-[#1a1a2e] border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition"
-              title="Search fund managers"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-
-            {/* Sort select — shown when search not expanded */}
-            <select
-              value={sortBy}
-              onChange={e => { setSortBy(e.target.value); setPage(1); }}
-              className="bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm px-3 py-2.5 focus:outline-none focus:border-cyan-500/50 flex-1 sm:flex-initial"
-            >
-              <option value="featured">Featured</option>
-              <option value="rating">Top Rated</option>
-              <option value="subscribers">Most Popular</option>
-              <option value="profit">Highest Profit</option>
-            </select>
-          </>
+          <button
+            onClick={() => setSearchExpanded(true)}
+            className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg bg-[#1a1a2e] border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition"
+            title="Search fund managers"
+          >
+            <Search className="w-4 h-4" />
+          </button>
         )}
       </div>
 
@@ -349,11 +328,10 @@ export default function FundManagersPage() {
                     </div>
                     {subscribedFmIds.has(fm.id) ? (
                       <button
-                        onClick={(e) => handleUnsubscribeFromList(fm.id, e)}
-                        disabled={unsubscribingId === fm.id}
-                        className="text-red-400 text-[10px] font-medium px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition disabled:opacity-50 whitespace-nowrap flex-shrink-0"
+                        onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/fund-managers/${fm.id}`); }}
+                        className="text-red-400 text-[10px] font-medium px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition whitespace-nowrap flex-shrink-0"
                       >
-                        {unsubscribingId === fm.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Unsubscribe'}
+                        Unsubscribe
                       </button>
                     ) : (
                       <button
@@ -424,11 +402,10 @@ export default function FundManagersPage() {
                     {/* Subscribe / Unsubscribe */}
                     {subscribedFmIds.has(fm.id) ? (
                       <button
-                        onClick={(e) => handleUnsubscribeFromList(fm.id, e)}
-                        disabled={unsubscribingId === fm.id}
-                        className="flex-1 py-2 text-red-400 text-[10px] font-medium border border-red-500/20 rounded-lg hover:bg-red-500/10 transition disabled:opacity-50"
+                        onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
+                        className="flex-1 py-2 text-red-400 text-[10px] font-medium border border-red-500/20 rounded-lg hover:bg-red-500/10 transition"
                       >
-                        {unsubscribingId === fm.id ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Unsubscribe'}
+                        Unsubscribe
                       </button>
                     ) : (
                       <button

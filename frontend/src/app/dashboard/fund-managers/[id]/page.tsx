@@ -518,14 +518,14 @@ export default function FundManagerDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-[#12121a] p-1 rounded-lg border border-cyan-500/10">
+      <div className="flex gap-1 mb-6 bg-[#12121a] p-1 rounded-xl border border-cyan-500/10">
         {(['overview', 'chat', 'schedule', 'reviews'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2.5 text-sm font-medium rounded-md transition capitalize ${
+            className={`flex-1 py-2 sm:py-2.5 px-1 sm:px-3 text-[10px] sm:text-xs font-semibold rounded-lg transition capitalize whitespace-nowrap ${
               activeTab === tab
-                ? 'bg-cyan-500 text-black'
+                ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20'
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
             }`}
             style={{ fontFamily: 'Orbitron, sans-serif' }}
@@ -537,36 +537,36 @@ export default function FundManagerDetailPage() {
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5">
           {/* Managed Accounts Stats */}
-          <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-5">
-            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-cyan-400" /> Portfolio Stats
+          <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-4 sm:p-5">
+            <h3 className="text-white text-sm sm:text-base font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" /> Portfolio Stats
             </h3>
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-gray-400 text-sm">Managed Accounts</span>
-                <span className="text-white font-medium">{fm.total_managed_accounts}</span>
+            <div className="space-y-2.5">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400 text-xs sm:text-sm">Managed Accounts</span>
+                <span className="text-white font-medium text-xs sm:text-sm">{fm.total_managed_accounts}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400 text-sm">Total Balance Managed</span>
-                <span className="text-white font-medium">${parseFloat(fm.total_managed_balance || '0').toLocaleString()}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400 text-xs sm:text-sm">Total Balance</span>
+                <span className="text-white font-medium text-xs sm:text-sm">${parseFloat(fm.total_managed_balance || '0').toLocaleString()}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400 text-sm">Max Subscribers</span>
-                <span className="text-white font-medium">{fm.subscriber_count}/{fm.max_subscribers}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400 text-xs sm:text-sm">Max Subscribers</span>
+                <span className="text-white font-medium text-xs sm:text-sm">{fm.subscriber_count}/{fm.max_subscribers}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400 text-sm">Trading Style</span>
-                <span className="text-cyan-300 font-medium">{fm.trading_style || 'N/A'}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400 text-xs sm:text-sm">Trading Style</span>
+                <span className="text-cyan-300 font-medium text-xs sm:text-sm">{fm.trading_style || 'N/A'}</span>
               </div>
             </div>
           </div>
 
           {/* Schedules Preview */}
-          <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-5">
-            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-yellow-400" /> Trading Schedule
+          <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-4 sm:p-5">
+            <h3 className="text-white text-sm sm:text-base font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+              <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" /> Trading Schedule
             </h3>
             {fm.schedules?.length > 0 ? (
               <div className="space-y-3">
@@ -590,10 +590,10 @@ export default function FundManagerDetailPage() {
       )}
 
       {activeTab === 'reviews' && (
-        <div className="space-y-6">
+        <div className="space-y-3 sm:space-y-4">
           {/* Write Review */}
           {mySubscription && (
-            <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-5">
+            <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-4 sm:p-5">
               <h3 className="text-white font-semibold mb-3">Write a Review</h3>
               <div className="flex items-center gap-1 mb-3">{renderStars(reviewRating, true)}</div>
               <textarea
@@ -616,7 +616,7 @@ export default function FundManagerDetailPage() {
           {/* Existing Reviews */}
           {fm.reviews?.length > 0 ? (
             fm.reviews.map((r: any, i: number) => (
-              <div key={i} className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-5">
+              <div key={i} className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-4 sm:p-5">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="text-white font-medium text-sm">{r.user}</span>
@@ -651,7 +651,7 @@ export default function FundManagerDetailPage() {
               </button>
             </div>
           ) : (
-            <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl overflow-hidden flex flex-col" style={{ height: '500px' }}>
+            <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl overflow-hidden flex flex-col" style={{ height: '420px' }}>
               {/* Pinned Messages */}
               {pinnedMessages.length > 0 && (
                 <div className="bg-yellow-500/5 border-b border-yellow-500/20 px-4 py-2">

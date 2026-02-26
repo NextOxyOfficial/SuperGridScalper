@@ -1873,9 +1873,12 @@ export default function DashboardHome() {
                         <span className="hidden group-[.copied]:inline">Copied</span>
                       </button>
                       {selectedLicense.fm_controlled ? (
-                        <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg whitespace-nowrap font-semibold border bg-purple-500/10 text-purple-400 border-purple-500/30">
-                          Managed by {selectedLicense.fm_name || 'FM'}
-                        </span>
+                        <a
+                          href={selectedLicense.fm_id ? `/dashboard/fund-managers/${selectedLicense.fm_id}` : '/dashboard/fund-managers'}
+                          className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg whitespace-nowrap font-semibold border bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20 transition cursor-pointer"
+                        >
+                          Managed by {selectedLicense.fm_name || 'FM'} →
+                        </a>
                       ) : (
                         <button
                           onClick={() => handleToggleLicense(selectedLicense.license_key, selectedLicense.status)}
@@ -3505,9 +3508,13 @@ export default function DashboardHome() {
                     </button>
                   {(lic.status === 'active' || lic.status === 'suspended') && (
                     lic.fm_controlled ? (
-                      <span className="shrink-0 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold border bg-purple-500/10 text-purple-400 border-purple-500/30">
-                        {lic.fm_stopped ? 'Stopped by FM' : `FM: ${lic.fm_name || 'Managed'}`}
-                      </span>
+                      <a
+                        href={lic.fm_id ? `/dashboard/fund-managers/${lic.fm_id}` : '/dashboard/fund-managers'}
+                        className="shrink-0 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold border bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20 transition cursor-pointer"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        {lic.fm_stopped ? 'Stopped by FM' : `FM: ${lic.fm_name || 'Managed'}`} →
+                      </a>
                     ) : (
                       <button
                         onClick={(e) => {
