@@ -3109,37 +3109,49 @@ export default function DashboardHome() {
       
       <div className="mt-6 mb-3 sm:mb-4">
         <div className="flex justify-between items-center mb-3">
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Left: always visible */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <h3 className="text-sm sm:text-lg font-semibold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>YOUR LICENSES</h3>
             <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-cyan-400 bg-cyan-500/10 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-cyan-500/30">
               <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
               Live
             </span>
           </div>
+          {/* Right: search icon + collapsible input / count + refresh */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setSearchExpanded(!searchExpanded);
-                if (searchExpanded) {
-                  setLicenseSearchQuery('');
-                }
-              }}
-              className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full transition text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30"
-              title="Search licenses"
-            >
-              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </button>
-            {!searchExpanded && (
+            {searchExpanded ? (
+              <div className="relative w-[180px] sm:w-[220px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                <input
+                  type="text"
+                  value={licenseSearchQuery}
+                  onChange={(e) => setLicenseSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full pl-9 pr-8 py-1.5 bg-[#0f1320] border border-cyan-500/30 rounded-lg text-white text-xs placeholder-gray-500 focus:outline-none focus:border-cyan-500/60"
+                  autoFocus
+                />
+                <button
+                  onClick={() => { setSearchExpanded(false); setLicenseSearchQuery(''); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
               <>
+                <button
+                  onClick={() => setSearchExpanded(true)}
+                  className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full transition text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30"
+                  title="Search licenses"
+                >
+                  <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
                 <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">{filteredLicenses.length} license(s)</span>
-                {refreshedMsg && (
-                  <span className="text-[10px] sm:text-xs text-green-400 animate-pulse">Refreshed!</span>
-                )}
+                {refreshedMsg && <span className="text-[10px] sm:text-xs text-green-400 animate-pulse">Refreshed!</span>}
                 <button
                   onClick={async () => {
                     if (refreshing || refreshCooldown > 0) return;
-                    setRefreshing(true);
-                    setRefreshedMsg(false);
+                    setRefreshing(true); setRefreshedMsg(false);
                     try {
                       await refreshLicenses();
                       await fetchAllLicensesTradeData();
@@ -3149,10 +3161,7 @@ export default function DashboardHome() {
                       setRefreshing(false);
                       setRefreshCooldown(5);
                       const cd = setInterval(() => {
-                        setRefreshCooldown(prev => {
-                          if (prev <= 1) { clearInterval(cd); return 0; }
-                          return prev - 1;
-                        });
+                        setRefreshCooldown(prev => { if (prev <= 1) { clearInterval(cd); return 0; } return prev - 1; });
                       }, 1000);
                     }
                   }}
@@ -3165,20 +3174,6 @@ export default function DashboardHome() {
                 </button>
               </>
             )}
-          </div>
-        </div>
-
-        <div className={`mb-3 relative transition-all duration-300 ease-in-out overflow-hidden ${searchExpanded ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input
-              type="text"
-              value={licenseSearchQuery}
-              onChange={(e) => setLicenseSearchQuery(e.target.value)}
-              placeholder="Search by MT5 account or name..."
-              className="w-full pl-10 pr-3 py-2 bg-[#0f1320] border border-cyan-500/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
-              autoFocus={searchExpanded}
-            />
           </div>
         </div>
         {/* Portfolio Summary */}

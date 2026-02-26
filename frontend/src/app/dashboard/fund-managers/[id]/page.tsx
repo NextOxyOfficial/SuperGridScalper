@@ -422,33 +422,33 @@ export default function FundManagerDetailPage() {
       {/* Profile Header */}
       <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl overflow-hidden mb-6">
         {fm.is_featured && (
-          <div className="bg-gradient-to-r from-yellow-500/20 to-yellow-600/10 px-6 py-2 flex items-center gap-2">
+          <div className="bg-gradient-to-r from-yellow-500/20 to-yellow-600/10 px-4 sm:px-6 py-2 flex items-center gap-2">
             <Crown className="w-4 h-4 text-yellow-400" />
             <span className="text-yellow-300 text-xs font-semibold">FEATURED FUND MANAGER</span>
           </div>
         )}
-        <div className="p-2">
-          <div className="flex flex-col sm:flex-row items-start gap-6">
+        <div className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
             {/* Avatar */}
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500/30 to-purple-500/30 flex items-center justify-center flex-shrink-0 border-2 border-cyan-500/20">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-cyan-500/30 to-purple-500/30 flex items-center justify-center flex-shrink-0 border-2 border-cyan-500/20 mx-auto sm:mx-0">
               {fm.avatar_url ? (
                 <img src={fm.avatar_url} alt={fm.display_name} className="w-full h-full rounded-full object-cover" />
               ) : (
-                <span className="text-3xl font-bold text-cyan-400">{fm.display_name.charAt(0).toUpperCase()}</span>
+                <span className="text-2xl sm:text-3xl font-bold text-cyan-400">{fm.display_name.charAt(0).toUpperCase()}</span>
               )}
             </div>
 
             {/* Info */}
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+            <div className="flex-1 text-center sm:text-left w-full">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                <h1 className="text-xl sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   {fm.display_name}
                 </h1>
-                {fm.is_verified && <Shield className="w-5 h-5 text-cyan-400" />}
+                {fm.is_verified && <Shield className="w-5 h-5 text-cyan-400 mx-auto sm:mx-0" />}
               </div>
-              <p className="text-gray-400 text-sm mb-3">{fm.bio || 'No bio provided'}</p>
+              <p className="text-gray-400 text-sm mb-3 leading-relaxed">{fm.bio || 'No bio provided'}</p>
 
-              <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-3 mb-4">
                 <span className="text-xs px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 capitalize">
                   {fm.tier}
                 </span>
@@ -464,25 +464,25 @@ export default function FundManagerDetailPage() {
               </div>
 
               {/* Stats Row */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                <div>
-                  <div className="text-cyan-400 font-bold text-lg">{fm.total_profit_percent}%</div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
+                <div className="text-center sm:text-left">
+                  <div className="text-cyan-400 font-bold text-base sm:text-lg">{fm.total_profit_percent}%</div>
                   <div className="text-gray-500 text-xs">Total Profit</div>
                 </div>
-                <div>
-                  <div className="text-green-400 font-bold text-lg">{fm.win_rate}%</div>
+                <div className="text-center sm:text-left">
+                  <div className="text-green-400 font-bold text-base sm:text-lg">{fm.win_rate}%</div>
                   <div className="text-gray-500 text-xs">Win Rate</div>
                 </div>
-                <div>
-                  <div className="text-purple-400 font-bold text-lg">{fm.subscriber_count}</div>
+                <div className="text-center sm:text-left">
+                  <div className="text-purple-400 font-bold text-base sm:text-lg">{fm.subscriber_count}</div>
                   <div className="text-gray-500 text-xs">Subscribers</div>
                 </div>
-                <div>
-                  <div className="text-yellow-400 font-bold text-lg">{fm.months_active}mo</div>
+                <div className="text-center sm:text-left">
+                  <div className="text-yellow-400 font-bold text-base sm:text-lg">{fm.months_active}mo</div>
                   <div className="text-gray-500 text-xs">Active</div>
                 </div>
-                <div>
-                  <div className="text-white font-bold text-lg">${fm.monthly_price}</div>
+                <div className="text-center sm:text-left col-span-2 sm:col-span-1">
+                  <div className="text-white font-bold text-base sm:text-lg">${fm.monthly_price}</div>
                   <div className="text-gray-500 text-xs">Per Month</div>
                 </div>
               </div>
@@ -490,16 +490,16 @@ export default function FundManagerDetailPage() {
           </div>
 
           {/* Subscribe Button */}
-          <div className="mt-6 pt-6 border-t border-gray-800 flex flex-col sm:flex-row items-center gap-4">
+          <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-800 flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
             {mySubscription?.is_active ? (
-              <div className="flex items-center gap-4 w-full sm:w-auto">
-                <div className="flex items-center gap-2 bg-green-500/10 text-green-400 px-4 py-2.5 rounded-lg border border-green-500/20">
+              <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full sm:w-auto">
+                <div className="flex items-center gap-2 bg-green-500/10 text-green-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-green-500/20 w-full sm:w-auto justify-center">
                   <Check className="w-4 h-4" />
                   <span className="text-sm font-medium">Subscribed ({mySubscription.days_remaining}d remaining)</span>
                 </div>
                 <button
                   onClick={() => { setUnsubError(''); setUnsubPassword(''); setShowUnsubscribeModal(true); }}
-                  className="text-red-400 hover:text-red-300 text-sm px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition"
+                  className="text-red-400 hover:text-red-300 text-sm px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition w-full sm:w-auto"
                 >
                   Unsubscribe
                 </button>
@@ -507,7 +507,7 @@ export default function FundManagerDetailPage() {
             ) : (
               <button
                 onClick={() => setShowSubscribeModal(true)}
-                className="w-full sm:w-auto bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black font-bold px-8 py-3 rounded-lg transition-all text-sm"
+                className="w-full sm:w-auto bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black font-bold px-6 sm:px-8 py-3 rounded-lg transition-all text-sm"
                 style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
                 {fm.trial_days > 0 ? `Subscribe for ${fm.trial_days} Days Free Trial` : `Subscribe for 30 Days — $${fm.monthly_price}`}

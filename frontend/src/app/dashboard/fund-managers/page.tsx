@@ -181,48 +181,60 @@ export default function FundManagersPage() {
           <Filter className="w-5 h-5" />
         </button>
 
-        {/* Professional-sized Search Icon */}
-        <button
-          onClick={() => {
-            setSearchExpanded(!searchExpanded);
-            if (searchExpanded) {
-              setSearchQuery('');
-            }
-          }}
-          className="flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-lg bg-[#1a1a2e] border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition"
-          title="Search fund managers"
-        >
-          <Search className="w-5 h-5" />
-        </button>
+        {searchExpanded ? (
+          /* Search Input in Same Row */
+          <div className="flex items-center gap-2 flex-1">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input
+                type="text"
+                placeholder="Search by name, style, or trading pair…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-10 py-2.5 bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+                autoFocus={searchExpanded}
+              />
+              <button
+                onClick={() => {
+                  setSearchExpanded(false);
+                  setSearchQuery('');
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center text-gray-500 hover:text-white transition"
+                title="Close search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Professional-sized Search Icon */}
+            <button
+              onClick={() => {
+                setSearchExpanded(!searchExpanded);
+                if (searchExpanded) {
+                  setSearchQuery('');
+                }
+              }}
+              className="flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-lg bg-[#1a1a2e] border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition"
+              title="Search fund managers"
+            >
+              <Search className="w-5 h-5" />
+            </button>
 
-        {/* Sort select — shown when search not expanded */}
-        {!searchExpanded && (
-          <select
-            value={sortBy}
-            onChange={e => { setSortBy(e.target.value); setPage(1); }}
-            className="bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm px-3 py-2.5 focus:outline-none focus:border-cyan-500/50 flex-1 sm:flex-initial"
-          >
-            <option value="featured">Featured</option>
-            <option value="rating">Top Rated</option>
-            <option value="subscribers">Most Popular</option>
-            <option value="profit">Highest Profit</option>
-          </select>
+            {/* Sort select — shown when search not expanded */}
+            <select
+              value={sortBy}
+              onChange={e => { setSortBy(e.target.value); setPage(1); }}
+              className="bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm px-3 py-2.5 focus:outline-none focus:border-cyan-500/50 flex-1 sm:flex-initial"
+            >
+              <option value="featured">Featured</option>
+              <option value="rating">Top Rated</option>
+              <option value="subscribers">Most Popular</option>
+              <option value="profit">Highest Profit</option>
+            </select>
+          </>
         )}
-      </div>
-
-      {/* Expandable Search Input */}
-      <div className={`mb-4 relative transition-all duration-300 ease-in-out overflow-hidden ${searchExpanded ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            placeholder="Search by name, style, or trading pair…"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
-            autoFocus={searchExpanded}
-          />
-        </div>
       </div>
 
       {/* Results count */}
