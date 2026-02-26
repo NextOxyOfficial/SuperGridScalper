@@ -1424,6 +1424,7 @@ def apply_fund_manager(request):
     display_name = data.get('display_name', '').strip()
     bio = data.get('bio', '').strip()
     monthly_price = data.get('monthly_price', '29.00')
+    trial_days = data.get('trial_days', '0')
     trading_style = data.get('trading_style', '').strip()
     trading_pairs = data.get('trading_pairs', 'XAUUSD').strip()
     
@@ -1447,6 +1448,7 @@ def apply_fund_manager(request):
         display_name=display_name,
         bio=bio,
         monthly_price=Decimal(str(monthly_price)),
+        trial_days=int(trial_days) if str(trial_days).isdigit() and int(trial_days) >= 0 else 0,
         trading_style=trading_style,
         trading_pairs=trading_pairs,
         status='pending',

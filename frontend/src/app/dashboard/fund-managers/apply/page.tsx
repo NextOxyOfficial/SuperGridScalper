@@ -16,6 +16,7 @@ export default function ApplyFMPage() {
     bio: '',
     trading_style: 'Scalping',
     monthly_price: '49.99',
+    trial_days: '0',
     experience_years: '',
     why_apply: '',
   });
@@ -168,6 +169,21 @@ export default function ApplyFMPage() {
               className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 text-sm"
             />
             <p className="text-gray-600 text-xs mt-1">Platform takes 15% commission</p>
+          </div>
+
+          {/* Trial Days */}
+          <div>
+            <label className="text-gray-400 text-sm mb-1 block">Free Trial Days (Optional)</label>
+            <input
+              type="number"
+              min="0"
+              max="30"
+              placeholder="0"
+              value={form.trial_days}
+              onChange={e => setForm({ ...form, trial_days: e.target.value })}
+              className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 text-sm"
+            />
+            <p className="text-gray-600 text-xs mt-1">Offer 0-30 days free trial to attract subscribers (0 = no trial)</p>
           </div>
 
           {/* Experience */}
