@@ -4,7 +4,7 @@ import { DashboardProvider, useDashboard } from './context';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { Bot, Store, Gift, Download, X, Bell } from 'lucide-react';
+import { Bot, Store, Gift, Download, X, Bell, Users, Star, Flame, Crown, Shield as ShieldIcon, Gem, Rocket, Trophy, Zap, Clock } from 'lucide-react';
 import SiteLogo from '@/components/SiteLogo';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
@@ -78,6 +78,55 @@ function EAUpdateBanner() {
   );
 }
 
+const BADGE_ICON_MAP: Record<string, React.ElementType> = {
+  star: Star,
+  fire: Flame,
+  crown: Crown,
+  shield: ShieldIcon,
+  diamond: Gem,
+  rocket: Rocket,
+  trophy: Trophy,
+  zap: Zap,
+  clock: Clock,
+};
+
+function UserBadges({ email }: { email: string }) {
+  const [badges, setBadges] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!email) return;
+    const fetch_ = async () => {
+      try {
+        const res = await fetch(`${API_URL}/user-badges/?email=${encodeURIComponent(email)}`);
+        const data = await res.json();
+        if (data.success) setBadges(data.badges);
+      } catch {}
+    };
+    fetch_();
+  }, [email]);
+
+  const manualBadges = badges.filter((b: any) => b.badge_type !== 'auto_join');
+  if (manualBadges.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {manualBadges.map((b: any) => {
+        const Icon = BADGE_ICON_MAP[b.icon] || Star;
+        return (
+          <span
+            key={b.id}
+            title={`${b.name}: ${b.description}`}
+            className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-full border bg-yellow-500/10 border-yellow-500/30 text-yellow-300"
+          >
+            <Icon className="w-2.5 h-2.5" />
+            {b.name}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function DashboardNav() {
   const { user, selectedLicense, logout, clearSelectedLicense } = useDashboard();
   const pathname = usePathname();
@@ -90,69 +139,71 @@ function DashboardNav() {
   };
 
   // Simple nav for license selection page or EA store without license
-  if (!selectedLicense && (pathname === '/dashboard' || pathname === '/dashboard/ea-store' || pathname === '/dashboard/referral')) {
+  const isFundManagersPage = pathname.startsWith('/dashboard/fund-managers');
+
+  if (!selectedLicense && (pathname === '/dashboard' || pathname === '/dashboard/ea-store' || pathname === '/dashboard/referral' || isFundManagersPage)) {
     return (
       <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-          {/* Mobile: Two rows layout */}
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
-            
-            {/* Row 1: Logo + Logout (mobile) */}
-            <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
-              <div className="flex items-center gap-2 sm:gap-4">
-                <SiteLogo size="sm" />
+        <div className="max-w-7xl mx-auto px-1 sm:px-4 py-2 sm:py-3">
+          {/* Row 1: Logo + Email + Logout */}
+          <div className="flex items-center justify-between mb-2">
+            <SiteLogo size="sm" />
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex flex-col items-end gap-0.5">
+                <span className="text-cyan-300 text-xs">{user?.email}</span>
+                {user?.email && <UserBadges email={user.email} />}
               </div>
-              {/* Mobile only: Logout on right */}
-              <button onClick={logout} className="sm:hidden text-cyan-300 hover:text-white text-xs px-3 py-2.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30">
+              <button onClick={logout} className="text-cyan-300 hover:text-white text-[10px] sm:text-xs px-2.5 py-1.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30">
                 Logout
               </button>
             </div>
-            
-            {/* Row 2: Nav buttons (mobile full width) */}
-            <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
-              <Link
-                href="/dashboard"
-                className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
-                  pathname === '/dashboard' 
-                    ? 'bg-cyan-500 text-black' 
-                    : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
-                }`}
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/dashboard/ea-store"
-                className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center justify-center gap-1 sm:gap-2 ${
-                  pathname === '/dashboard/ea-store' 
-                    ? 'bg-yellow-500 text-black' 
-                    : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
-                }`}
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                <Store className="w-3.5 h-3.5 sm:w-5 sm:h-5" /> EA Store
-              </Link>
-              <Link
-                href="/dashboard/referral"
-                className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center justify-center gap-1 sm:gap-2 ${
-                  pathname === '/dashboard/referral' 
-                    ? 'bg-green-500 text-black' 
-                    : 'text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30'
-                }`}
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                <Gift className="w-3.5 h-3.5 sm:w-5 sm:h-5" /> Referral
-              </Link>
-              
-              {/* Desktop only: Email + Logout */}
-              <div className="hidden sm:flex items-center gap-3">
-                <div className="h-5 w-px bg-cyan-500/30"></div>
-                <span className="text-cyan-300 text-xs sm:text-sm">{user?.email}</span>
-                <button onClick={logout} className="text-cyan-300 hover:text-white text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30">
-                  Logout
-                </button>
-              </div>
-            </div>
+          </div>
+          {/* Row 2: Nav buttons */}
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
+            <Link
+              href="/dashboard"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
+                pathname === '/dashboard' 
+                  ? 'bg-cyan-500 text-black' 
+                  : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/dashboard/ea-store"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                pathname === '/dashboard/ea-store' 
+                  ? 'bg-yellow-500 text-black' 
+                  : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> EA Store
+            </Link>
+            <Link
+              href="/dashboard/referral"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                pathname === '/dashboard/referral' 
+                  ? 'bg-green-500 text-black' 
+                  : 'text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Referral
+            </Link>
+            <Link
+              href="/dashboard/fund-managers"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                isFundManagersPage 
+                  ? 'bg-purple-500 text-black' 
+                  : 'text-purple-300 hover:text-white hover:bg-purple-500/20 border border-purple-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> FM Engine
+            </Link>
           </div>
         </div>
       </nav>
@@ -166,90 +217,89 @@ function DashboardNav() {
 
   return (
     <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-        {/* Mobile: Two rows layout */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
-          
-          {/* Row 1: Back + License Info + Days */}
-          <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
-            <div className="flex items-center gap-2 sm:gap-4">
-              <button 
-                onClick={() => clearSelectedLicense()}
-                className="text-cyan-300 hover:text-white text-sm sm:text-sm flex items-center gap-1 transition px-3 sm:px-3 py-2 sm:py-2 hover:bg-cyan-500/10 rounded-lg border border-cyan-500/30"
-              >
-                ←
-              </button>
-              {selectedLicense && (
-                <>
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <SiteLogo size="sm" showText={false} />
-                    <span className="text-white font-semibold text-sm sm:text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>{selectedLicense.plan}</span>
-                    <span className="bg-yellow-500/20 text-yellow-300 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1 rounded-full border border-yellow-500/30">
-                      {getDaysRemaining(selectedLicense)}d
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-            
-            {/* Mobile only: Logout button on right of first row */}
+      <div className="max-w-7xl mx-auto px-1 sm:px-4 py-2 sm:py-3">
+        {/* Row 1: Back + License Info + Logout */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button 
-              onClick={logout} 
-              className="sm:hidden text-cyan-300 hover:text-white text-xs px-3 py-2.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30"
+              onClick={() => clearSelectedLicense()}
+              className="text-cyan-300 hover:text-white text-sm flex items-center gap-1 transition px-2.5 py-1.5 hover:bg-cyan-500/10 rounded-lg border border-cyan-500/30"
             >
-              Logout
+              ←
             </button>
-          </div>
-
-          {/* Row 2: Nav Links (Mobile) / Nav Links + User (Desktop) */}
-          <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
             {selectedLicense && (
-              <>
-                <Link
-                  href="/dashboard"
-                  className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
-                    isDashboardPage 
-                      ? 'bg-cyan-500 text-black' 
-                      : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
-                  }`}
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  href="/dashboard/ea-store"
-                  className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center justify-center gap-1 sm:gap-2 ${
-                    isEAStorePage 
-                      ? 'bg-yellow-500 text-black' 
-                      : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
-                  }`}
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
-                  <Store className="w-4 h-4 sm:w-5 sm:h-5" /> EA Store
-                </Link>
-                <Link
-                  href="/dashboard/referral"
-                  className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center justify-center gap-1 sm:gap-2 ${
-                    isReferralPage 
-                      ? 'bg-green-500 text-black' 
-                      : 'text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30'
-                  }`}
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
-                  <Gift className="w-4 h-4 sm:w-5 sm:h-5" /> Referral
-                </Link>
-                <div className="h-5 sm:h-6 w-px bg-cyan-500/30 mx-1 sm:mx-2 hidden sm:block"></div>
-              </>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <SiteLogo size="sm" showText={false} />
+                <span className="text-white font-semibold text-xs sm:text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>{selectedLicense.plan}</span>
+                <span className="bg-yellow-500/20 text-yellow-300 text-[10px] sm:text-sm px-2 py-0.5 rounded-full border border-yellow-500/30">
+                  {getDaysRemaining(selectedLicense)}d
+                </span>
+              </div>
             )}
-            <span className="text-cyan-300 text-xs sm:text-sm hidden md:inline">{user?.email}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="hidden md:flex flex-col items-end gap-0.5">
+              <span className="text-cyan-300 text-xs">{user?.email}</span>
+              {user?.email && <UserBadges email={user.email} />}
+            </div>
             <button 
               onClick={logout} 
-              className="hidden sm:block text-cyan-300 hover:text-white text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30"
+              className="text-cyan-300 hover:text-white text-[10px] sm:text-xs px-2.5 py-1.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30"
             >
               Logout
             </button>
           </div>
         </div>
+
+        {/* Row 2: Nav Links */}
+        {selectedLicense && (
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
+            <Link
+              href="/dashboard"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
+                isDashboardPage 
+                  ? 'bg-cyan-500 text-black' 
+                  : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/dashboard/ea-store"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                isEAStorePage 
+                  ? 'bg-yellow-500 text-black' 
+                  : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> EA Store
+            </Link>
+            <Link
+              href="/dashboard/referral"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                isReferralPage 
+                  ? 'bg-green-500 text-black' 
+                  : 'text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Referral
+            </Link>
+            <Link
+              href="/dashboard/fund-managers"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                isFundManagersPage 
+                  ? 'bg-purple-500 text-black' 
+                  : 'text-purple-300 hover:text-white hover:bg-purple-500/20 border border-purple-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> FM Engine
+            </Link>
+          </div>
+        )}
       </div>
     </nav>
   );

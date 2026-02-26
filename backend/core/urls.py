@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from . import unsubscribe_views
+from . import fm_views
 
 urlpatterns = [
     path('health/', views.api_health, name='api_health'),
@@ -54,4 +55,28 @@ urlpatterns = [
     # License Toggle & Nickname
     path('toggle-license/', views.toggle_license_status, name='toggle_license_status'),
     path('license-nickname/', views.update_license_nickname, name='update_license_nickname'),
+    
+    # Fund Manager Portal
+    path('fund-managers/', fm_views.list_fund_managers, name='list_fund_managers'),
+    path('fund-managers/<int:fm_id>/', fm_views.fund_manager_detail, name='fund_manager_detail'),
+    path('fund-managers/leaderboard/', fm_views.fm_leaderboard, name='fm_leaderboard'),
+    path('fund-managers/apply/', fm_views.apply_fund_manager, name='apply_fund_manager'),
+    path('fund-managers/subscribe/', fm_views.subscribe_to_fm, name='subscribe_to_fm'),
+    path('fund-managers/unsubscribe/', fm_views.unsubscribe_from_fm, name='unsubscribe_from_fm'),
+    path('fund-managers/my-subscriptions/', fm_views.get_my_fm_subscriptions, name='get_my_fm_subscriptions'),
+    path('fund-managers/assign-license/', fm_views.assign_license_to_fm, name='assign_license_to_fm'),
+    path('fund-managers/dashboard/', fm_views.fm_dashboard, name='fm_dashboard'),
+    path('fund-managers/toggle-ea/', fm_views.fm_toggle_ea, name='fm_toggle_ea'),
+    path('fund-managers/ea-status/', fm_views.check_fm_ea_status, name='check_fm_ea_status'),
+    path('fund-managers/chat/', fm_views.fm_get_chat, name='fm_get_chat'),
+    path('fund-managers/chat/send/', fm_views.fm_send_message, name='fm_send_message'),
+    path('fund-managers/chat/pin/', fm_views.fm_pin_message, name='fm_pin_message'),
+    path('fund-managers/review/', fm_views.submit_review, name='submit_review'),
+    path('fund-managers/schedules/', fm_views.fm_manage_schedule, name='fm_manage_schedule'),
+    path('economic-events/', fm_views.get_economic_events, name='get_economic_events'),
+    path('fund-managers/update-avatar/', fm_views.update_fm_avatar, name='update_fm_avatar'),
+    path('fund-managers/seed-dummy/', fm_views.seed_dummy_fund_managers, name='seed_dummy_fund_managers'),
+    path('fund-managers/chat/media/', fm_views.fm_chat_media_upload, name='fm_chat_media_upload'),
+    path('fund-managers/chat/profanity-check/', fm_views.check_chat_profanity, name='check_chat_profanity'),
+    path('user-badges/', fm_views.get_user_badges, name='get_user_badges'),
 ]

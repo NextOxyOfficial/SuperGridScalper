@@ -1,0 +1,676 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useDashboard } from '../../context';
+import {
+  Star, Shield, Crown, Users, TrendingUp, Clock, ArrowLeft,
+  MessageCircle, Calendar, ChevronDown, ChevronUp, Check, Loader2,
+  Send, Pin, Megaphone, Zap, AlertTriangle, DollarSign, BarChart3
+} from 'lucide-react';
+
+export default function FundManagerDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const { user, licenses, API_URL } = useDashboard();
+  const fmId = params.id;
+
+  const [fm, setFm] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'overview' | 'reviews' | 'chat' | 'schedule'>('overview');
+
+  // Subscription state
+  const [mySubscription, setMySubscription] = useState<any>(null);
+  const [subscribing, setSubscribing] = useState(false);
+  const [selectedLicenses, setSelectedLicenses] = useState<number[]>([]);
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+
+  // Chat state
+  const [messages, setMessages] = useState<any[]>([]);
+  const [pinnedMessages, setPinnedMessages] = useState<any[]>([]);
+  const [chatMessage, setChatMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [isFm, setIsFm] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Review state
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  useEffect(() => {
+    fetchFMDetail();
+    fetchMySubscription();
+  }, [fmId]);
+
+  useEffect(() => {
+    if (activeTab === 'chat' && mySubscription?.is_active) {
+      fetchChat();
+      connectChatWS();
+    }
+    return () => {
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, [activeTab, mySubscription]);
+
+  const fetchFMDetail = async () => {
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/${fmId}/`);
+      const data = await res.json();
+      if (data.success) setFm(data.fund_manager);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMySubscription = async () => {
+    if (!user?.email) return;
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/my-subscriptions/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const sub = data.subscriptions.find((s: any) => s.fund_manager.id === Number(fmId));
+        setMySubscription(sub || null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSubscribe = async () => {
+    if (!user?.email || selectedLicenses.length === 0) return;
+    setSubscribing(true);
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/subscribe/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email,
+          fund_manager_id: Number(fmId),
+          license_ids: selectedLicenses,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowSubscribeModal(false);
+        fetchMySubscription();
+      } else {
+        alert(data.error || 'Failed to subscribe');
+      }
+    } catch (err) {
+      alert('Failed to subscribe');
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
+  const handleUnsubscribe = async () => {
+    if (!confirm('Are you sure you want to cancel your subscription?')) return;
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/unsubscribe/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, fund_manager_id: Number(fmId) }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMySubscription(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Chat functions
+  const fetchChat = async () => {
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/chat/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, fund_manager_id: Number(fmId) }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessages(data.messages.reverse());
+        setPinnedMessages(data.pinned);
+        setIsFm(data.is_fm);
+        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const connectChatWS = () => {
+    if (wsRef.current) wsRef.current.close();
+    const wsUrl = API_URL.replace('http', 'ws').replace('/api', '');
+    const ws = new WebSocket(`${wsUrl}/ws/fm-chat/${fmId}/${user.email}/`);
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'chat_message') {
+        setMessages(prev => [...prev, data.data]);
+        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      }
+    };
+    ws.onerror = () => {};
+    wsRef.current = ws;
+  };
+
+  const sendMessage = async (type: string = 'message') => {
+    if (!chatMessage.trim()) return;
+    setSendingMessage(true);
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/chat/send/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email,
+          fund_manager_id: Number(fmId),
+          message: chatMessage,
+          message_type: type,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessages(prev => [...prev, data.message]);
+        setChatMessage('');
+        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const submitReview = async () => {
+    if (!reviewRating) return;
+    setSubmittingReview(true);
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/review/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email,
+          fund_manager_id: Number(fmId),
+          rating: reviewRating,
+          comment: reviewComment,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchFMDetail();
+        setReviewRating(0);
+        setReviewComment('');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const renderStars = (rating: number, interactive: boolean = false) => {
+    const stars = [];
+    const r = parseFloat(String(rating));
+    for (let i = 1; i <= 5; i++) {
+      stars.push(
+        <Star
+          key={i}
+          className={`w-4 h-4 ${interactive ? 'cursor-pointer' : ''} ${
+            i <= r ? 'text-yellow-400 fill-yellow-400' : 'text-gray-600'
+          }`}
+          onClick={interactive ? () => setReviewRating(i) : undefined}
+        />
+      );
+    }
+    return stars;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500"></div>
+      </div>
+    );
+  }
+
+  if (!fm) {
+    return (
+      <div className="max-w-4xl mx-auto px-1 sm:px-4 py-10 text-center">
+        <p className="text-gray-400">Fund manager not found</p>
+        <button onClick={() => router.back()} className="mt-4 text-cyan-400 hover:text-cyan-300">← Go Back</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto px-1 sm:px-4 py-6">
+      {/* Back Button */}
+      <button
+        onClick={() => router.push('/dashboard/fund-managers')}
+        className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 mb-6 text-sm transition"
+      >
+        <ArrowLeft className="w-4 h-4" /> Back to Fund Managers
+      </button>
+
+      {/* Profile Header */}
+      <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl overflow-hidden mb-6">
+        {fm.is_featured && (
+          <div className="bg-gradient-to-r from-yellow-500/20 to-yellow-600/10 px-6 py-2 flex items-center gap-2">
+            <Crown className="w-4 h-4 text-yellow-400" />
+            <span className="text-yellow-300 text-xs font-semibold">FEATURED FUND MANAGER</span>
+          </div>
+        )}
+        <div className="p-6">
+          <div className="flex flex-col sm:flex-row items-start gap-6">
+            {/* Avatar */}
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500/30 to-purple-500/30 flex items-center justify-center flex-shrink-0 border-2 border-cyan-500/20">
+              {fm.avatar_url ? (
+                <img src={fm.avatar_url} alt={fm.display_name} className="w-full h-full rounded-full object-cover" />
+              ) : (
+                <span className="text-3xl font-bold text-cyan-400">{fm.display_name.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
+
+            {/* Info */}
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  {fm.display_name}
+                </h1>
+                {fm.is_verified && <Shield className="w-5 h-5 text-cyan-400" />}
+              </div>
+              <p className="text-gray-400 text-sm mb-3">{fm.bio || 'No bio provided'}</p>
+
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                <span className="text-xs px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 capitalize">
+                  {fm.tier}
+                </span>
+                <div className="flex items-center gap-1">
+                  {renderStars(fm.average_rating)}
+                  <span className="text-gray-400 text-xs ml-1">{fm.average_rating} ({fm.total_reviews} reviews)</span>
+                </div>
+                {fm.trading_pairs.split(',').map((pair: string) => (
+                  <span key={pair} className="text-[10px] px-2 py-0.5 bg-purple-500/10 text-purple-300 rounded border border-purple-500/20">
+                    {pair.trim()}
+                  </span>
+                ))}
+              </div>
+
+              {/* Stats Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                <div>
+                  <div className="text-cyan-400 font-bold text-lg">{fm.total_profit_percent}%</div>
+                  <div className="text-gray-500 text-xs">Total Profit</div>
+                </div>
+                <div>
+                  <div className="text-green-400 font-bold text-lg">{fm.win_rate}%</div>
+                  <div className="text-gray-500 text-xs">Win Rate</div>
+                </div>
+                <div>
+                  <div className="text-purple-400 font-bold text-lg">{fm.subscriber_count}</div>
+                  <div className="text-gray-500 text-xs">Subscribers</div>
+                </div>
+                <div>
+                  <div className="text-yellow-400 font-bold text-lg">{fm.months_active}mo</div>
+                  <div className="text-gray-500 text-xs">Active</div>
+                </div>
+                <div>
+                  <div className="text-white font-bold text-lg">${fm.monthly_price}</div>
+                  <div className="text-gray-500 text-xs">Per Month</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Subscribe Button */}
+          <div className="mt-6 pt-6 border-t border-gray-800 flex flex-col sm:flex-row items-center gap-4">
+            {mySubscription?.is_active ? (
+              <div className="flex items-center gap-4 w-full sm:w-auto">
+                <div className="flex items-center gap-2 bg-green-500/10 text-green-400 px-4 py-2.5 rounded-lg border border-green-500/20">
+                  <Check className="w-4 h-4" />
+                  <span className="text-sm font-medium">Subscribed ({mySubscription.days_remaining}d remaining)</span>
+                </div>
+                <button
+                  onClick={handleUnsubscribe}
+                  className="text-red-400 hover:text-red-300 text-sm px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowSubscribeModal(true)}
+                className="w-full sm:w-auto bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black font-bold px-8 py-3 rounded-lg transition-all text-sm"
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                {fm.trial_days > 0 ? `Subscribe for ${fm.trial_days} Days Free Trial` : `Subscribe for 30 Days — $${fm.monthly_price}`}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 bg-[#12121a] p-1 rounded-lg border border-cyan-500/10">
+        {(['overview', 'reviews', 'chat', 'schedule'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`flex-1 py-2.5 text-sm font-medium rounded-md transition capitalize ${
+              activeTab === tab
+                ? 'bg-cyan-500 text-black'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+            style={{ fontFamily: 'Orbitron, sans-serif' }}
+          >
+            {tab === 'chat' && !mySubscription?.is_active ? '🔒 Chat' : tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'overview' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Managed Accounts Stats */}
+          <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-5">
+            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-cyan-400" /> Portfolio Stats
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Managed Accounts</span>
+                <span className="text-white font-medium">{fm.total_managed_accounts}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Total Balance Managed</span>
+                <span className="text-white font-medium">${parseFloat(fm.total_managed_balance || '0').toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Max Subscribers</span>
+                <span className="text-white font-medium">{fm.subscriber_count}/{fm.max_subscribers}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Trading Style</span>
+                <span className="text-cyan-300 font-medium">{fm.trading_style || 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Schedules Preview */}
+          <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-5">
+            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-yellow-400" /> Trading Schedule
+            </h3>
+            {fm.schedules?.length > 0 ? (
+              <div className="space-y-3">
+                {fm.schedules.map((s: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between bg-[#0a0a0f] rounded-lg p-3">
+                    <div>
+                      <div className="text-white text-sm font-medium">{s.name}</div>
+                      <div className="text-gray-500 text-xs">{s.day} • OFF {s.off_time} → ON {s.on_time} UTC</div>
+                    </div>
+                    {s.reason && (
+                      <span className="text-yellow-400 text-xs">{s.reason}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-sm">No scheduled breaks</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'reviews' && (
+        <div className="space-y-6">
+          {/* Write Review */}
+          {mySubscription && (
+            <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-5">
+              <h3 className="text-white font-semibold mb-3">Write a Review</h3>
+              <div className="flex items-center gap-1 mb-3">{renderStars(reviewRating, true)}</div>
+              <textarea
+                value={reviewComment}
+                onChange={e => setReviewComment(e.target.value)}
+                placeholder="Share your experience..."
+                className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 resize-none"
+                rows={3}
+              />
+              <button
+                onClick={submitReview}
+                disabled={!reviewRating || submittingReview}
+                className="mt-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold px-6 py-2 rounded-lg text-sm disabled:opacity-50 transition"
+              >
+                {submittingReview ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Submit Review'}
+              </button>
+            </div>
+          )}
+
+          {/* Existing Reviews */}
+          {fm.reviews?.length > 0 ? (
+            fm.reviews.map((r: any, i: number) => (
+              <div key={i} className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-medium text-sm">{r.user}</span>
+                    <div className="flex">{renderStars(r.rating)}</div>
+                  </div>
+                  <span className="text-gray-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</span>
+                </div>
+                {r.comment && <p className="text-gray-300 text-sm">{r.comment}</p>}
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-10">
+              <Star className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-400">No reviews yet</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'chat' && (
+        <>
+          {!mySubscription?.is_active ? (
+            <div className="text-center py-20 bg-[#12121a] border border-cyan-500/10 rounded-xl">
+              <MessageCircle className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+              <h3 className="text-white font-semibold mb-2">Subscribe to Access Chat</h3>
+              <p className="text-gray-400 text-sm mb-4">Join this fund manager's community to chat with other subscribers</p>
+              <button
+                onClick={() => setShowSubscribeModal(true)}
+                className="bg-cyan-500 hover:bg-cyan-400 text-black font-bold px-6 py-2.5 rounded-lg text-sm transition"
+              >
+                Subscribe Now
+              </button>
+            </div>
+          ) : (
+            <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl overflow-hidden flex flex-col" style={{ height: '500px' }}>
+              {/* Pinned Messages */}
+              {pinnedMessages.length > 0 && (
+                <div className="bg-yellow-500/5 border-b border-yellow-500/20 px-4 py-2">
+                  {pinnedMessages.map((m: any) => (
+                    <div key={m.id} className="flex items-start gap-2 text-xs">
+                      <Pin className="w-3 h-3 text-yellow-400 flex-shrink-0 mt-0.5" />
+                      <span className="text-yellow-300 font-medium">{m.sender_name}:</span>
+                      <span className="text-gray-300 truncate">{m.message}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {messages.map((m: any) => (
+                  <div key={m.id} className={`flex gap-3 ${m.sender_email === user.email ? 'flex-row-reverse' : ''}`}>
+                    <div className={`max-w-[75%] ${m.sender_email === user.email ? 'items-end' : 'items-start'}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-xs font-medium ${m.is_fm ? 'text-cyan-400' : 'text-gray-400'}`}>
+                          {m.sender_name} {m.is_fm && '(FM)'}
+                        </span>
+                        <span className="text-gray-600 text-[10px]">
+                          {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div className={`rounded-lg px-3 py-2 text-sm ${
+                        m.message_type === 'announcement'
+                          ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-200'
+                          : m.message_type === 'signal'
+                          ? 'bg-green-500/10 border border-green-500/20 text-green-200'
+                          : m.sender_email === user.email
+                          ? 'bg-cyan-500/20 text-white'
+                          : 'bg-[#0a0a0f] text-gray-300'
+                      }`}>
+                        {m.message_type === 'announcement' && <Megaphone className="w-3 h-3 inline mr-1" />}
+                        {m.message_type === 'signal' && <Zap className="w-3 h-3 inline mr-1" />}
+                        {m.message}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="border-t border-gray-800 p-3 flex gap-2">
+                <input
+                  type="text"
+                  value={chatMessage}
+                  onChange={e => setChatMessage(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                  placeholder="Type a message..."
+                  className="flex-1 bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+                />
+                {isFm && (
+                  <button
+                    onClick={() => sendMessage('announcement')}
+                    className="px-3 py-2 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition"
+                    title="Send as Announcement"
+                  >
+                    <Megaphone className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={() => sendMessage()}
+                  disabled={!chatMessage.trim() || sendingMessage}
+                  className="px-4 py-2 bg-cyan-500 text-black rounded-lg hover:bg-cyan-400 disabled:opacity-50 transition"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {activeTab === 'schedule' && (
+        <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-5">
+          <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-yellow-400" /> EA Trading Schedule
+          </h3>
+          <p className="text-gray-400 text-sm mb-6">
+            This fund manager's EA on/off schedule. During OFF periods, your EA will not open new trades.
+          </p>
+          {fm.schedules?.length > 0 ? (
+            <div className="space-y-3">
+              {fm.schedules.map((s: any, i: number) => (
+                <div key={i} className="flex items-center justify-between bg-[#0a0a0f] rounded-lg p-4 border border-gray-800">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+                      <AlertTriangle className="w-5 h-5 text-yellow-400" />
+                    </div>
+                    <div>
+                      <div className="text-white font-medium">{s.name}</div>
+                      <div className="text-gray-500 text-xs mt-1">
+                        Every {s.day} • EA OFF at {s.off_time} UTC → EA ON at {s.on_time} UTC
+                      </div>
+                    </div>
+                  </div>
+                  {s.reason && (
+                    <span className="text-yellow-400/70 text-xs bg-yellow-500/5 px-2 py-1 rounded">{s.reason}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-10">
+              <Clock className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-400 text-sm">No scheduled breaks — EA runs 24/5</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Subscribe Modal */}
+      {showSubscribeModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl max-w-md w-full p-6">
+            <h2 className="text-white text-lg font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              Subscribe to {fm.display_name}
+            </h2>
+            <p className="text-gray-400 text-sm mb-4">
+              {fm.trial_days > 0
+                ? `Start with a ${fm.trial_days}-day free trial, then $${fm.monthly_price}/month`
+                : `$${fm.monthly_price}/month`}
+            </p>
+
+            <div className="mb-4">
+              <label className="text-gray-300 text-sm font-medium block mb-2">Select MT5 accounts to assign:</label>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {licenses.filter((l: any) => l.status === 'active').map((lic: any) => (
+                  <label
+                    key={lic.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                      selectedLicenses.includes(lic.id)
+                        ? 'bg-cyan-500/10 border-cyan-500/30'
+                        : 'bg-[#0a0a0f] border-gray-800 hover:border-gray-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedLicenses.includes(lic.id)}
+                      onChange={() => {
+                        setSelectedLicenses(prev =>
+                          prev.includes(lic.id) ? prev.filter(id => id !== lic.id) : [...prev, lic.id]
+                        );
+                      }}
+                      className="accent-cyan-500"
+                    />
+                    <div>
+                      <div className="text-white text-sm font-medium">MT5: {lic.mt5_account || 'Unbound'}</div>
+                      <div className="text-gray-500 text-xs">{lic.plan} • {lic.license_key?.slice(0, 12)}...</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSubscribeModal(false)}
+                className="flex-1 py-2.5 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-800 transition text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubscribe}
+                disabled={selectedLicenses.length === 0 || subscribing}
+                className="flex-1 py-2.5 bg-cyan-500 text-black font-bold rounded-lg hover:bg-cyan-400 disabled:opacity-50 transition text-sm flex items-center justify-center gap-2"
+              >
+                {subscribing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Subscribe'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

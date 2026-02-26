@@ -8,7 +8,15 @@ from django.utils.html import format_html, mark_safe
 from django.utils import timezone
 from decimal import Decimal
 from django.db.models import F
-from .models import SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest, SMTPSettings, EmailPreference, PayoutMethod
+from .models import (
+    SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData,
+    EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout,
+    TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest,
+    SMTPSettings, EmailPreference, PayoutMethod,
+    FundManager, FMSubscription, FMAccountAssignment, FMCommand,
+    FMChatRoom, FMChatMessage, FMReview, FMPayout, FMSchedule, EconomicEvent,
+    Badge, UserBadge
+)
 
 
 # Unregister default User admin and register with search
@@ -1594,3 +1602,118 @@ class EmailPreferenceAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+# ============================================================
+# FUND MANAGER ADMIN
+# ============================================================
+
+@admin.register(FundManager)
+class FundManagerAdmin(admin.ModelAdmin):
+    list_display = ['display_name', 'user', 'tier', 'status', 'monthly_price', 'average_rating', 'total_reviews', 'is_verified', 'is_featured', 'created_at']
+    list_filter = ['status', 'tier', 'is_verified', 'is_featured']
+    search_fields = ['display_name', 'user__email', 'user__username', 'trading_pairs']
+    list_editable = ['status', 'tier', 'is_verified', 'is_featured']
+    readonly_fields = ['average_rating', 'total_reviews', 'created_at', 'updated_at']
+    fieldsets = (
+        ('Profile', {'fields': ('user', 'display_name', 'bio', 'avatar', 'tier')}),
+        ('Pricing', {'fields': ('monthly_price', 'platform_commission_percent', 'trial_days')}),
+        ('Performance', {'fields': ('total_profit_percent', 'win_rate', 'months_active', 'average_rating', 'total_reviews')}),
+        ('Status', {'fields': ('status', 'is_verified', 'is_featured')}),
+        ('Trading', {'fields': ('trading_pairs', 'trading_style', 'max_subscribers')}),
+        ('Timestamps', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
+    )
+
+
+@admin.register(FMSubscription)
+class FMSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ['user', 'fund_manager', 'status', 'price_at_subscription', 'current_period_end', 'auto_renew']
+    list_filter = ['status', 'auto_renew']
+    search_fields = ['user__email', 'fund_manager__display_name']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(FMAccountAssignment)
+class FMAccountAssignmentAdmin(admin.ModelAdmin):
+    list_display = ['license', 'subscription', 'is_ea_active', 'last_toggled_at', 'assigned_at']
+    list_filter = ['is_ea_active']
+    search_fields = ['license__license_key', 'subscription__user__email']
+
+
+@admin.register(FMCommand)
+class FMCommandAdmin(admin.ModelAdmin):
+    list_display = ['fund_manager', 'command_type', 'target_type', 'status', 'affected_accounts', 'reason', 'created_at']
+    list_filter = ['command_type', 'target_type', 'status']
+    search_fields = ['fund_manager__display_name', 'reason']
+    readonly_fields = ['created_at', 'executed_at']
+
+
+@admin.register(FMChatRoom)
+class FMChatRoomAdmin(admin.ModelAdmin):
+    list_display = ['fund_manager', 'name', 'is_active', 'created_at']
+    list_filter = ['is_active']
+
+
+@admin.register(FMChatMessage)
+class FMChatMessageAdmin(admin.ModelAdmin):
+    list_display = ['chat_room', 'sender', 'message_type', 'is_pinned', 'created_at']
+    list_filter = ['message_type', 'is_pinned']
+    search_fields = ['sender__email', 'message']
+
+
+@admin.register(FMReview)
+class FMReviewAdmin(admin.ModelAdmin):
+    list_display = ['user', 'fund_manager', 'rating', 'created_at']
+    list_filter = ['rating']
+    search_fields = ['user__email', 'fund_manager__display_name', 'comment']
+
+
+@admin.register(FMPayout)
+class FMPayoutAdmin(admin.ModelAdmin):
+    list_display = ['fund_manager', 'gross_amount', 'platform_fee', 'net_amount', 'status', 'period_start', 'period_end']
+    list_filter = ['status']
+    search_fields = ['fund_manager__display_name']
+    readonly_fields = ['created_at', 'processed_at']
+
+
+@admin.register(FMSchedule)
+class FMScheduleAdmin(admin.ModelAdmin):
+    list_display = ['fund_manager', 'name', 'day_of_week', 'off_time', 'on_time', 'is_active']
+    list_filter = ['is_active', 'day_of_week']
+    search_fields = ['fund_manager__display_name', 'name']
+
+
+@admin.register(EconomicEvent)
+class EconomicEventAdmin(admin.ModelAdmin):
+    list_display = ['title', 'currency', 'impact', 'event_time', 'forecast', 'actual', 'previous']
+    list_filter = ['impact', 'currency']
+    search_fields = ['title', 'currency']
+
+
+@admin.register(Badge)
+class BadgeAdmin(admin.ModelAdmin):
+    list_display = ['name', 'icon', 'color', 'badge_type', 'is_active', 'created_at']
+    list_filter = ['badge_type', 'is_active', 'icon']
+    list_editable = ['is_active']
+    search_fields = ['name', 'description']
+    fieldsets = (
+        ('Badge Info', {'fields': ('name', 'description', 'icon', 'color')}),
+        ('Settings', {'fields': ('badge_type', 'is_active')}),
+    )
+
+
+class UserBadgeInline(admin.TabularInline):
+    model = UserBadge
+    extra = 1
+    readonly_fields = ['awarded_at']
+    fields = ['badge', 'awarded_by', 'note', 'awarded_at']
+    autocomplete_fields = ['badge']
+
+
+@admin.register(UserBadge)
+class UserBadgeAdmin(admin.ModelAdmin):
+    list_display = ['user', 'badge', 'awarded_at', 'awarded_by', 'note']
+    list_filter = ['badge', 'awarded_at']
+    search_fields = ['user__email', 'user__username', 'badge__name']
+    readonly_fields = ['awarded_at']
+    autocomplete_fields = ['badge', 'user']

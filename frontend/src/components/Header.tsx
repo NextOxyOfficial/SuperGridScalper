@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Store, LogOut, Menu, X } from 'lucide-react';
+import { Store, LogOut, Menu, X, Users } from 'lucide-react';
 import SiteLogo from './SiteLogo';
 
 interface HeaderProps {
@@ -81,10 +81,17 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                 >
                   Demo
                 </Link>
+                <Link
+                  href="/dashboard/fund-managers"
+                  className="px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 text-purple-300 hover:text-white hover:bg-purple-500/20 border border-purple-500/30"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <Users className="w-4 h-4" /> FM Engine
+                </Link>
                 {scrollToPricing ? (
                   <button
                     onClick={scrollToPricing}
-                    className="px-4 py-2 rounded-lg text-sm font-medium transition text-purple-300 hover:text-white hover:bg-purple-500/20 border border-purple-500/30"
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
                     Pricing
@@ -92,7 +99,7 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                 ) : (
                   <Link
                     href={pricingHref}
-                    className="px-4 py-2 rounded-lg text-sm font-medium transition text-purple-300 hover:text-white hover:bg-purple-500/20 border border-purple-500/30"
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
                     Pricing
@@ -130,10 +137,17 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                 >
                   Demo
                 </Link>
+                <Link
+                  href="/dashboard/fund-managers"
+                  className="px-4 py-2 text-purple-300 hover:text-white hover:bg-purple-500/20 rounded-lg text-sm font-medium transition border border-purple-500/30 flex items-center gap-2"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <Users className="w-4 h-4" /> FM Engine
+                </Link>
                 {scrollToPricing ? (
                   <button
                     onClick={scrollToPricing}
-                    className="px-4 py-2 text-purple-300 hover:text-white hover:bg-purple-500/20 rounded-lg text-sm font-medium transition border border-purple-500/30"
+                    className="px-4 py-2 text-cyan-300 hover:text-white hover:bg-cyan-500/20 rounded-lg text-sm font-medium transition border border-cyan-500/30"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
                     Pricing
@@ -141,7 +155,7 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                 ) : (
                   <Link
                     href={pricingHref}
-                    className="px-4 py-2 text-purple-300 hover:text-white hover:bg-purple-500/20 rounded-lg text-sm font-medium transition border border-purple-500/30"
+                    className="px-4 py-2 text-cyan-300 hover:text-white hover:bg-cyan-500/20 rounded-lg text-sm font-medium transition border border-cyan-500/30"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
                     Pricing
@@ -256,6 +270,14 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
                   Demo
+                </Link>
+                <Link
+                  href="/dashboard/fund-managers"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-2 rounded-lg text-xs font-medium transition border border-purple-500/30 text-purple-300 hover:text-white hover:bg-purple-500/20 inline-flex items-center justify-center gap-1"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <Users className="w-3.5 h-3.5" /> FM Engine
                 </Link>
 
                 {scrollToPricing ? (

@@ -581,6 +581,8 @@ class TradeCommand(models.Model):
         ('CLOSE_ALL_SELL', 'Close All Sell'),
         ('CLOSE_ALL', 'Close All Positions'),
         ('CLOSE_BULK', 'Close Bulk Positions'),
+        ('EA_ON', 'Turn EA ON (FM)'),
+        ('EA_OFF', 'Turn EA OFF (FM)'),
     ]
     
     STATUS_CHOICES = [
@@ -820,3 +822,456 @@ class EmailPreference(models.Model):
         except cls.DoesNotExist:
             # If no preference exists, allow emails (opt-in by default)
             return True
+
+
+# ============================================================
+# FUND MANAGER PORTAL MODELS
+# ============================================================
+
+class FundManager(models.Model):
+    """Fund Manager profile - expert traders who manage groups of users' EA bots"""
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending Approval'),
+        ('approved', 'Approved'),
+        ('suspended', 'Suspended'),
+        ('rejected', 'Rejected'),
+    ]
+    
+    TIER_CHOICES = [
+        ('standard', 'Standard'),
+        ('professional', 'Professional'),
+        ('elite', 'Elite'),
+    ]
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='fund_manager_profile')
+    
+    # Profile
+    display_name = models.CharField(max_length=100, help_text="Public display name")
+    bio = models.TextField(blank=True, help_text="About the fund manager")
+    avatar = models.ImageField(upload_to='fm_avatars/', blank=True, null=True)
+    tier = models.CharField(max_length=20, choices=TIER_CHOICES, default='standard')
+    
+    # Subscription pricing
+    monthly_price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('29.00'), help_text="Monthly subscription price in USD")
+    
+    # Performance stats (updated periodically)
+    total_profit_percent = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'), help_text="Total profit % across all managed accounts")
+    win_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'), help_text="Win rate percentage")
+    months_active = models.IntegerField(default=0)
+    
+    # Ratings
+    average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=Decimal('0.00'))
+    total_reviews = models.IntegerField(default=0)
+    
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    is_verified = models.BooleanField(default=False, help_text="Verified badge")
+    is_featured = models.BooleanField(default=False, help_text="Featured on marketplace")
+    
+    # Platform commission
+    platform_commission_percent = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('15.00'), help_text="Platform takes this % of subscription fee")
+    
+    # Trading preferences
+    trading_pairs = models.CharField(max_length=200, default='XAUUSD', help_text="Comma-separated trading pairs")
+    trading_style = models.CharField(max_length=100, blank=True, help_text="e.g., Conservative Scalping, Aggressive Grid")
+    max_subscribers = models.IntegerField(default=50, help_text="Maximum number of subscribers allowed")
+    
+    # Trial
+    trial_days = models.IntegerField(default=7, help_text="Free trial period in days (0 = no trial)")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    @property
+    def subscriber_count(self):
+        return self.subscriptions.filter(status='active').count()
+    
+    @property
+    def total_managed_accounts(self):
+        return FMAccountAssignment.objects.filter(
+            subscription__fund_manager=self,
+            subscription__status='active'
+        ).count()
+    
+    def __str__(self):
+        return f"{self.display_name} ({self.get_status_display()}) - ${self.monthly_price}/mo"
+    
+    class Meta:
+        verbose_name = "Fund Manager"
+        verbose_name_plural = "Fund Managers"
+        ordering = ['-is_featured', '-average_rating', '-created_at']
+
+
+class FMSubscription(models.Model):
+    """User subscription to a Fund Manager"""
+    
+    STATUS_CHOICES = [
+        ('trial', 'Free Trial'),
+        ('active', 'Active'),
+        ('expired', 'Expired'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='fm_subscriptions')
+    fund_manager = models.ForeignKey(FundManager, on_delete=models.CASCADE, related_name='subscriptions')
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='trial')
+    
+    # Pricing at time of subscription
+    price_at_subscription = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    # Dates
+    started_at = models.DateTimeField(auto_now_add=True)
+    current_period_start = models.DateTimeField(auto_now_add=True)
+    current_period_end = models.DateTimeField()
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    
+    auto_renew = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    @property
+    def is_active(self):
+        if self.status not in ('active', 'trial'):
+            return False
+        return timezone.now() <= self.current_period_end
+    
+    @property
+    def days_remaining(self):
+        if not self.is_active:
+            return 0
+        delta = self.current_period_end - timezone.now()
+        return max(0, delta.days)
+    
+    def __str__(self):
+        return f"{self.user.email} → {self.fund_manager.display_name} ({self.status})"
+    
+    class Meta:
+        verbose_name = "FM Subscription"
+        verbose_name_plural = "FM Subscriptions"
+        ordering = ['-created_at']
+        unique_together = [['user', 'fund_manager']]
+
+
+class FMAccountAssignment(models.Model):
+    """Assigns a user's MT5 license to a Fund Manager's control"""
+    
+    subscription = models.ForeignKey(FMSubscription, on_delete=models.CASCADE, related_name='assigned_accounts')
+    license = models.ForeignKey(License, on_delete=models.CASCADE, related_name='fm_assignments')
+    
+    # FM control state
+    is_ea_active = models.BooleanField(default=True, help_text="Whether EA trading is currently enabled by FM")
+    last_toggled_at = models.DateTimeField(null=True, blank=True)
+    last_toggled_reason = models.CharField(max_length=255, blank=True)
+    
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        status = "ON" if self.is_ea_active else "OFF"
+        return f"{self.license.mt5_account} [{status}] → {self.subscription.fund_manager.display_name}"
+    
+    class Meta:
+        verbose_name = "FM Account Assignment"
+        verbose_name_plural = "FM Account Assignments"
+        unique_together = [['subscription', 'license']]
+
+
+class FMCommand(models.Model):
+    """Commands issued by Fund Manager to control EA on/off for subscribers"""
+    
+    COMMAND_TYPES = [
+        ('ea_on', 'Turn EA ON'),
+        ('ea_off', 'Turn EA OFF'),
+    ]
+    
+    TARGET_TYPES = [
+        ('all', 'All Subscribers'),
+        ('specific', 'Specific Account'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('executed', 'Executed'),
+        ('partial', 'Partially Executed'),
+        ('failed', 'Failed'),
+    ]
+    
+    fund_manager = models.ForeignKey(FundManager, on_delete=models.CASCADE, related_name='commands')
+    command_type = models.CharField(max_length=10, choices=COMMAND_TYPES)
+    target_type = models.CharField(max_length=10, choices=TARGET_TYPES, default='all')
+    
+    # If targeting specific account
+    target_assignment = models.ForeignKey(FMAccountAssignment, on_delete=models.SET_NULL, null=True, blank=True, related_name='commands')
+    
+    reason = models.CharField(max_length=255, blank=True, help_text="Why this command was issued (e.g., NFP News)")
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    affected_accounts = models.IntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.fund_manager.display_name} - {self.get_command_type_display()} ({self.get_target_type_display()})"
+    
+    class Meta:
+        verbose_name = "FM Command"
+        verbose_name_plural = "FM Commands"
+        ordering = ['-created_at']
+
+
+class FMChatRoom(models.Model):
+    """Group chat room for a Fund Manager and their subscribers"""
+    
+    fund_manager = models.OneToOneField(FundManager, on_delete=models.CASCADE, related_name='chat_room')
+    name = models.CharField(max_length=100, blank=True)
+    is_active = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"Chat: {self.fund_manager.display_name}"
+    
+    class Meta:
+        verbose_name = "FM Chat Room"
+        verbose_name_plural = "FM Chat Rooms"
+
+
+class FMChatMessage(models.Model):
+    """Messages in a Fund Manager's group chat"""
+    
+    MESSAGE_TYPES = [
+        ('message', 'Regular Message'),
+        ('announcement', 'Announcement'),
+        ('signal', 'Trade Signal'),
+        ('system', 'System Message'),
+        ('photo', 'Photo'),
+        ('voice', 'Voice Message'),
+    ]
+    
+    chat_room = models.ForeignKey(FMChatRoom, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='fm_chat_messages')
+    reply_to = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replies')
+    
+    message = models.TextField(blank=True)
+    message_type = models.CharField(max_length=20, choices=MESSAGE_TYPES, default='message')
+    is_pinned = models.BooleanField(default=False)
+    
+    # Media attachments
+    image = models.ImageField(upload_to='fm_chat_images/', blank=True, null=True)
+    voice = models.FileField(upload_to='fm_chat_voice/', blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.sender.email}: {self.message[:50]}"
+    
+    class Meta:
+        verbose_name = "FM Chat Message"
+        verbose_name_plural = "FM Chat Messages"
+        ordering = ['-created_at']
+
+
+class FMReview(models.Model):
+    """User reviews for Fund Managers"""
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='fm_reviews')
+    fund_manager = models.ForeignKey(FundManager, on_delete=models.CASCADE, related_name='reviews')
+    
+    rating = models.IntegerField(help_text="Rating 1-5")
+    comment = models.TextField(blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Update fund manager's average rating
+        from django.db.models import Avg, Count
+        stats = self.fund_manager.reviews.aggregate(
+            avg_rating=Avg('rating'),
+            total=Count('id')
+        )
+        self.fund_manager.average_rating = stats['avg_rating'] or Decimal('0.00')
+        self.fund_manager.total_reviews = stats['total'] or 0
+        self.fund_manager.save(update_fields=['average_rating', 'total_reviews'])
+    
+    def __str__(self):
+        return f"{self.user.email} → {self.fund_manager.display_name}: {self.rating}★"
+    
+    class Meta:
+        verbose_name = "FM Review"
+        verbose_name_plural = "FM Reviews"
+        unique_together = [['user', 'fund_manager']]
+        ordering = ['-created_at']
+
+
+class FMPayout(models.Model):
+    """Track Fund Manager earnings and payouts"""
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+    
+    fund_manager = models.ForeignKey(FundManager, on_delete=models.CASCADE, related_name='payouts')
+    
+    # Period
+    period_start = models.DateField()
+    period_end = models.DateField()
+    
+    # Amounts
+    gross_amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Total subscription revenue for period")
+    platform_fee = models.DecimalField(max_digits=10, decimal_places=2, help_text="Platform commission deducted")
+    net_amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Amount payable to FM")
+    
+    # Payment
+    payment_method = models.CharField(max_length=50, blank=True)
+    payment_details = models.JSONField(default=dict, blank=True)
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    admin_notes = models.TextField(blank=True)
+    
+    def __str__(self):
+        return f"{self.fund_manager.display_name} - ${self.net_amount} ({self.status})"
+    
+    class Meta:
+        verbose_name = "FM Payout"
+        verbose_name_plural = "FM Payouts"
+        ordering = ['-created_at']
+
+
+class FMSchedule(models.Model):
+    """EA on/off schedule templates created by Fund Managers"""
+    
+    DAYS_OF_WEEK = [
+        (0, 'Monday'),
+        (1, 'Tuesday'),
+        (2, 'Wednesday'),
+        (3, 'Thursday'),
+        (4, 'Friday'),
+        (5, 'Saturday'),
+        (6, 'Sunday'),
+    ]
+    
+    fund_manager = models.ForeignKey(FundManager, on_delete=models.CASCADE, related_name='schedules')
+    
+    name = models.CharField(max_length=100, help_text="Schedule name (e.g., 'No Friday Trading')")
+    is_active = models.BooleanField(default=True)
+    
+    # Schedule details
+    day_of_week = models.IntegerField(choices=DAYS_OF_WEEK)
+    off_time = models.TimeField(help_text="Time to turn EA OFF (UTC)")
+    on_time = models.TimeField(help_text="Time to turn EA back ON (UTC)")
+    reason = models.CharField(max_length=255, blank=True, help_text="e.g., 'High impact news window'")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.fund_manager.display_name} - {self.name} ({self.get_day_of_week_display()})"
+    
+    class Meta:
+        verbose_name = "FM Schedule"
+        verbose_name_plural = "FM Schedules"
+        ordering = ['day_of_week', 'off_time']
+
+
+class EconomicEvent(models.Model):
+    """Economic calendar events for Fund Managers"""
+    
+    IMPACT_CHOICES = [
+        ('low', 'Low Impact'),
+        ('medium', 'Medium Impact'),
+        ('high', 'High Impact'),
+    ]
+    
+    title = models.CharField(max_length=200)
+    currency = models.CharField(max_length=10, help_text="e.g., USD, EUR, GBP")
+    impact = models.CharField(max_length=10, choices=IMPACT_CHOICES, default='medium')
+    
+    event_time = models.DateTimeField()
+    
+    # Forecast/Actual/Previous
+    forecast = models.CharField(max_length=50, blank=True)
+    actual = models.CharField(max_length=50, blank=True)
+    previous = models.CharField(max_length=50, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"[{self.impact.upper()}] {self.title} ({self.currency}) - {self.event_time}"
+    
+    class Meta:
+        verbose_name = "Economic Event"
+        verbose_name_plural = "Economic Events"
+        ordering = ['event_time']
+
+
+# ============================================================
+# USER BADGE SYSTEM
+# ============================================================
+
+class Badge(models.Model):
+    """Achievement badges that can be granted to users"""
+
+    BADGE_TYPES = [
+        ('manual', 'Manual (Admin Assigned)'),
+        ('auto_join', 'Auto: Join Duration'),
+    ]
+
+    ICON_CHOICES = [
+        ('star', '⭐ Star'),
+        ('fire', '🔥 Fire'),
+        ('crown', '👑 Crown'),
+        ('shield', '🛡 Shield'),
+        ('diamond', '💎 Diamond'),
+        ('rocket', '🚀 Rocket'),
+        ('trophy', '🏆 Trophy'),
+        ('zap', '⚡ Zap'),
+    ]
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.CharField(max_length=255)
+    icon = models.CharField(max_length=20, choices=ICON_CHOICES, default='star')
+    color = models.CharField(max_length=30, default='text-yellow-400', help_text="Tailwind text color class")
+    badge_type = models.CharField(max_length=20, choices=BADGE_TYPES, default='manual')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Badge"
+        verbose_name_plural = "Badges"
+        ordering = ['name']
+
+
+class UserBadge(models.Model):
+    """Many-to-many: badges awarded to users"""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='badges')
+    badge = models.ForeignKey(Badge, on_delete=models.CASCADE, related_name='user_badges')
+    awarded_at = models.DateTimeField(auto_now_add=True)
+    awarded_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='badges_awarded', help_text="Admin who granted this badge"
+    )
+    note = models.CharField(max_length=255, blank=True)
+
+    def __str__(self):
+        return f"{self.user.email} — {self.badge.name}"
+
+    class Meta:
+        verbose_name = "User Badge"
+        verbose_name_plural = "User Badges"
+        unique_together = [['user', 'badge']]
+        ordering = ['-awarded_at']

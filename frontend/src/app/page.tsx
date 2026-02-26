@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Check, CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift } from 'lucide-react'
+import { Check, CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift, Users } from 'lucide-react'
 import axios from 'axios'
 import ExnessBroker from '@/components/ExnessBroker'
 import Header from '@/components/Header'
@@ -279,6 +279,175 @@ function StepsSlideshow({ router }: { router: any }) {
       </div>
 
       {/* Transitions handled via inline styles */}
+    </div>
+  );
+}
+
+function FMEngineSection({ router }: { router: any }) {
+  const [leaders, setLeaders] = useState<any[]>([]);
+  const [loadingFM, setLoadingFM] = useState(true);
+
+  useEffect(() => {
+    const fetchLeaders = async () => {
+      try {
+        const res = await fetch(`${API_URL}/fund-managers/leaderboard/`);
+        const data = await res.json();
+        if (data.success) setLeaders(data.leaderboard.slice(0, 5));
+      } catch {
+      } finally {
+        setLoadingFM(false);
+      }
+    };
+    fetchLeaders();
+  }, []);
+
+  const renderStars = (rating: number) => {
+    const r = Math.round(parseFloat(String(rating)));
+    return Array.from({ length: 5 }, (_, i) => (
+      <Star key={i} className={`w-3 h-3 ${i < r ? 'text-yellow-400 fill-yellow-400' : 'text-gray-700'}`} />
+    ));
+  };
+
+  return (
+    <div className="mb-12 sm:mb-24 relative">
+      <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-cyan-500/5 rounded-3xl blur-xl pointer-events-none" />
+      <div className="relative bg-gradient-to-br from-[#0a0a0f] via-[#12121a] to-[#0a0a0f] border border-purple-500/20 rounded-2xl sm:rounded-3xl p-4 sm:p-8 overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/40 to-transparent" />
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6 sm:mb-8">
+          <div>
+            <div className="inline-flex items-center gap-2 bg-purple-500/10 border border-purple-500/30 rounded-full px-3 py-1 mb-3">
+              <Users className="w-3.5 h-3.5 text-purple-400" />
+              <span className="text-purple-300 text-[10px] sm:text-xs font-semibold tracking-wider" style={{ fontFamily: 'Orbitron, sans-serif' }}>FM ENGINE</span>
+            </div>
+            <h2 className="text-xl sm:text-3xl font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              Hire an Expert for Your EA Management
+            </h2>
+            <p className="text-gray-400 text-xs sm:text-sm max-w-xl">
+              Subscribe to a verified fund manager who remotely controls your trading EA — turning it on or off based on live market conditions, so you never miss a setup or overtrade a bad session.
+            </p>
+          </div>
+          <button
+            onClick={() => router.push('/dashboard/fund-managers')}
+            className="flex-shrink-0 inline-flex items-center gap-2 border border-purple-500/40 text-purple-300 hover:text-white hover:bg-purple-500/20 px-4 py-2 rounded-lg text-xs font-semibold transition"
+            style={{ fontFamily: 'Orbitron, sans-serif' }}
+          >
+            Browse All <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Leaderboard List */}
+        {loadingFM ? (
+          <div className="flex justify-center py-10">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+          </div>
+        ) : leaders.length === 0 ? (
+          <div className="text-center py-10 text-gray-500 text-sm">
+            No fund managers available yet. <button onClick={() => router.push('/dashboard/fund-managers/apply')} className="text-purple-400 hover:text-purple-300 underline">Be the first to apply.</button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {/* Desktop header row */}
+            <div className="hidden sm:grid grid-cols-12 gap-3 px-3 py-1.5 text-gray-600 text-[10px] font-semibold uppercase tracking-wider">
+              <div className="col-span-1">#</div>
+              <div className="col-span-4">Fund Manager</div>
+              <div className="col-span-2 text-right">Profit</div>
+              <div className="col-span-2 text-right">Win Rate</div>
+              <div className="col-span-1 text-right">Rating</div>
+              <div className="col-span-2 text-right">Action</div>
+            </div>
+
+            {leaders.map((fm: any, idx: number) => {
+              const rankColors = ['text-yellow-400', 'text-gray-300', 'text-amber-600', 'text-gray-400', 'text-gray-400'];
+              const profit = parseFloat(fm.total_profit_percent || '0');
+              return (
+                <div
+                  key={fm.id}
+                  className="bg-[#0d0d14] border border-white/5 hover:border-purple-500/30 rounded-xl transition-all"
+                >
+                  {/* Desktop row */}
+                  <div className="hidden sm:grid grid-cols-12 gap-3 items-center px-3 py-3.5">
+                    <div className={`col-span-1 font-bold text-base ${rankColors[idx] || 'text-gray-500'}`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                      {idx + 1}
+                    </div>
+                    <div className="col-span-4 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500/40 to-cyan-500/30 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 border border-white/10">
+                        {fm.avatar_url ? <img src={fm.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" /> : fm.display_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-white font-semibold text-sm truncate flex items-center gap-1">
+                          {fm.display_name}
+                          {fm.is_verified && <Shield className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />}
+                        </div>
+                        <div className="text-gray-500 text-[10px] truncate">{fm.trading_style} · {fm.trading_pairs?.split(',')[0]?.trim()}</div>
+                      </div>
+                    </div>
+                    <div className="col-span-2 text-right">
+                      <span className={`font-bold text-sm ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {profit >= 0 ? '+' : ''}{fm.total_profit_percent}%
+                      </span>
+                    </div>
+                    <div className="col-span-2 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <div className="w-14 bg-gray-800 rounded-full h-1">
+                          <div className="bg-green-500 h-1 rounded-full" style={{ width: `${Math.min(100, parseFloat(fm.win_rate || '0'))}%` }} />
+                        </div>
+                        <span className="text-white text-xs">{fm.win_rate}%</span>
+                      </div>
+                    </div>
+                    <div className="col-span-1 text-right">
+                      <div className="flex justify-end">{renderStars(fm.average_rating)}</div>
+                    </div>
+                    <div className="col-span-2 text-right">
+                      <button
+                        onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
+                        className="inline-flex items-center gap-1.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition"
+                        style={{ fontFamily: 'Orbitron, sans-serif' }}
+                      >
+                        Subscribe
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Mobile row */}
+                  <div className="sm:hidden flex items-center gap-3 px-3 py-3">
+                    <span className={`font-bold text-sm w-4 flex-shrink-0 ${rankColors[idx] || 'text-gray-500'}`} style={{ fontFamily: 'Orbitron, sans-serif' }}>{idx + 1}</span>
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500/40 to-cyan-500/30 flex items-center justify-center text-white font-bold text-xs flex-shrink-0 border border-white/10">
+                      {fm.avatar_url ? <img src={fm.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" /> : fm.display_name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white font-semibold text-xs truncate">{fm.display_name}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[10px] font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{profit >= 0 ? '+' : ''}{fm.total_profit_percent}%</span>
+                        <span className="text-gray-600 text-[10px]">·</span>
+                        <span className="text-gray-400 text-[10px]">Win {fm.win_rate}%</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
+                      className="flex-shrink-0 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      Subscribe
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Footer link */}
+        <div className="mt-4 text-center">
+          <button
+            onClick={() => router.push('/dashboard/fund-managers/leaderboard')}
+            className="text-purple-400 hover:text-purple-300 text-xs sm:text-sm font-medium transition inline-flex items-center gap-1"
+          >
+            View full leaderboard <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1238,6 +1407,9 @@ export default function Home() {
 
         {/* Progress Steps - Auto-Playing Tab Slideshow */}
         <StepsSlideshow router={router} />
+
+        {/* FM Engine Section */}
+        <FMEngineSection router={router} />
 
         {/* EA Store Preview Section */}
         <div className="mb-12 sm:mb-24">
