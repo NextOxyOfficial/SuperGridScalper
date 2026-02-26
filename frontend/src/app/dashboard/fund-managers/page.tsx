@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useDashboard } from '../context';
 import { useRouter } from 'next/navigation';
-import { Star, Users, TrendingUp, Shield, Crown, Search, Zap, Clock, ChevronLeft, ChevronRight, ArrowUpDown, CheckCircle, Loader2, X } from 'lucide-react';
+import { Star, Users, TrendingUp, Shield, Crown, Search, Zap, Clock, ChevronLeft, ChevronRight, ArrowUpDown, CheckCircle, Loader2, X, Filter } from 'lucide-react';
 
 const TIER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   standard: { bg: 'bg-gray-500/20', text: 'text-gray-300', border: 'border-gray-500/30' },
@@ -26,6 +26,7 @@ export default function FundManagersPage() {
   const [subscribedFmIds, setSubscribedFmIds] = useState<Set<number>>(new Set());
   const [unsubscribingId, setUnsubscribingId] = useState<number | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
 
   useEffect(() => {
     fetchFundManagers();
@@ -166,31 +167,52 @@ export default function FundManagersPage() {
         )}
       </div>
 
-      {/* Search & Sort row */}
+      {/* Search & Filter row */}
       <div className="flex items-center gap-2 mb-4">
-        {/* Sort select — hidden when chat open */}
-        {!chatOpen && (
-          <>
-            <ArrowUpDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
-            <select
-              value={sortBy}
-              onChange={e => { setSortBy(e.target.value); setPage(1); }}
-              className="bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm px-3 py-2.5 focus:outline-none focus:border-cyan-500/50 flex-shrink-0"
-            >
-              <option value="featured">Featured</option>
-              <option value="rating">Top Rated</option>
-              <option value="subscribers">Most Popular</option>
-              <option value="profit">Highest Profit</option>
-              <option value="price_low">Price: Low → High</option>
-              <option value="price_high">Price: High → Low</option>
-            </select>
-          </>
-        )}
+        {/* Professional-sized Filter Icon */}
+        <button
+          onClick={() => {
+            setSearchExpanded(false);
+            setSearchQuery('');
+          }}
+          className="flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-lg bg-[#1a1a2e] border border-purple-500/20 text-purple-400 hover:bg-purple-500/10 transition"
+          title="Filter options"
+        >
+          <Filter className="w-5 h-5" />
+        </button>
 
-        {/* Search input — shown when chat open, hidden otherwise on mobile */}
-        <div className={`relative transition-all duration-300 ${
-          chatOpen ? 'flex-1' : 'hidden sm:flex flex-1'
-        }`}>
+        {/* Professional-sized Search Icon */}
+        <button
+          onClick={() => {
+            setSearchExpanded(!searchExpanded);
+            if (searchExpanded) {
+              setSearchQuery('');
+            }
+          }}
+          className="flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-lg bg-[#1a1a2e] border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition"
+          title="Search fund managers"
+        >
+          <Search className="w-5 h-5" />
+        </button>
+
+        {/* Sort select — shown when search not expanded */}
+        {!searchExpanded && (
+          <select
+            value={sortBy}
+            onChange={e => { setSortBy(e.target.value); setPage(1); }}
+            className="bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm px-3 py-2.5 focus:outline-none focus:border-cyan-500/50 flex-1 sm:flex-initial"
+          >
+            <option value="featured">Featured</option>
+            <option value="rating">Top Rated</option>
+            <option value="subscribers">Most Popular</option>
+            <option value="profit">Highest Profit</option>
+          </select>
+        )}
+      </div>
+
+      {/* Expandable Search Input */}
+      <div className={`mb-4 relative transition-all duration-300 ease-in-out overflow-hidden ${searchExpanded ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             type="text"
@@ -198,18 +220,9 @@ export default function FundManagersPage() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a2e] border border-cyan-500/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
-            autoFocus={chatOpen}
+            autoFocus={searchExpanded}
           />
         </div>
-
-        {/* Chat / Search toggle icon (mobile only) */}
-        <button
-          onClick={() => { setChatOpen(o => !o); if (chatOpen) setSearchQuery(''); }}
-          className="sm:hidden flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg bg-[#1a1a2e] border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition"
-          title={chatOpen ? 'Close search' : 'Search'}
-        >
-          {chatOpen ? <X className="w-4 h-4" /> : <Search className="w-4 h-4" />}
-        </button>
       </div>
 
       {/* Results count */}

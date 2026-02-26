@@ -88,6 +88,7 @@ export default function DashboardHome() {
   const [nicknameValue, setNicknameValue] = useState('');
   const [savingNickname, setSavingNickname] = useState(false);
   const [licenseSearchQuery, setLicenseSearchQuery] = useState('');
+  const [searchExpanded, setSearchExpanded] = useState(false);
 
   // Free Exness claim state
   const [freeExnessMt5, setFreeExnessMt5] = useState('');
@@ -3116,54 +3117,69 @@ export default function DashboardHome() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">{filteredLicenses.length} license(s)</span>
-            {refreshedMsg && (
-              <span className="text-[10px] sm:text-xs text-green-400 animate-pulse">Refreshed!</span>
-            )}
             <button
-              onClick={async () => {
-                if (refreshing || refreshCooldown > 0) return;
-                setRefreshing(true);
-                setRefreshedMsg(false);
-                try {
-                  await refreshLicenses();
-                  await fetchAllLicensesTradeData();
-                  setRefreshedMsg(true);
-                  setTimeout(() => setRefreshedMsg(false), 2000);
-                } finally {
-                  setRefreshing(false);
-                  setRefreshCooldown(5);
-                  const cd = setInterval(() => {
-                    setRefreshCooldown(prev => {
-                      if (prev <= 1) { clearInterval(cd); return 0; }
-                      return prev - 1;
-                    });
-                  }, 1000);
+              onClick={() => {
+                setSearchExpanded(!searchExpanded);
+                if (searchExpanded) {
+                  setLicenseSearchQuery('');
                 }
               }}
-              disabled={refreshing || refreshCooldown > 0}
-              className={`p-1.5 sm:p-2 rounded-lg border transition-all flex items-center gap-1.5 ${
-                refreshing || refreshCooldown > 0
-                  ? 'bg-gray-800/50 border-gray-700 text-gray-600 cursor-not-allowed'
-                  : 'bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30 text-cyan-400 hover:text-cyan-300'
-              }`}
-              title={refreshCooldown > 0 ? `Wait ${refreshCooldown}s` : 'Refresh all data'}
+              className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full transition text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30"
+              title="Search licenses"
             >
-              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshCooldown > 0 && <span className="text-[10px] sm:text-xs tabular-nums">{refreshCooldown}s</span>}
+              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
+            {!searchExpanded && (
+              <>
+                <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">{filteredLicenses.length} license(s)</span>
+                {refreshedMsg && (
+                  <span className="text-[10px] sm:text-xs text-green-400 animate-pulse">Refreshed!</span>
+                )}
+                <button
+                  onClick={async () => {
+                    if (refreshing || refreshCooldown > 0) return;
+                    setRefreshing(true);
+                    setRefreshedMsg(false);
+                    try {
+                      await refreshLicenses();
+                      await fetchAllLicensesTradeData();
+                      setRefreshedMsg(true);
+                      setTimeout(() => setRefreshedMsg(false), 2000);
+                    } finally {
+                      setRefreshing(false);
+                      setRefreshCooldown(5);
+                      const cd = setInterval(() => {
+                        setRefreshCooldown(prev => {
+                          if (prev <= 1) { clearInterval(cd); return 0; }
+                          return prev - 1;
+                        });
+                      }, 1000);
+                    }
+                  }}
+                  disabled={refreshing || refreshCooldown > 0}
+                  className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full transition ${refreshing || refreshCooldown > 0 ? 'text-gray-500 bg-gray-800 cursor-wait' : 'text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30'}`}
+                  title={refreshCooldown > 0 ? `Wait ${refreshCooldown}s` : 'Refresh all data'}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                  {refreshCooldown > 0 && <span className="text-[10px] sm:text-xs tabular-nums">{refreshCooldown}s</span>}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="mb-3 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            value={licenseSearchQuery}
-            onChange={(e) => setLicenseSearchQuery(e.target.value)}
-            placeholder="Search by MT5 account or name..."
-            className="w-full pl-10 pr-3 py-2 bg-[#0f1320] border border-cyan-500/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
-          />
+        <div className={`mb-3 relative transition-all duration-300 ease-in-out overflow-hidden ${searchExpanded ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              value={licenseSearchQuery}
+              onChange={(e) => setLicenseSearchQuery(e.target.value)}
+              placeholder="Search by MT5 account or name..."
+              className="w-full pl-10 pr-3 py-2 bg-[#0f1320] border border-cyan-500/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+              autoFocus={searchExpanded}
+            />
+          </div>
         </div>
         {/* Portfolio Summary */}
         {licenses.length > 0 && (() => {
