@@ -39,7 +39,8 @@ source venv/bin/activate
 pip install -q -r requirements.txt
 echo -e "${GREEN}✓ Python dependencies updated${NC}"
 
-# Run migrations
+# Run migrations (auto-merge conflicts if any)
+python manage.py makemigrations --merge --no-input
 python manage.py makemigrations
 python manage.py migrate
 echo -e "${GREEN}✓ Database migrations applied${NC}"
