@@ -25,10 +25,22 @@ def _resolve_user(identifier):
     if not identifier:
         return None
     identifier = identifier.strip()
-    user = User.objects.filter(email__iexact=identifier).first()
-    if not user:
-        user = User.objects.filter(username__iexact=identifier).first()
-    return user
+    email_qs = User.objects.filter(email__iexact=identifier)
+    username_qs = User.objects.filter(username__iexact=identifier).exclude(id__in=email_qs.values('id'))
+    ids = list(email_qs.values_list('id', flat=True)) + list(username_qs.values_list('id', flat=True))
+    if not ids:
+        return None
+
+    # Prefer the account that actually has licenses/subscriptions (handles legacy duplicate users in production).
+    return (
+        User.objects.filter(id__in=ids)
+        .annotate(
+            license_count=Count('licenses', distinct=True),
+            fm_sub_count=Count('fm_subscriptions', distinct=True),
+        )
+        .order_by('-license_count', '-fm_sub_count', '-id')
+        .first()
+    )
 
 
 def _get_fm_from_user(user):
@@ -560,6 +572,7 @@ def get_my_fm_subscriptions(request):
             used_license_map[a.license.id] = a.subscription.fund_manager.display_name
 
     results = []
+    
     for sub in subs:
         fm = sub.fund_manager
         assignments = sub.assigned_accounts.select_related('license')

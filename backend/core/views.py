@@ -40,8 +40,11 @@ def resolve_user(identifier: str):
     # Prefer the user record that actually has licenses (handles duplicate emails / legacy data)
     return (
         User.objects.filter(id__in=ids)
-        .annotate(license_count=Count('licenses'))
-        .order_by('-license_count', '-id')
+        .annotate(
+            license_count=Count('licenses', distinct=True),
+            fm_sub_count=Count('fm_subscriptions', distinct=True),
+        )
+        .order_by('-license_count', '-fm_sub_count', '-id')
         .first()
     )
 

@@ -1696,30 +1696,53 @@ class TradingWaveAlertAdmin(admin.ModelAdmin):
     list_editable = ['display_name', 'is_active', 'minutes_before']
     list_filter = ['is_active']
     readonly_fields = ['activated_at', 'updated_at']
+    actions = ['activate_alerts', 'deactivate_alerts']
+    
     fieldsets = (
         ('Alert Type', {
             'fields': ('mode', 'display_name'),
             'description': 'Each mode (Normal / Medium / High) is a separate alert row. Customize the display name shown to users.'
         }),
         ('Countdown & Status', {
-            'fields': ('minutes_before', 'is_active', 'activated_at'),
-            'description': 'Set minutes_before = how many minutes until impact. Toggle is_active ON to start the countdown for users.'
+            'fields': ('minutes_before', 'is_active'),
+            'description': 'Set countdown time and activate/deactivate the alert.'
         }),
-        ('Tips / Summary', {
+        ('Tips & Content', {
             'fields': ('tips',),
-            'description': 'Write tips or summary text that users will see alongside this alert.'
+            'description': 'Trading tips shown to users during this impact level.'
         }),
-        ('Timestamps', {
-            'fields': ('updated_at',),
+        ('System Info', {
+            'fields': ('activated_at', 'updated_at'),
+            'classes': ('collapse',),
         }),
     )
+    
+    def activate_alerts(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} alerts activated.')
+    activate_alerts.short_description = "Activate selected alerts"
+    
+    def deactivate_alerts(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} alerts deactivated.')
+    deactivate_alerts.short_description = "Deactivate selected alerts"
 
     def has_add_permission(self, request):
         # Max 3 alerts (one per mode)
-        return TradingWaveAlert.objects.count() < 3
+        return request.user.is_active and request.user.is_staff and TradingWaveAlert.objects.count() < 3
 
     def has_delete_permission(self, request, obj=None):
-        return True
+        return request.user.is_active and request.user.is_staff
+
+    def has_module_permission(self, request):
+        # Keep model visible in sidebar for admin staff even if granular model perms are missing in production.
+        return request.user.is_active and request.user.is_staff
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_staff
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_staff
 
 
 @admin.register(Badge)
