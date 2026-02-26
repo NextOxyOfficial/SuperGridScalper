@@ -160,44 +160,20 @@ function DashboardNav() {
           </div>
           {/* Row 2: Nav buttons */}
           <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <Link
-                href="/dashboard"
-                className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
-                  pathname === '/dashboard' 
-                    ? 'bg-cyan-500 text-black' 
-                    : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
-                }`}
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/dashboard/ea-store"
-                className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
-                  pathname === '/dashboard/ea-store' 
-                    ? 'bg-yellow-500 text-black' 
-                    : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
-                }`}
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> EA Store
-              </Link>
-              <Link
-                href="/dashboard/referral"
-                className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
-                  pathname === '/dashboard/referral' 
-                    ? 'bg-green-500 text-black' 
-                    : 'text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30'
-                }`}
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Referral
-              </Link>
-            </div>
+            <Link
+              href="/dashboard"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
+                pathname === '/dashboard' 
+                  ? 'bg-cyan-500 text-black' 
+                  : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              Dashboard
+            </Link>
             <Link
               href="/dashboard/fund-managers"
-              className={`ml-auto flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
                 isFundManagersPage 
                   ? 'bg-purple-500 text-black' 
                   : 'text-purple-300 hover:text-white hover:bg-purple-500/20 border border-purple-500/30'
@@ -205,6 +181,28 @@ function DashboardNav() {
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> FM Engine
+            </Link>
+            <Link
+              href="/dashboard/ea-store"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                pathname === '/dashboard/ea-store' 
+                  ? 'bg-yellow-500 text-black' 
+                  : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> EA Store
+            </Link>
+            <Link
+              href="/dashboard/referral"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                pathname === '/dashboard/referral' 
+                  ? 'bg-green-500 text-black' 
+                  : 'text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Referral
             </Link>
           </div>
         </div>
@@ -256,44 +254,20 @@ function DashboardNav() {
         {/* Row 2: Nav Links */}
         {selectedLicense && (
           <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <Link
-                href="/dashboard"
-                className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
-                  isDashboardPage 
-                    ? 'bg-cyan-500 text-black' 
-                    : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
-                }`}
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/dashboard/ea-store"
-                className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
-                  isEAStorePage 
-                    ? 'bg-yellow-500 text-black' 
-                    : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
-                }`}
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> EA Store
-              </Link>
-              <Link
-                href="/dashboard/referral"
-                className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
-                  isReferralPage 
-                    ? 'bg-green-500 text-black' 
-                    : 'text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30'
-                }`}
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Referral
-              </Link>
-            </div>
+            <Link
+              href="/dashboard"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
+                isDashboardPage 
+                  ? 'bg-cyan-500 text-black' 
+                  : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              Dashboard
+            </Link>
             <Link
               href="/dashboard/fund-managers"
-              className={`ml-auto flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
                 isFundManagersPage 
                   ? 'bg-purple-500 text-black' 
                   : 'text-purple-300 hover:text-white hover:bg-purple-500/20 border border-purple-500/30'
@@ -301,6 +275,28 @@ function DashboardNav() {
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> FM Engine
+            </Link>
+            <Link
+              href="/dashboard/ea-store"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                isEAStorePage 
+                  ? 'bg-yellow-500 text-black' 
+                  : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> EA Store
+            </Link>
+            <Link
+              href="/dashboard/referral"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                isReferralPage 
+                  ? 'bg-green-500 text-black' 
+                  : 'text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Referral
             </Link>
           </div>
         )}

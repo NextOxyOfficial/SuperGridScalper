@@ -7,7 +7,7 @@ import {
   Star, Shield, Crown, Users, TrendingUp, Clock, ArrowLeft,
   MessageCircle, Calendar, ChevronDown, ChevronUp, Check, Loader2,
   Send, Pin, Megaphone, Zap, AlertTriangle, DollarSign, BarChart3,
-  Mic, MicOff, StopCircle
+  Mic, MicOff, StopCircle, X, Eye, EyeOff
 } from 'lucide-react';
 
 export default function FundManagerDetailPage() {
@@ -26,6 +26,13 @@ export default function FundManagerDetailPage() {
   const [selectedLicenses, setSelectedLicenses] = useState<number[]>([]);
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
   const [usedLicenseMap, setUsedLicenseMap] = useState<Record<number, string>>({});
+
+  // Unsubscribe modal state
+  const [showUnsubscribeModal, setShowUnsubscribeModal] = useState(false);
+  const [unsubPassword, setUnsubPassword] = useState('');
+  const [unsubPasswordVisible, setUnsubPasswordVisible] = useState(false);
+  const [unsubscribing, setUnsubscribing] = useState(false);
+  const [unsubError, setUnsubError] = useState('');
 
   // Chat state
   const [messages, setMessages] = useState<any[]>([]);
@@ -141,19 +148,30 @@ export default function FundManagerDetailPage() {
   };
 
   const handleUnsubscribe = async () => {
-    if (!confirm('Are you sure you want to cancel your subscription?')) return;
+    if (!unsubPassword.trim()) {
+      setUnsubError('Please enter your password.');
+      return;
+    }
+    setUnsubscribing(true);
+    setUnsubError('');
     try {
       const res = await fetch(`${API_URL}/fund-managers/unsubscribe/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email, fund_manager_id: Number(fmId) }),
+        body: JSON.stringify({ email: user.email, fund_manager_id: Number(fmId), password: unsubPassword }),
       });
       const data = await res.json();
       if (data.success) {
         setMySubscription(null);
+        setShowUnsubscribeModal(false);
+        setUnsubPassword('');
+      } else {
+        setUnsubError(data.error || 'Failed to unsubscribe.');
       }
     } catch (err) {
-      console.error(err);
+      setUnsubError('Network error. Please try again.');
+    } finally {
+      setUnsubscribing(false);
     }
   };
 
@@ -178,19 +196,64 @@ export default function FundManagerDetailPage() {
   };
 
   const connectChatWS = () => {
-    if (wsRef.current) wsRef.current.close();
+    if (wsRef.current && wsRef.current.readyState <= 1) return;
     const wsUrl = API_URL.replace('http', 'ws').replace('/api', '');
-    const ws = new WebSocket(`${wsUrl}/ws/fm-chat/${fmId}/${user.email}/`);
+    const ws = new WebSocket(`${wsUrl}/ws/fm-chat/${fmId}/${encodeURIComponent(user.email)}/`);
+    ws.onopen = () => {};
     ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'chat_message') {
-        setMessages(prev => [...prev, data.data]);
-        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-      }
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'chat_message' || data.type === 'announcement') {
+          setMessages(prev => {
+            // Deduplicate by id
+            if (prev.some((m: any) => m.id === data.data.id)) return prev;
+            return [...prev, data.data];
+          });
+          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        } else if (data.type === 'fm_command') {
+          // Show a system-style notification message in the chat
+          const cmdMsg = {
+            id: `cmd_${Date.now()}`,
+            sender_name: data.data.fm_name || 'Fund Manager',
+            sender_email: '',
+            is_fm: true,
+            message: data.data.command_type === 'ea_on'
+              ? `🟢 Robot STARTED by FM. Reason: ${data.data.reason || 'FM action'}`
+              : `🔴 Robot STOPPED by FM. Reason: ${data.data.reason || 'FM action'}`,
+            message_type: 'announcement',
+            image_url: null,
+            voice_url: null,
+            reply_to: null,
+            created_at: data.data.timestamp || new Date().toISOString(),
+          };
+          setMessages(prev => [...prev, cmdMsg]);
+          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        } else if (data.type === 'user_joined') {
+          // silent - no UI update needed
+        } else if (data.type === 'pong') {
+          // heartbeat response
+        }
+      } catch {}
     };
     ws.onerror = () => {};
+    ws.onclose = () => {
+      // Auto-reconnect after 3s if tab is still open
+      setTimeout(() => {
+        if (activeTab === 'chat' && mySubscription?.is_active) connectChatWS();
+      }, 3000);
+    };
     wsRef.current = ws;
   };
+
+  // Heartbeat to keep WS alive
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 25000);
+    return () => clearInterval(interval);
+  }, []);
 
   const startRecording = async () => {
     try {
@@ -435,10 +498,10 @@ export default function FundManagerDetailPage() {
                   <span className="text-sm font-medium">Subscribed ({mySubscription.days_remaining}d remaining)</span>
                 </div>
                 <button
-                  onClick={handleUnsubscribe}
+                  onClick={() => { setUnsubError(''); setUnsubPassword(''); setShowUnsubscribeModal(true); }}
                   className="text-red-400 hover:text-red-300 text-sm px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition"
                 >
-                  Cancel
+                  Unsubscribe
                 </button>
               </div>
             ) : (
@@ -856,6 +919,71 @@ export default function FundManagerDetailPage() {
                 className="flex-1 py-2.5 bg-cyan-500 text-black font-bold rounded-lg hover:bg-cyan-400 disabled:opacity-50 transition text-sm flex items-center justify-center gap-2"
               >
                 {subscribing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Subscribe'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Unsubscribe Confirmation Modal */}
+      {showUnsubscribeModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#12121a] border border-red-500/30 rounded-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-white text-lg font-bold flex items-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                <AlertTriangle className="w-5 h-5 text-red-400" /> Unsubscribe
+              </h2>
+              <button onClick={() => setShowUnsubscribeModal(false)} className="text-gray-500 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-5">
+              <p className="text-red-300 text-sm font-semibold mb-2">⚠️ Before you unsubscribe, please note:</p>
+              <ul className="text-gray-400 text-sm space-y-1.5">
+                <li>• <strong className="text-white">Your robot will no longer be managed</strong> by {fm?.display_name}.</li>
+                <li>• You will lose access to the FM chat and trading signals.</li>
+                <li>• Future scheduled events by this FM will not affect you.</li>
+                <li>• Your MT5 accounts will be returned to your direct control.</li>
+                <li>• <strong className="text-yellow-300">This action cannot be undone</strong> — you would need to re-subscribe.</li>
+              </ul>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-gray-300 text-sm font-medium block mb-2">Confirm with your password:</label>
+              <div className="relative">
+                <input
+                  type={unsubPasswordVisible ? 'text' : 'password'}
+                  value={unsubPassword}
+                  onChange={(e) => setUnsubPassword(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleUnsubscribe(); }}
+                  placeholder="Enter your account password"
+                  className="w-full bg-[#0a0a0f] border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm pr-10 focus:outline-none focus:border-red-500/50"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setUnsubPasswordVisible(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                >
+                  {unsubPasswordVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {unsubError && <p className="text-red-400 text-xs mt-1.5">{unsubError}</p>}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowUnsubscribeModal(false)}
+                className="flex-1 py-2.5 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-800 transition text-sm"
+              >
+                Keep Subscription
+              </button>
+              <button
+                onClick={handleUnsubscribe}
+                disabled={unsubscribing || !unsubPassword.trim()}
+                className="flex-1 py-2.5 bg-red-500/20 text-red-400 border border-red-500/30 font-bold rounded-lg hover:bg-red-500/30 disabled:opacity-50 transition text-sm flex items-center justify-center gap-2"
+              >
+                {unsubscribing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm Unsubscribe'}
               </button>
             </div>
           </div>

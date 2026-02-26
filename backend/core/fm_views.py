@@ -39,6 +39,48 @@ def _get_fm_from_user(user):
         return None
 
 
+def _send_fm_email(to_email, subject, heading, body_lines, cta_text=None, cta_url=None, extra_note=None):
+    """Send a professional FM-related email notification."""
+    try:
+        from django.core.mail import EmailMultiAlternatives
+        from django.conf import settings as django_settings
+        from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+        from django.contrib.auth.models import User as DjangoUser
+
+        recipient = DjangoUser.objects.filter(email__iexact=to_email).first()
+        if recipient and not can_send_email_to_user(recipient, 'transactional'):
+            return
+
+        base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+        cta_html = ''
+        if cta_text and cta_url:
+            full_url = cta_url if cta_url.startswith('http') else f'{base}{cta_url}'
+            cta_html = f'<p style="margin:24px 0 8px;"><a href="{full_url}" style="background:#00d4ff;color:#000;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-family:Arial,sans-serif;">{cta_text}</a></p>'
+
+        body_html = ''.join(f'<p style="margin:0 0 14px;color:#cbd5e1;font-size:15px;line-height:1.6;">{line}</p>' for line in body_lines)
+        full_message = body_html + cta_html
+        if extra_note:
+            full_message += f'<p style="margin:20px 0 0;font-size:12px;color:#64748b;">{extra_note}</p>'
+
+        html_content = render_email_template(
+            subject=subject,
+            heading=heading,
+            message=full_message,
+            footer_note='This is an automated notification from MarksTrades FM Engine.',
+            preheader=subject,
+            unsubscribe_url=get_unsubscribe_url(recipient) if recipient else get_unsubscribe_url(None),
+        )
+        body_text = '\n'.join(
+            line.replace('<strong>', '').replace('</strong>', '') for line in body_lines
+        )
+        msg = EmailMultiAlternatives(subject, body_text, get_email_from_address(), [to_email])
+        msg.attach_alternative(html_content, 'text/html')
+        msg = add_email_headers(msg, 'transactional', user=recipient)
+        msg.send(fail_silently=True)
+    except Exception:
+        pass  # Email is non-critical
+
+
 # ============================================================
 # PUBLIC: Fund Manager Marketplace
 # ============================================================
@@ -316,7 +358,35 @@ def subscribe_to_fm(request):
     
     # Create chat room if not exists
     FMChatRoom.objects.get_or_create(fund_manager=fm, defaults={'name': f"{fm.display_name}'s Community"})
-    
+
+    # Send confirmation emails
+    trial_note = f'{fm.trial_days}-day free trial, then ${fm.monthly_price}/month' if fm.trial_days else f'${fm.monthly_price}/month'
+    _send_fm_email(
+        to_email=user.email,
+        subject=f'You are now subscribed to {fm.display_name}',
+        heading='Subscription Confirmed!',
+        body_lines=[
+            f'Welcome! You have successfully subscribed to <strong>{fm.display_name}</strong>.',
+            f'Plan: {trial_note}',
+            f'{len(assigned)} MT5 account(s) have been assigned to this fund manager.',
+            f'The fund manager will now be able to start and stop your robot on your behalf. You can unsubscribe at any time.',
+        ],
+        cta_text='View My Subscription',
+        cta_url='/dashboard/fund-managers',
+    )
+    _send_fm_email(
+        to_email=fm.user.email,
+        subject=f'New subscriber: {user.email}',
+        heading='New Subscriber!',
+        body_lines=[
+            f'<strong>{user.email}</strong> has subscribed to your fund manager account.',
+            f'{len(assigned)} MT5 account(s) have been assigned to your management.',
+            'Log in to your FM dashboard to manage your subscribers.',
+        ],
+        cta_text='Go to FM Dashboard',
+        cta_url='/dashboard/fund-managers/dashboard',
+    )
+
     return JsonResponse({
         'success': True,
         'subscription': {
@@ -333,7 +403,7 @@ def subscribe_to_fm(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def unsubscribe_from_fm(request):
-    """Cancel subscription to a fund manager"""
+    """Cancel subscription to a fund manager (requires password confirmation)"""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -341,16 +411,26 @@ def unsubscribe_from_fm(request):
     
     email = data.get('email', '').strip()
     fm_id = data.get('fund_manager_id')
-    
+    password = data.get('password', '').strip()
+
     user = _resolve_user(email)
     if not user:
         return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
-    
+
+    # Require password confirmation
+    if not password:
+        return JsonResponse({'success': False, 'error': 'Password is required to unsubscribe.'}, status=400)
+    if not user.check_password(password):
+        return JsonResponse({'success': False, 'error': 'Incorrect password. Unsubscribe denied.'}, status=403)
+
     try:
-        sub = FMSubscription.objects.get(user=user, fund_manager_id=fm_id)
+        sub = FMSubscription.objects.select_related('fund_manager').get(user=user, fund_manager_id=fm_id)
     except FMSubscription.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Subscription not found'}, status=404)
-    
+
+    fm = sub.fund_manager
+    fm_name = fm.display_name
+
     sub.status = 'cancelled'
     sub.cancelled_at = timezone.now()
     sub.auto_renew = False
@@ -367,6 +447,32 @@ def unsubscribe_from_fm(request):
             id__in=affected_license_ids,
             status='suspended',
         ).exclude(expires_at__lt=now).update(status='active', updated_at=now)
+
+    # Send email notifications
+    _send_fm_email(
+        to_email=user.email,
+        subject=f'You have unsubscribed from {fm_name}',
+        heading='Subscription Cancelled',
+        body_lines=[
+            f'You have successfully cancelled your subscription to <strong>{fm_name}</strong>.',
+            'Your robot control has been returned to you — all your assigned MT5 accounts are now back under your direct management.',
+            'You can re-subscribe at any time from the FM Engine marketplace.',
+        ],
+        cta_text='Visit FM Engine',
+        cta_url='/dashboard/fund-managers',
+    )
+    _send_fm_email(
+        to_email=fm.user.email,
+        subject=f'Subscriber {user.email} has cancelled their subscription',
+        heading='Subscription Cancelled by Subscriber',
+        body_lines=[
+            f'<strong>{user.email}</strong> has cancelled their subscription to your fund manager account.',
+            f'Their {len(affected_license_ids)} assigned MT5 account(s) have been released from your management.',
+            'Log in to your FM dashboard to review your current subscriber list.',
+        ],
+        cta_text='Go to FM Dashboard',
+        cta_url='/dashboard/fund-managers/dashboard',
+    )
     
     return JsonResponse({'success': True, 'message': 'Subscription cancelled'})
 
@@ -802,7 +908,55 @@ def fm_toggle_ea(request):
         )
     except Exception:
         pass  # Non-critical if WebSocket broadcast fails
-    
+
+    # Send email notifications to affected subscribers
+    try:
+        if target == 'all':
+            notify_assignments = FMAccountAssignment.objects.filter(
+                subscription__fund_manager=fm,
+                subscription__status__in=['active', 'trial']
+            ).select_related('subscription__user')
+        else:
+            notify_assignments = [target_assignment] if target_assignment else []
+
+        notified_users = set()
+        for a in notify_assignments:
+            sub_user = a.subscription.user
+            if sub_user.id in notified_users:
+                continue
+            notified_users.add(sub_user.id)
+            if new_state:
+                _send_fm_email(
+                    to_email=sub_user.email,
+                    subject=f'Your Robot Has Been Started by {fm.display_name}',
+                    heading='Robot Started by Fund Manager',
+                    body_lines=[
+                        f'Your fund manager <strong>{fm.display_name}</strong> has <strong>started your robot</strong>.',
+                        f'Reason: {tc_reason}',
+                        'Your MT5 EA is now active and trading will resume automatically.',
+                        'If you have any concerns, please contact your fund manager via the FM chat.',
+                    ],
+                    cta_text='View Dashboard',
+                    cta_url='/dashboard',
+                )
+            else:
+                _send_fm_email(
+                    to_email=sub_user.email,
+                    subject=f'Your Robot Has Been Stopped by {fm.display_name}',
+                    heading='Robot Stopped by Fund Manager',
+                    body_lines=[
+                        f'Your fund manager <strong>{fm.display_name}</strong> has <strong>stopped your robot</strong>.',
+                        f'Reason: {tc_reason}',
+                        'Your MT5 EA has been paused. No new trades will be opened until the robot is restarted.',
+                        'If you have concerns or wish to unsubscribe, you can do so from the FM Engine page.',
+                    ],
+                    cta_text='View FM Engine',
+                    cta_url='/dashboard/fund-managers',
+                    extra_note='This action was taken by your fund manager as part of their trade management strategy.',
+                )
+    except Exception:
+        pass  # Email is non-critical
+
     return JsonResponse({
         'success': True,
         'command': {
@@ -1192,6 +1346,27 @@ def fm_manage_schedule(request):
             on_time=dt_time(int(on_h), int(on_m)),
             reason=reason,
         )
+        # Notify all active subscribers of the new schedule
+        active_subs = FMSubscription.objects.filter(
+            fund_manager=fm, status__in=['active', 'trial']
+        ).select_related('user')
+        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        day_label = day_names[int(day)] if int(day) < 7 else 'Weekly'
+        for sub in active_subs:
+            _send_fm_email(
+                to_email=sub.user.email,
+                subject=f'New Trading Schedule Set by {fm.display_name}',
+                heading='New Robot Schedule Configured',
+                body_lines=[
+                    f'Your fund manager <strong>{fm.display_name}</strong> has created a new trading schedule.',
+                    f'Schedule: <strong>{name or "New Schedule"}</strong>',
+                    f'Day: {day_label} | Robot OFF at {off_h}:{off_m.zfill(2)} → Robot ON at {on_h}:{on_m.zfill(2)} UTC',
+                    f'Reason: {reason or "Scheduled maintenance / economic event"}',
+                    'Your robot will be automatically paused and resumed according to this schedule.',
+                ],
+                cta_text='View Schedule',
+                cta_url=f'/dashboard/fund-managers/{fm.id}',
+            )
         return JsonResponse({'success': True, 'schedule_id': schedule.id})
     
     elif action == 'delete':
@@ -1266,7 +1441,29 @@ def apply_fund_manager(request):
         trading_pairs=trading_pairs,
         status='pending',
     )
-    
+
+    # Email applicant and notify admin
+    _send_fm_email(
+        to_email=user.email,
+        subject='FM Engine Application Received — Under Review',
+        heading='Application Submitted Successfully',
+        body_lines=[
+            f'Thank you for applying to become a Fund Manager on MarksTrades as <strong>{display_name}</strong>.',
+            'Your application is currently <strong>under review</strong> by our admin team. This typically takes 1–3 business days.',
+            'You will receive an email once your application has been approved or if additional information is needed.',
+        ],
+        cta_text='Check Application Status',
+        cta_url='/dashboard/fund-managers/apply',
+    )
+    from core.utils import send_admin_notification
+    send_admin_notification(
+        subject=f'New FM Application: {display_name} ({email})',
+        heading='New Fund Manager Application',
+        html_body=f'<p><strong>{display_name}</strong> ({email}) has applied to become a Fund Manager.</p><p>Trading Style: {trading_style or "N/A"} | Pairs: {trading_pairs} | Price: ${monthly_price}/mo</p>',
+        text_body=f'{display_name} ({email}) applied as a Fund Manager. Style: {trading_style} | Pairs: {trading_pairs}',
+        preheader=f'New FM application from {email}',
+    )
+
     return JsonResponse({
         'success': True,
         'message': 'Application submitted! It will be reviewed by our admin team.',
