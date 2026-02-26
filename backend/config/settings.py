@@ -93,16 +93,21 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# Django Channels - use Redis if available, fall back to in-memory
-_REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379').strip()
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [_REDIS_URL],
-        },
+# Django Channels - use Redis on production, in-memory for local dev
+_REDIS_URL = os.environ.get('REDIS_URL', '').strip()
+if _REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [_REDIS_URL]},
+        }
     }
-}
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        }
+    }
 
 
 # Database
