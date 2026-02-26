@@ -56,6 +56,8 @@ export default function FundManagerDetailPage() {
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  const isGuest = !user?.email;
+
   useEffect(() => {
     fetchFMDetail();
     fetchMySubscription();
@@ -491,7 +493,15 @@ export default function FundManagerDetailPage() {
 
           {/* Subscribe Button */}
           <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-800 flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
-            {mySubscription?.is_active ? (
+            {isGuest ? (
+              <button
+                onClick={() => router.push('/')}
+                className="w-full sm:w-auto bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black font-bold px-6 sm:px-8 py-3 rounded-lg transition-all text-sm"
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                Login to Subscribe — ${fm.monthly_price}/mo
+              </button>
+            ) : mySubscription?.is_active ? (
               <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full sm:w-auto">
                 <div className="flex items-center gap-2 bg-green-500/10 text-green-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-green-500/20 w-full sm:w-auto justify-center">
                   <Check className="w-4 h-4" />
@@ -641,13 +651,13 @@ export default function FundManagerDetailPage() {
           {!mySubscription?.is_active ? (
             <div className="text-center py-20 bg-[#12121a] border border-cyan-500/10 rounded-xl">
               <MessageCircle className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <h3 className="text-white font-semibold mb-2">Subscribe to Access Chat</h3>
+              <h3 className="text-white font-semibold mb-2">{isGuest ? 'Login to Access Chat' : 'Subscribe to Access Chat'}</h3>
               <p className="text-gray-400 text-sm mb-4">Join this fund manager's community to chat with other subscribers</p>
               <button
-                onClick={() => setShowSubscribeModal(true)}
+                onClick={() => isGuest ? router.push('/') : setShowSubscribeModal(true)}
                 className="bg-cyan-500 hover:bg-cyan-400 text-black font-bold px-6 py-2.5 rounded-lg text-sm transition"
               >
-                Subscribe Now
+                {isGuest ? 'Login / Register' : 'Subscribe Now'}
               </button>
             </div>
           ) : (

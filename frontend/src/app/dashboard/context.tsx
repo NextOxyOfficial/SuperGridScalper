@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -26,6 +26,7 @@ const DashboardContext = createContext<DashboardContextType | null>(null);
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [licenses, setLicenses] = useState<any[]>([]);
   const [selectedLicense, setSelectedLicense] = useState<any>(null);
@@ -58,6 +59,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const selectedLicenseData = localStorage.getItem('selectedLicense');
     
     if (!userData) {
+      // Allow non-logged-in users to browse FM Engine pages
+      if (pathname.startsWith('/dashboard/fund-managers')) {
+        setLoading(false);
+        return;
+      }
       router.push('/');
       return;
     }

@@ -37,14 +37,12 @@ export default function FundManagersPage() {
     fetchMySubscriptions();
     const checkFMStatus = async () => {
       try {
-        // GET request — returns success:true only for approved FMs
         const res = await fetch(`${API_URL}/fund-managers/dashboard/?email=${encodeURIComponent(user.email)}`);
         const data = await res.json();
         if (data.success) {
           setIsApprovedFM(true);
           setFmStatus('approved');
         } else {
-          // Check if they have a pending/rejected application
           const applyRes = await fetch(`${API_URL}/fund-managers/apply/?check=1&email=${encodeURIComponent(user.email)}`);
           const applyData = await applyRes.json();
           if (applyData.status) setFmStatus(applyData.status);
@@ -53,6 +51,8 @@ export default function FundManagersPage() {
     };
     checkFMStatus();
   }, [user]);
+
+  const isGuest = !user?.email;
 
   const fetchMySubscriptions = async () => {
     if (!user?.email) return;
@@ -146,24 +146,26 @@ export default function FundManagersPage() {
         >
           <Crown className="w-3.5 h-3.5" /> Leaderboard
         </button>
-        {isApprovedFM ? (
-          <button
-            onClick={() => router.push('/dashboard/fund-managers/dashboard')}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-green-500/10 text-green-400 rounded-lg text-xs font-medium border border-green-500/20 hover:bg-green-500/20 transition"
-          >
-            <CheckCircle className="w-3.5 h-3.5" /> My FM Dashboard
-          </button>
-        ) : fmStatus === 'pending' ? (
-          <span className="flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-yellow-500/10 text-yellow-400 rounded-lg text-xs font-medium border border-yellow-500/20">
-            <Clock className="w-3.5 h-3.5" /> Application Pending
-          </span>
-        ) : (
-          <button
-            onClick={() => router.push('/dashboard/fund-managers/apply')}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs font-medium border border-purple-500/20 hover:bg-purple-500/20 transition"
-          >
-            <Zap className="w-3.5 h-3.5" /> Become an FM
-          </button>
+        {!isGuest && (
+          isApprovedFM ? (
+            <button
+              onClick={() => router.push('/dashboard/fund-managers/dashboard')}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-green-500/10 text-green-400 rounded-lg text-xs font-medium border border-green-500/20 hover:bg-green-500/20 transition"
+            >
+              <CheckCircle className="w-3.5 h-3.5" /> My FM Dashboard
+            </button>
+          ) : fmStatus === 'pending' ? (
+            <span className="flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-yellow-500/10 text-yellow-400 rounded-lg text-xs font-medium border border-yellow-500/20">
+              <Clock className="w-3.5 h-3.5" /> Application Pending
+            </span>
+          ) : (
+            <button
+              onClick={() => router.push('/dashboard/fund-managers/apply')}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs font-medium border border-purple-500/20 hover:bg-purple-500/20 transition"
+            >
+              <Zap className="w-3.5 h-3.5" /> Become an FM
+            </button>
+          )
         )}
       </div>
 
@@ -326,7 +328,15 @@ export default function FundManagersPage() {
                         </div>
                       )}
                     </div>
-                    {subscribedFmIds.has(fm.id) ? (
+                    {isGuest ? (
+                      <button
+                        onClick={() => router.push('/')}
+                        className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black text-[10px] font-bold px-4 py-2 rounded-lg transition whitespace-nowrap flex-shrink-0"
+                        style={{ fontFamily: 'Orbitron, sans-serif' }}
+                      >
+                        Login to Subscribe
+                      </button>
+                    ) : subscribedFmIds.has(fm.id) ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/fund-managers/${fm.id}`); }}
                         className="text-red-400 text-[10px] font-medium px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition whitespace-nowrap flex-shrink-0"
@@ -400,7 +410,15 @@ export default function FundManagersPage() {
                     </button>
 
                     {/* Subscribe / Unsubscribe */}
-                    {subscribedFmIds.has(fm.id) ? (
+                    {isGuest ? (
+                      <button
+                        onClick={() => router.push('/')}
+                        className="flex-1 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black text-[10px] font-bold rounded-lg transition"
+                        style={{ fontFamily: 'Orbitron, sans-serif' }}
+                      >
+                        Login to Subscribe
+                      </button>
+                    ) : subscribedFmIds.has(fm.id) ? (
                       <button
                         onClick={() => router.push(`/dashboard/fund-managers/${fm.id}`)}
                         className="flex-1 py-2 text-red-400 text-[10px] font-medium border border-red-500/20 rounded-lg hover:bg-red-500/10 transition"

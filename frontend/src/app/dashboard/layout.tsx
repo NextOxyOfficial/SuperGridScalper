@@ -141,6 +141,58 @@ function DashboardNav() {
   // Simple nav for license selection page or EA store without license
   const isFundManagersPage = pathname.startsWith('/dashboard/fund-managers');
 
+  // Guest nav for non-logged-in users browsing FM Engine
+  if (!user && isFundManagersPage) {
+    return (
+      <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
+        <div className="max-w-7xl mx-auto px-1 sm:px-4 py-2 sm:py-3">
+          <div className="flex items-center justify-between mb-2">
+            <SiteLogo size="sm" />
+            <div className="flex items-center gap-2">
+              <Link
+                href="/"
+                className="text-cyan-300 hover:text-white text-[10px] sm:text-xs px-3 py-1.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30"
+              >
+                Login
+              </Link>
+              <Link
+                href="/"
+                className="bg-cyan-500 hover:bg-cyan-400 text-black text-[10px] sm:text-xs px-3 py-1.5 rounded-lg transition font-bold"
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                Register
+              </Link>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
+            <Link
+              href="/dashboard/fund-managers"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                pathname === '/dashboard/fund-managers'
+                  ? 'bg-purple-500 text-black'
+                  : 'text-purple-300 hover:text-white hover:bg-purple-500/20 border border-purple-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> FM Engine
+            </Link>
+            <Link
+              href="/dashboard/fund-managers/leaderboard"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                pathname === '/dashboard/fund-managers/leaderboard'
+                  ? 'bg-yellow-500 text-black'
+                  : 'text-yellow-300 hover:text-white hover:bg-yellow-500/20 border border-yellow-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Crown className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Leaderboard
+            </Link>
+          </div>
+        </div>
+      </nav>
+    );
+  }
+
   if (!selectedLicense && (pathname === '/dashboard' || pathname === '/dashboard/ea-store' || pathname === '/dashboard/referral' || isFundManagersPage)) {
     return (
       <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
