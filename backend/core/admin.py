@@ -963,36 +963,37 @@ class LicenseAdmin(admin.ModelAdmin):
         )
     status_display.short_description = 'Status'
 
+    def _get_trade_data(self, obj):
+        """Get the latest TradeData row for this license."""
+        return obj.trade_data.order_by('-last_update').first()
+
     def balance_display(self, obj):
-        try:
-            td = obj.trade_data
+        td = self._get_trade_data(obj)
+        if td:
             return format_html('<strong>${:,.2f}</strong>', td.account_balance)
-        except:
-            return "-"
+        return "-"
     balance_display.short_description = 'Balance'
 
     def equity_display(self, obj):
-        try:
-            td = obj.trade_data
+        td = self._get_trade_data(obj)
+        if td:
             return format_html('${:,.2f}', td.account_equity)
-        except:
-            return "-"
+        return "-"
     equity_display.short_description = 'Equity'
 
     def pl_display(self, obj):
-        try:
-            td = obj.trade_data
+        td = self._get_trade_data(obj)
+        if td:
             profit = td.account_profit
             color = '#10b981' if profit >= 0 else '#ef4444'
             sign = '+' if profit >= 0 else ''
             return format_html('<span style="color: {}; font-weight: bold;">{}{}</span>', color, sign, f"${profit:,.2f}")
-        except:
-            return "-"
+        return "-"
     pl_display.short_description = 'P/L'
 
     def positions_display(self, obj):
-        try:
-            td = obj.trade_data
+        td = self._get_trade_data(obj)
+        if td:
             total = td.total_buy_positions + td.total_sell_positions
             if total == 0:
                 return mark_safe('<span style="color: gray;">0</span>')
@@ -1000,19 +1001,15 @@ class LicenseAdmin(admin.ModelAdmin):
                 '<span style="color: #10b981;">{} B</span> / <span style="color: #ef4444;">{} S</span>',
                 td.total_buy_positions, td.total_sell_positions
             )
-        except:
-            return "-"
+        return "-"
     positions_display.short_description = 'Positions'
 
     def trade_status(self, obj):
-        try:
-            td = obj.trade_data
-            if not td.last_update:
-                return mark_safe('<span style="color: gray;">No data</span>')
+        td = self._get_trade_data(obj)
+        if td and td.last_update:
             from django.utils.timesince import timesince
             return format_html('<span style="color: #6b7280; font-size: 11px;">{} ago</span>', timesince(td.last_update))
-        except:
-            return mark_safe('<span style="color: gray;">No data</span>')
+        return mark_safe('<span style="color: gray;">No data</span>')
     trade_status.short_description = 'Last Update'
 
     def days_remaining_display(self, obj):
