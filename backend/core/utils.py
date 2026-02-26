@@ -150,22 +150,72 @@ def can_send_email_to_user(user, email_type='transactional'):
         return True
 
 
+def _to_https_absolute_url(url_or_path):
+    """Normalize a URL/path into an absolute HTTPS URL for email clients."""
+    if not url_or_path:
+        return ''
+
+    url_or_path = str(url_or_path).strip()
+    if not url_or_path:
+        return ''
+
+    if url_or_path.startswith('https://'):
+        return url_or_path
+    if url_or_path.startswith('http://'):
+        return 'https://' + url_or_path[len('http://'):]
+    if url_or_path.startswith('//'):
+        return f'https:{url_or_path}'
+
+    base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+    if base.startswith('http://'):
+        base = 'https://' + base[len('http://'):]
+    if not url_or_path.startswith('/'):
+        url_or_path = f'/{url_or_path}'
+    return f'{base}{url_or_path}'
+
+
+def _is_email_safe_image(url):
+    """Email clients (e.g., Gmail) often fail on ICO/SVG/data URI in <img> tags."""
+    clean = (url or '').split('?', 1)[0].lower()
+    return clean.endswith(('.png', '.jpg', '.jpeg', '.gif'))
+
+
 def get_email_logo_url():
     """Get the site favicon/logo URL for emails from SiteSettings"""
     try:
         from core.models import SiteSettings
         s = SiteSettings.get_settings()
-        if s.favicon:
-            # Use HTTPS version of the URL
-            url = f"https://markstrades.com{s.favicon.url}"
-            return url
-        if s.logo:
-            url = f"https://markstrades.com{s.logo.url}"
-            return url
+
+        # Prefer logo first for email compatibility (favicon is often .ico).
+        if s.logo and getattr(s.logo, 'name', None):
+            try:
+                if not s.logo.storage.exists(s.logo.name):
+                    raise FileNotFoundError('Logo file not found in storage')
+            except Exception:
+                pass
+            else:
+                logo_url = _to_https_absolute_url(s.logo.url)
+                if _is_email_safe_image(logo_url):
+                    return logo_url
+
+        if s.favicon and getattr(s.favicon, 'name', None):
+            try:
+                if not s.favicon.storage.exists(s.favicon.name):
+                    raise FileNotFoundError('Favicon file not found in storage')
+            except Exception:
+                pass
+            else:
+                favicon_url = _to_https_absolute_url(s.favicon.url)
+                if _is_email_safe_image(favicon_url):
+                    return favicon_url
     except Exception:
         pass
-    # Use a working favicon URL - simple M logo data URI
-    return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiByeD0iOCIgZmlsbD0iIzA2YjZkNCIvPgo8dGV4dCB4PSIyMCIgeT0iMjgiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiMwMDAwMDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk08L3RleHQ+Cjwvc3ZnPgo='
+
+    # Final fallback: hosted PNG from frontend public assets.
+    base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+    if base.startswith('http://'):
+        base = 'https://' + base[len('http://'):]
+    return f'{base}/marks-ai-robot.png'
 
 
 def render_email_template(subject, heading, message, cta_text=None, cta_url=None, footer_note=None, preheader=None, unsubscribe_url=None):
@@ -321,3 +371,128 @@ def render_email_template(subject, heading, message, cta_text=None, cta_url=None
 </html>"""
     
     return html
+
+
+def send_wave_alert_emails(alert_mode, minutes_before, tips):
+    """
+    Send Trading Wave Alert email to all unique users who have at least one active license.
+    One email per user regardless of how many licenses they have.
+    Runs in a background thread so admin save is not blocked.
+    """
+    import threading
+
+    def _send():
+        try:
+            from django.core.mail import EmailMultiAlternatives
+            from core.models import License, EmailPreference
+
+            # Get distinct users with at least one active license
+            active_licenses = License.objects.filter(status='active').select_related('user')
+            seen_user_ids = set()
+            users_to_email = []
+            for lic in active_licenses:
+                if lic.user_id not in seen_user_ids:
+                    seen_user_ids.add(lic.user_id)
+                    users_to_email.append(lic.user)
+
+            mode_labels = {
+                'normal': 'Normal Impact Running',
+                'medium': 'Medium Impact Expecting',
+                'high': 'High Impact Expecting',
+            }
+            mode_emojis = {
+                'normal': '☀️',
+                'medium': '⛈️',
+                'high': '🌋',
+            }
+            mode_colors = {
+                'normal': '#10b981',
+                'medium': '#f59e0b',
+                'high': '#ef4444',
+            }
+            mode_tags = {
+                'normal': '🌸 Sunny Day',
+                'medium': '🌧️ Hard Day',
+                'high': '🔥 Fire Zone',
+            }
+
+            label = mode_labels.get(alert_mode, alert_mode)
+            emoji = mode_emojis.get(alert_mode, '⚠️')
+            color = mode_colors.get(alert_mode, '#06b6d4')
+            tag = mode_tags.get(alert_mode, '')
+
+            subject = f'{emoji} Trading Wave Alert: {label}'
+            if minutes_before and minutes_before > 0:
+                subject += f' in {minutes_before} min'
+
+            countdown_html = ''
+            if minutes_before and minutes_before > 0:
+                countdown_html = f"""
+                <div style="display:inline-block;background:{color}22;border:1px solid {color}44;border-radius:8px;padding:6px 14px;margin-top:8px;">
+                    <span style="font-family:monospace;font-size:18px;font-weight:bold;color:{color};">
+                        ⏱ {minutes_before} minutes
+                    </span>
+                </div>
+                """
+
+            tips_html = ''
+            if tips and tips.strip():
+                tips_html = f"""
+                <div style="background:#1a1a2e;border-left:3px solid {color};border-radius:6px;padding:12px 16px;margin-top:14px;">
+                    <p style="color:#9ca3af;font-size:12px;margin:0 0 4px 0;font-weight:bold;">💡 TIPS</p>
+                    <p style="color:#d1d5db;font-size:14px;margin:0;line-height:1.6;">{tips}</p>
+                </div>
+                """
+
+            body_html = f"""
+            <div style="text-align:center;padding:10px 0 16px;">
+                <span style="font-size:48px;">{emoji}</span>
+            </div>
+            <div style="text-align:center;">
+                <span style="display:inline-block;background:{color}22;color:{color};font-size:11px;font-weight:bold;padding:4px 12px;border-radius:20px;letter-spacing:1px;">{tag}</span>
+            </div>
+            <p style="color:#e5e7eb;font-size:16px;line-height:1.6;margin-top:16px;text-align:center;">
+                <strong style="color:{color};">{label}</strong>
+            </p>
+            {countdown_html}
+            {tips_html}
+            <p style="color:#6b7280;font-size:13px;margin-top:20px;text-align:center;">
+                Please review your open positions and take necessary precautions.
+            </p>
+            """
+
+            from_addr = get_email_from_address()
+            base_url = getattr(django_settings, 'FRONTEND_URL', 'https://markstrades.com').rstrip('/')
+
+            sent = 0
+            for u in users_to_email:
+                if not can_send_email_to_user(u, 'transactional'):
+                    continue
+                email = (u.email or '').strip()
+                if not email:
+                    continue
+                try:
+                    unsub_url = get_unsubscribe_url(u)
+                    html_message = render_email_template(
+                        subject=subject,
+                        heading='Trading Wave Alert',
+                        message=body_html,
+                        cta_text='Open Dashboard',
+                        cta_url=f'{base_url}/dashboard',
+                        preheader=f'{emoji} {label} — prepare your positions now!',
+                        unsubscribe_url=unsub_url,
+                    )
+                    text_body = f'{label}\n\nMinutes until impact: {minutes_before}\nTips: {tips}\n\nPlease check your dashboard.'
+
+                    msg = EmailMultiAlternatives(subject, text_body, from_addr, [email])
+                    msg.attach_alternative(html_message, 'text/html')
+                    msg = add_email_headers(msg, 'transactional', user=u)
+                    msg.send(fail_silently=True)
+                    sent += 1
+                except Exception:
+                    pass
+
+        except Exception:
+            pass
+
+    threading.Thread(target=_send, daemon=True).start()

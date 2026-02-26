@@ -74,6 +74,7 @@ urlpatterns = [
     path('fund-managers/review/', fm_views.submit_review, name='submit_review'),
     path('fund-managers/schedules/', fm_views.fm_manage_schedule, name='fm_manage_schedule'),
     path('economic-events/', fm_views.get_economic_events, name='get_economic_events'),
+    path('trading-wave-alert/', fm_views.get_trading_wave_alert, name='get_trading_wave_alert'),
     path('fund-managers/update-avatar/', fm_views.update_fm_avatar, name='update_fm_avatar'),
     path('fund-managers/seed-dummy/', fm_views.seed_dummy_fund_managers, name='seed_dummy_fund_managers'),
     path('fund-managers/cancel-subscriber/', fm_views.fm_cancel_subscriber, name='fm_cancel_subscriber'),

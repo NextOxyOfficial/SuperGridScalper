@@ -1215,6 +1215,72 @@ class EconomicEvent(models.Model):
         ordering = ['event_time']
 
 
+class TradingWaveAlert(models.Model):
+    """Admin-configurable Trading Wave Alerts — 3 separate alerts (Normal / Medium / High)"""
+
+    MODE_CHOICES = [
+        ('normal', 'Normal Impact Running'),
+        ('medium', 'Medium Impact Expecting'),
+        ('high', 'High Impact Expecting'),
+    ]
+
+    mode = models.CharField(max_length=10, choices=MODE_CHOICES, unique=True)
+    display_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Custom display name for this alert (e.g., 'High Impact Expecting'). If empty, uses default based on mode."
+    )
+    minutes_before = models.PositiveIntegerField(
+        default=0,
+        help_text="Minutes until the impact wave arrives. Frontend shows a live countdown from this value."
+    )
+    tips = models.TextField(
+        blank=True,
+        default='',
+        help_text="Tips / summary text shown to users (e.g., 'Close risky positions before NFP release')"
+    )
+    is_active = models.BooleanField(default=False, help_text="Turn ON to broadcast this alert to all users")
+    activated_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Auto-set when you activate the alert. The countdown runs from this moment."
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def get_display_name(self):
+        """Get custom display name or fallback to default"""
+        if self.display_name.strip():
+            return self.display_name.strip()
+        return self.get_mode_display()
+
+    def save(self, *args, **kwargs):
+        # Detect if alert is being newly activated
+        newly_activated = False
+        if self.is_active and not self.activated_at:
+            self.activated_at = timezone.now()
+            newly_activated = True
+        elif not self.is_active:
+            self.activated_at = None
+        super().save(*args, **kwargs)
+
+        # Send email to active license users when medium/high alert is newly activated
+        if newly_activated and self.mode in ('medium', 'high'):
+            try:
+                from core.utils import send_wave_alert_emails
+                send_wave_alert_emails(self.mode, self.minutes_before, self.tips)
+            except Exception:
+                pass
+
+    def __str__(self):
+        status = '🟢 ACTIVE' if self.is_active else '⚫ OFF'
+        display = self.get_display_name()
+        return f"{display} [{status}]"
+
+    class Meta:
+        verbose_name = "Trading Wave Alert"
+        verbose_name_plural = "Trading Wave Alerts"
+        ordering = ['mode']
+
+
 # ============================================================
 # USER BADGE SYSTEM
 # ============================================================

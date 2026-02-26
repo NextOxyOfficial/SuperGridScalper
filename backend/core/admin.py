@@ -15,7 +15,7 @@ from .models import (
     SMTPSettings, EmailPreference, PayoutMethod,
     FundManager, FMSubscription, FMAccountAssignment, FMCommand,
     FMChatRoom, FMChatMessage, FMReview, FMPayout, FMSchedule, EconomicEvent,
-    Badge, UserBadge
+    TradingWaveAlert, Badge, UserBadge
 )
 
 
@@ -1688,6 +1688,38 @@ class EconomicEventAdmin(admin.ModelAdmin):
     list_display = ['title', 'currency', 'impact', 'event_time', 'forecast', 'actual', 'previous']
     list_filter = ['impact', 'currency']
     search_fields = ['title', 'currency']
+
+
+@admin.register(TradingWaveAlert)
+class TradingWaveAlertAdmin(admin.ModelAdmin):
+    list_display = ['mode', 'display_name', 'minutes_before', 'is_active', 'activated_at', 'updated_at']
+    list_editable = ['display_name', 'is_active', 'minutes_before']
+    list_filter = ['is_active']
+    readonly_fields = ['activated_at', 'updated_at']
+    fieldsets = (
+        ('Alert Type', {
+            'fields': ('mode', 'display_name'),
+            'description': 'Each mode (Normal / Medium / High) is a separate alert row. Customize the display name shown to users.'
+        }),
+        ('Countdown & Status', {
+            'fields': ('minutes_before', 'is_active', 'activated_at'),
+            'description': 'Set minutes_before = how many minutes until impact. Toggle is_active ON to start the countdown for users.'
+        }),
+        ('Tips / Summary', {
+            'fields': ('tips',),
+            'description': 'Write tips or summary text that users will see alongside this alert.'
+        }),
+        ('Timestamps', {
+            'fields': ('updated_at',),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        # Max 3 alerts (one per mode)
+        return TradingWaveAlert.objects.count() < 3
+
+    def has_delete_permission(self, request, obj=None):
+        return True
 
 
 @admin.register(Badge)

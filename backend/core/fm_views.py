@@ -12,7 +12,7 @@ from django.db.models import Avg, Count, Q, Sum, F
 from core.models import (
     FundManager, FMSubscription, FMAccountAssignment, FMCommand,
     FMChatRoom, FMChatMessage, FMReview, FMPayout, FMSchedule,
-    EconomicEvent, License, TradeData
+    EconomicEvent, TradingWaveAlert, License, TradeData
 )
 
 
@@ -1519,6 +1519,41 @@ def get_economic_events(request):
             'previous': e.previous,
         } for e in events]
     })
+
+
+# ============================================================
+# TRADING WAVE ALERT
+# ============================================================
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_trading_wave_alert(request):
+    """Get all trading wave alerts with countdown info"""
+    now = timezone.now()
+    alerts = TradingWaveAlert.objects.all()
+
+    result = []
+    for a in alerts:
+        # Calculate remaining seconds for countdown
+        remaining_seconds = 0
+        if a.is_active and a.activated_at and a.minutes_before > 0:
+            end_time = a.activated_at + timedelta(minutes=a.minutes_before)
+            time_diff = (end_time - now).total_seconds()
+            remaining_seconds = max(0, int(time_diff))
+        
+        # Only include active alerts in the response
+        if a.is_active:
+            result.append({
+                'mode': a.mode,
+                'display_name': a.get_display_name(),
+                'minutes_before': a.minutes_before,
+                'tips': a.tips,
+                'is_active': a.is_active,
+                'activated_at': a.activated_at.isoformat() if a.activated_at else None,
+                'remaining_seconds': remaining_seconds,
+            })
+
+    return JsonResponse({'success': True, 'alerts': result})
 
 
 # ============================================================

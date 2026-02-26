@@ -101,6 +101,10 @@ export default function DashboardHome() {
   const [requestingFreeExtension, setRequestingFreeExtension] = useState(false);
   const [freeExtensionResult, setFreeExtensionResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Trading Wave Alert state
+  const [waveAlerts, setWaveAlerts] = useState<{ mode: string; display_name: string; minutes_before: number; tips: string; is_active: boolean; remaining_seconds: number }[]>([]);
+  const waveCountdownRef = useRef<NodeJS.Timeout | null>(null);
+
   const nicknameInputRef = useRef<HTMLInputElement>(null);
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -116,10 +120,47 @@ export default function DashboardHome() {
   
   // Keep closed positions scroll at top (latest positions shown first via reverse order)
 
+  // Format remaining seconds into MM:SS or HH:MM:SS
+  const formatCountdown = (secs: number) => {
+    if (secs <= 0) return '00:00';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  // Fetch trading wave alerts (all 3)
+  const fetchWaveAlerts = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/trading-wave-alert/`);
+      if (res.data.success) {
+        setWaveAlerts(res.data.alerts.filter((a: any) => a.is_active));
+      }
+    } catch { /* silent */ }
+  };
+
+  // Live countdown ticker — decrement remaining_seconds every second
+  useEffect(() => {
+    if (waveCountdownRef.current) clearInterval(waveCountdownRef.current);
+    const hasCountdown = waveAlerts.some(a => a.remaining_seconds > 0);
+    if (!hasCountdown) return;
+    waveCountdownRef.current = setInterval(() => {
+      setWaveAlerts(prev => prev.map(a => ({
+        ...a,
+        remaining_seconds: Math.max(0, a.remaining_seconds - 1),
+      })));
+    }, 1000);
+    return () => { if (waveCountdownRef.current) clearInterval(waveCountdownRef.current); };
+  }, [waveAlerts.length]);
+
   useEffect(() => {
     fetchPlans();
     fetchPaymentNetworks();
     fetchPurchaseRequests();
+    fetchWaveAlerts();
+    // Refresh wave alerts every 30s from server
+    const waveInterval = setInterval(fetchWaveAlerts, 30000);
     // Fetch trade data for all licenses initially
     fetchAllLicensesTradeData();
     
@@ -134,6 +175,7 @@ export default function DashboardHome() {
       if (allLicensesPollingRef.current) {
         clearInterval(allLicensesPollingRef.current);
       }
+      clearInterval(waveInterval);
     };
   }, [licenses, selectedLicense, user?.email]);
 
@@ -1384,6 +1426,63 @@ export default function DashboardHome() {
     return (
       <div className="max-w-7xl mx-auto pt-3 sm:pt-5 px-0.5 sm:px-4 pb-6 sm:pb-8">
         <div className="space-y-3 sm:space-y-4">
+          {/* Trading Wave Alert Banners */}
+          {waveAlerts.length > 0 && waveAlerts.map(wa => {
+            const isHigh = wa.mode === 'high';
+            const isMedium = wa.mode === 'medium';
+            const emoji = isHigh ? '🌋' : isMedium ? '⛈️' : '🌺';
+
+            let headingText = wa.display_name || 'Impact Alert';
+            if (wa.mode !== 'normal') {
+              if (wa.remaining_seconds > 0) {
+                headingText += ` in ${formatCountdown(wa.remaining_seconds)}`;
+              } else if (wa.minutes_before > 0) {
+                headingText += ' — Active Now';
+              }
+            }
+
+            return (
+              <div key={wa.mode} className={`relative rounded-xl border overflow-hidden ${
+                isHigh
+                  ? 'bg-gradient-to-r from-red-950/50 via-[#12121a] to-[#12121a] border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.1)]'
+                  : isMedium
+                  ? 'bg-gradient-to-r from-amber-950/40 via-[#12121a] to-[#12121a] border-amber-500/25 shadow-[0_0_15px_rgba(245,158,11,0.08)]'
+                  : 'bg-gradient-to-r from-emerald-950/40 via-[#12121a] to-[#12121a] border-emerald-500/25 shadow-[0_0_15px_rgba(16,185,129,0.08)]'
+              }`}>
+                <div className={`absolute top-0 left-0 w-1 h-full ${
+                  isHigh ? 'bg-gradient-to-b from-red-500 to-orange-600' : isMedium ? 'bg-gradient-to-b from-amber-400 to-yellow-600' : 'bg-gradient-to-b from-emerald-400 to-green-600'
+                }`}></div>
+                <div className="pl-4 pr-3 py-2.5 sm:pl-5 sm:pr-4 sm:py-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`text-3xl sm:text-4xl flex-shrink-0 ${isHigh ? 'animate-pulse transform hover:scale-110 transition-transform duration-300' : ''}`} style={isHigh ? {filter: 'drop-shadow(0 0 8px rgba(239, 68, 68, 0.6))', animation: 'pulse 1.5s ease-in-out infinite'} : {}}>{emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs sm:text-sm font-bold leading-tight ${
+                        isHigh ? 'text-red-400' : isMedium ? 'text-amber-400' : 'text-emerald-400'
+                      }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                        {headingText}
+                      </p>
+                      {wa.tips && (
+                        <p className={`text-[10px] sm:text-xs mt-1 leading-relaxed ${
+                          isHigh ? 'text-red-200/50' : isMedium ? 'text-amber-200/50' : 'text-emerald-200/50'
+                        }`}>
+                          💡 {wa.tips}
+                        </p>
+                      )}
+                    </div>
+                    {wa.remaining_seconds > 0 && (
+                      <div className={`flex-shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg font-mono text-[11px] sm:text-xs font-bold ${
+                        isHigh ? 'bg-red-500/15 text-red-400 border border-red-500/25' : isMedium ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25' : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isHigh ? 'bg-red-500' : isMedium ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                        {formatCountdown(wa.remaining_seconds)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
           {/* License Expiry Warning Banner */}
           {(() => {
             const daysLeft = getDaysRemaining(selectedLicense);
@@ -3109,6 +3208,68 @@ export default function DashboardHome() {
       <div className="mb-4 sm:mb-6">
         <ExnessBroker variant="compact" />
       </div>
+
+      {/* ══════ Trading Wave Alert Section ══════ */}
+      {waveAlerts.length > 0 && (
+        <div className="mb-4 sm:mb-6 space-y-2">
+          {waveAlerts.map(wa => {
+            const isHigh = wa.mode === 'high';
+            const isMedium = wa.mode === 'medium';
+            const emoji = isHigh ? '🌋' : isMedium ? '⛈️' : '🌺';
+
+            // Build the main heading text: use custom display_name from admin
+            let headingText = wa.display_name || 'Impact Alert';
+            if (wa.mode !== 'normal') {
+              if (wa.remaining_seconds > 0) {
+                headingText += ` in ${formatCountdown(wa.remaining_seconds)}`;
+              } else if (wa.minutes_before > 0) {
+                headingText += ' — Active Now';
+              }
+            }
+
+            return (
+              <div key={wa.mode} className={`relative rounded-xl border overflow-hidden ${
+                isHigh
+                  ? 'bg-gradient-to-r from-red-950/50 via-[#12121a] to-[#12121a] border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.1)]'
+                  : isMedium
+                  ? 'bg-gradient-to-r from-amber-950/40 via-[#12121a] to-[#12121a] border-amber-500/25 shadow-[0_0_15px_rgba(245,158,11,0.08)]'
+                  : 'bg-gradient-to-r from-emerald-950/40 via-[#12121a] to-[#12121a] border-emerald-500/25 shadow-[0_0_15px_rgba(16,185,129,0.08)]'
+              }`}>
+                <div className={`absolute top-0 left-0 w-1 h-full ${
+                  isHigh ? 'bg-gradient-to-b from-red-500 to-orange-600' : isMedium ? 'bg-gradient-to-b from-amber-400 to-yellow-600' : 'bg-gradient-to-b from-emerald-400 to-green-600'
+                }`}></div>
+                <div className="pl-4 pr-3 py-3 sm:pl-5 sm:pr-4 sm:py-4">
+                  <div className="flex items-center gap-3">
+                    <span className={`text-4xl sm:text-5xl flex-shrink-0 ${isHigh ? 'animate-pulse transform hover:scale-110 transition-transform duration-300' : ''}`} style={isHigh ? {filter: 'drop-shadow(0 0 12px rgba(239, 68, 68, 0.8))', animation: 'pulse 1.2s ease-in-out infinite'} : {}}>{emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm sm:text-base font-bold leading-tight ${
+                        isHigh ? 'text-red-400' : isMedium ? 'text-amber-400' : 'text-emerald-400'
+                      }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                        {headingText}
+                      </p>
+                      {wa.tips && (
+                        <p className={`text-[11px] sm:text-xs mt-1.5 leading-relaxed ${
+                          isHigh ? 'text-red-200/50' : isMedium ? 'text-amber-200/50' : 'text-emerald-200/50'
+                        }`}>
+                          💡 {wa.tips}
+                        </p>
+                      )}
+                    </div>
+                    {wa.remaining_seconds > 0 && (
+                      <div className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-mono text-xs sm:text-sm font-bold ${
+                        isHigh ? 'bg-red-500/15 text-red-400 border border-red-500/25' : isMedium ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25' : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isHigh ? 'bg-red-500' : isMedium ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                        {formatCountdown(wa.remaining_seconds)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       
       <div className="mt-6 mb-3 sm:mb-4">
         <div className="flex justify-between items-center mb-3">
