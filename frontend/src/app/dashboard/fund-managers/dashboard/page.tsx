@@ -796,11 +796,10 @@ export default function FMDashboardPage() {
               ) : (
                 <div className="space-y-2">
                   {/* Header */}
-                  <div className="hidden sm:grid grid-cols-7 gap-2 text-gray-500 text-[10px] font-semibold uppercase px-3 pb-2 border-b border-gray-800">
+                  <div className="hidden sm:grid gap-2 text-gray-500 text-[10px] font-semibold uppercase px-3 pb-2 border-b border-gray-800" style={{ gridTemplateColumns: '1.8fr 0.7fr 0.8fr 1.2fr 1.2fr 1fr' }}>
                     <span>Ticket</span>
                     <span>Type</span>
-                    <span>Symbol</span>
-                    <span className="text-right">Volume</span>
+                    <span className="text-right">Vol</span>
                     <span className="text-right">Open Price</span>
                     <span className="text-right">Current</span>
                     <span className="text-right">Profit</span>
@@ -809,39 +808,26 @@ export default function FMDashboardPage() {
                     const isBuy = String(p.type).toLowerCase().includes('buy') || p.type === 0 || p.type === 'POSITION_TYPE_BUY';
                     const profit = parseFloat(p.profit || '0');
                     return (
-                      <div key={p.ticket || i} className="grid grid-cols-2 sm:grid-cols-7 gap-1 sm:gap-2 px-3 py-2 rounded-lg bg-[#0a0a0f] border border-gray-800/50 text-xs">
-                        <div className="sm:col-span-1">
-                          <span className="sm:hidden text-gray-500 text-[10px]">Ticket </span>
-                          <span className="text-gray-300 font-mono">{p.ticket || '-'}</span>
-                        </div>
-                        <div className="sm:col-span-1">
-                          <span className="sm:hidden text-gray-500 text-[10px]">Type </span>
-                          <span className={`font-semibold ${isBuy ? 'text-green-400' : 'text-red-400'}`}>
-                            {isBuy ? 'BUY' : 'SELL'}
-                          </span>
-                        </div>
-                        <div className="sm:col-span-1">
-                          <span className="sm:hidden text-gray-500 text-[10px]">Symbol </span>
-                          <span className="text-white">{p.symbol || '-'}</span>
-                        </div>
-                        <div className="sm:col-span-1 sm:text-right">
-                          <span className="sm:hidden text-gray-500 text-[10px]">Vol </span>
-                          <span className="text-gray-300">{p.volume || p.lots || '-'}</span>
-                        </div>
-                        <div className="sm:col-span-1 sm:text-right">
-                          <span className="sm:hidden text-gray-500 text-[10px]">Open </span>
-                          <span className="text-gray-300">{p.open_price || p.price_open || '-'}</span>
-                        </div>
-                        <div className="sm:col-span-1 sm:text-right">
-                          <span className="sm:hidden text-gray-500 text-[10px]">Current </span>
-                          <span className="text-gray-300">{p.current_price || p.price_current || '-'}</span>
-                        </div>
-                        <div className="sm:col-span-1 sm:text-right">
-                          <span className="sm:hidden text-gray-500 text-[10px]">P/L </span>
-                          <span className={`font-semibold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            ${profit.toFixed(2)}
-                          </span>
-                        </div>
+                      <div key={p.ticket || i} className="hidden sm:grid gap-2 px-3 py-2 rounded-lg bg-[#0a0a0f] border border-gray-800/50 text-xs items-center" style={{ gridTemplateColumns: '1.8fr 0.7fr 0.8fr 1.2fr 1.2fr 1fr' }}>
+                        <span className="text-gray-300 font-mono truncate">{p.ticket || '-'}</span>
+                        <span className={`font-semibold ${isBuy ? 'text-green-400' : 'text-red-400'}`}>{isBuy ? 'BUY' : 'SELL'}</span>
+                        <span className="text-gray-300 text-right">{p.volume || p.lots || '-'}</span>
+                        <span className="text-gray-300 text-right">{p.open_price || p.price_open || '-'}</span>
+                        <span className="text-gray-300 text-right">{p.current_price || p.price_current || '-'}</span>
+                        <span className={`font-semibold text-right ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${profit.toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
+                  {/* Mobile view */}
+                  {positionsModal.positions.map((p: any, i: number) => {
+                    const isBuy = String(p.type).toLowerCase().includes('buy') || p.type === 0 || p.type === 'POSITION_TYPE_BUY';
+                    const profit = parseFloat(p.profit || '0');
+                    return (
+                      <div key={`m_${p.ticket || i}`} className="sm:hidden flex items-center justify-between px-3 py-2 rounded-lg bg-[#0a0a0f] border border-gray-800/50 text-xs gap-2">
+                        <span className="text-gray-400 font-mono truncate flex-1">{p.ticket || '-'}</span>
+                        <span className={`font-semibold flex-shrink-0 ${isBuy ? 'text-green-400' : 'text-red-400'}`}>{isBuy ? 'BUY' : 'SELL'}</span>
+                        <span className="text-gray-400 flex-shrink-0">vol: {p.volume || p.lots || '-'}</span>
+                        <span className={`font-semibold flex-shrink-0 ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${profit.toFixed(2)}</span>
                       </div>
                     );
                   })}

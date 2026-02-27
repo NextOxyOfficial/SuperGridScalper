@@ -885,7 +885,7 @@ class FundManager(models.Model):
     
     @property
     def subscriber_count(self):
-        return self.subscriptions.filter(status='active').count()
+        return self.subscriptions.filter(status__in=['active', 'trial']).count()
     
     @property
     def total_managed_accounts(self):
