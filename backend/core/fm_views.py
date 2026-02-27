@@ -207,6 +207,7 @@ def fund_manager_detail(request, fm_id):
     
     data = {
         'id': fm.id,
+        'user_email': fm.user.email,
         'display_name': fm.display_name,
         'bio': fm.bio,
         'avatar_url': fm.avatar.url if fm.avatar else None,

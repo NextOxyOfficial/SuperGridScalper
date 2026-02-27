@@ -7,7 +7,7 @@ import {
   Power, PowerOff, Users, DollarSign, TrendingUp, BarChart3,
   Shield, Clock, AlertTriangle, Calendar, Plus, Trash2, Loader2,
   MessageCircle, ChevronDown, ChevronUp, Zap, ArrowLeft, Camera, Upload,
-  UserX
+  UserX, Eye
 } from 'lucide-react';
 
 export default function FMDashboardPage() {
@@ -265,6 +265,13 @@ export default function FMDashboardPage() {
             </h1>
             <p className="text-gray-400 text-xs sm:text-sm">{profile.display_name} • {profile.tier} tier</p>
             {avatarError && <p className="text-red-400 text-xs mt-1">{avatarError}</p>}
+            <button
+              onClick={() => router.push(`/dashboard/fund-managers/${profile.id}`)}
+              className="mt-2 flex items-center gap-1.5 bg-purple-500/20 text-purple-300 px-3 py-1.5 rounded-lg text-xs font-medium border border-purple-500/30 hover:bg-purple-500/30 transition"
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Eye className="w-3.5 h-3.5" /> My FM Funnel
+            </button>
           </div>
         </div>
         {(() => {

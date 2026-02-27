@@ -63,15 +63,17 @@ export default function FundManagerDetailPage() {
     fetchMySubscription();
   }, [fmId]);
 
+  const isOwner = !isGuest && fm?.user_email === user?.email;
+
   useEffect(() => {
-    if (activeTab === 'chat' && mySubscription?.is_active) {
+    if (activeTab === 'chat' && (mySubscription?.is_active || isOwner)) {
       fetchChat();
       connectChatWS();
     }
     return () => {
       if (wsRef.current) wsRef.current.close();
     };
-  }, [activeTab, mySubscription]);
+  }, [activeTab, mySubscription, isOwner]);
 
   const fetchFMDetail = async () => {
     try {
@@ -241,7 +243,7 @@ export default function FundManagerDetailPage() {
     ws.onclose = () => {
       // Auto-reconnect after 3s if tab is still open
       setTimeout(() => {
-        if (activeTab === 'chat' && mySubscription?.is_active) connectChatWS();
+        if (activeTab === 'chat' && (mySubscription?.is_active || isOwner)) connectChatWS();
       }, 3000);
     };
     wsRef.current = ws;
@@ -493,7 +495,12 @@ export default function FundManagerDetailPage() {
 
           {/* Subscribe Button */}
           <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-800 flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
-            {isGuest ? (
+            {isOwner ? (
+              <div className="flex items-center gap-2 bg-cyan-500/10 text-cyan-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-cyan-500/20 w-full sm:w-auto justify-center">
+                <Shield className="w-4 h-4" />
+                <span className="text-sm font-medium">This is your FM profile</span>
+              </div>
+            ) : isGuest ? (
               <button
                 onClick={() => router.push('/')}
                 className="w-full sm:w-auto bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black font-bold px-6 sm:px-8 py-3 rounded-lg transition-all text-sm"
@@ -540,7 +547,7 @@ export default function FundManagerDetailPage() {
             }`}
             style={{ fontFamily: 'Orbitron, sans-serif' }}
           >
-            {tab === 'chat' && !mySubscription?.is_active ? '🔒 Chat' : tab}
+            {tab === 'chat' && !mySubscription?.is_active && !isOwner ? '🔒 Chat' : tab}
           </button>
         ))}
       </div>
@@ -648,7 +655,7 @@ export default function FundManagerDetailPage() {
 
       {activeTab === 'chat' && (
         <>
-          {!mySubscription?.is_active ? (
+          {!mySubscription?.is_active && !isOwner ? (
             <div className="text-center py-20 bg-[#12121a] border border-cyan-500/10 rounded-xl">
               <MessageCircle className="w-16 h-16 text-gray-600 mx-auto mb-4" />
               <h3 className="text-white font-semibold mb-2">{isGuest ? 'Login to Access Chat' : 'Subscribe to Access Chat'}</h3>
