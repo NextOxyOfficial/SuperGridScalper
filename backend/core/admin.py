@@ -970,14 +970,14 @@ class LicenseAdmin(admin.ModelAdmin):
     def balance_display(self, obj):
         td = self._get_trade_data(obj)
         if td:
-            return format_html('<strong>${:,.2f}</strong>', td.account_balance)
+            return format_html('<strong>{}</strong>', f'${td.account_balance:,.2f}')
         return "-"
     balance_display.short_description = 'Balance'
 
     def equity_display(self, obj):
         td = self._get_trade_data(obj)
         if td:
-            return format_html('${:,.2f}', td.account_equity)
+            return format_html('{}', f'${td.account_equity:,.2f}')
         return "-"
     equity_display.short_description = 'Equity'
 
