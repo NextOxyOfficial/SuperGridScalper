@@ -7,7 +7,7 @@ import {
   Power, PowerOff, Users, DollarSign, TrendingUp, BarChart3,
   Shield, Clock, AlertTriangle, Calendar, Plus, Trash2, Loader2,
   MessageCircle, ChevronDown, ChevronUp, Zap, ArrowLeft, Camera, Upload,
-  UserX, Eye
+  UserX, Eye, X
 } from 'lucide-react';
 
 export default function FMDashboardPage() {
@@ -35,6 +35,7 @@ export default function FMDashboardPage() {
   const [avatarError, setAvatarError] = useState('');
   const [expandedSub, setExpandedSub] = useState<number | null>(null);
   const [cancellingSubId, setCancellingSubId] = useState<number | null>(null);
+  const [positionsModal, setPositionsModal] = useState<{ subscriber: string; positions: any[] } | null>(null);
 
   useEffect(() => {
     fetchDashboard();
@@ -375,6 +376,41 @@ export default function FMDashboardPage() {
                       )}
                     </div>
                   </button>
+
+                  {/* Trade Summary inline */}
+                  {(() => {
+                    const totalBuy = sub.accounts.reduce((s: number, a: any) => s + (a.buy_positions || 0), 0);
+                    const totalSell = sub.accounts.reduce((s: number, a: any) => s + (a.sell_positions || 0), 0);
+                    const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
+                    const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
+                    const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account })));
+                    const totalPos = totalBuy + totalSell;
+                    return (
+                      <div className="hidden sm:flex items-center gap-3 flex-shrink-0 mx-3">
+                        <div className="text-right">
+                          <div className="text-gray-400 text-[10px]">Balance</div>
+                          <div className="text-white text-xs font-semibold">${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-gray-400 text-[10px]">P/L</div>
+                          <div className={`text-xs font-semibold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${totalProfit.toFixed(2)}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-gray-400 text-[10px]">Positions</div>
+                          <div className="text-white text-xs font-semibold">{totalPos}</div>
+                        </div>
+                        {totalPos > 0 && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setPositionsModal({ subscriber: sub.user_name, positions: allPositions }); }}
+                            className="text-[10px] px-2 py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition whitespace-nowrap"
+                          >
+                            View Positions
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Right: status + expand toggle */}
                   <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                     <span className={`text-xs px-2 py-1 rounded-full ${
@@ -396,6 +432,42 @@ export default function FMDashboardPage() {
                 {/* Expanded: Account Details + Cancel */}
                 {expandedSub === sub.subscription_id && (
                   <div className="border-t border-gray-800 p-4 space-y-3">
+                    {/* Mobile Trade Summary (hidden on desktop where it's inline) */}
+                    {(() => {
+                      const totalBuy = sub.accounts.reduce((s: number, a: any) => s + (a.buy_positions || 0), 0);
+                      const totalSell = sub.accounts.reduce((s: number, a: any) => s + (a.sell_positions || 0), 0);
+                      const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
+                      const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
+                      const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account })));
+                      const totalPos = totalBuy + totalSell;
+                      if (sub.accounts.length === 0 || !sub.accounts.some((a: any) => a.balance)) return null;
+                      return (
+                        <div className="sm:hidden flex items-center justify-between bg-[#0a0a0f] rounded-lg p-3 border border-gray-800/50">
+                          <div className="flex items-center gap-4">
+                            <div>
+                              <div className="text-gray-500 text-[9px]">Balance</div>
+                              <div className="text-white text-xs font-semibold">${totalBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-500 text-[9px]">P/L</div>
+                              <div className={`text-xs font-semibold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${totalProfit.toFixed(2)}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-500 text-[9px]">Positions</div>
+                              <div className="text-white text-xs font-semibold">{totalPos}</div>
+                            </div>
+                          </div>
+                          {totalPos > 0 && (
+                            <button
+                              onClick={() => setPositionsModal({ subscriber: sub.user_name, positions: allPositions })}
+                              className="text-[10px] px-2 py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition whitespace-nowrap"
+                            >
+                              View Positions
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {/* Accounts list */}
                     {sub.accounts.length === 0 ? (
                       <div className="flex items-start gap-3 bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3">
@@ -701,6 +773,87 @@ export default function FMDashboardPage() {
               >
                 {pendingToggle?.action === 'ea_on' ? 'Start Robot' : 'Stop Robot'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Open Positions Modal */}
+      {positionsModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setPositionsModal(null)}>
+          <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+              <h2 className="text-white text-sm sm:text-base font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                Open Positions — {positionsModal.subscriber}
+              </h2>
+              <button onClick={() => setPositionsModal(null)} className="text-gray-400 hover:text-white transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4">
+              {positionsModal.positions.length === 0 ? (
+                <div className="text-center py-10 text-gray-500 text-sm">No open positions</div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Header */}
+                  <div className="hidden sm:grid grid-cols-7 gap-2 text-gray-500 text-[10px] font-semibold uppercase px-3 pb-2 border-b border-gray-800">
+                    <span>Ticket</span>
+                    <span>Type</span>
+                    <span>Symbol</span>
+                    <span className="text-right">Volume</span>
+                    <span className="text-right">Open Price</span>
+                    <span className="text-right">Current</span>
+                    <span className="text-right">Profit</span>
+                  </div>
+                  {positionsModal.positions.map((p: any, i: number) => {
+                    const isBuy = String(p.type).toLowerCase().includes('buy') || p.type === 0 || p.type === 'POSITION_TYPE_BUY';
+                    const profit = parseFloat(p.profit || '0');
+                    return (
+                      <div key={p.ticket || i} className="grid grid-cols-2 sm:grid-cols-7 gap-1 sm:gap-2 px-3 py-2 rounded-lg bg-[#0a0a0f] border border-gray-800/50 text-xs">
+                        <div className="sm:col-span-1">
+                          <span className="sm:hidden text-gray-500 text-[10px]">Ticket </span>
+                          <span className="text-gray-300 font-mono">{p.ticket || '-'}</span>
+                        </div>
+                        <div className="sm:col-span-1">
+                          <span className="sm:hidden text-gray-500 text-[10px]">Type </span>
+                          <span className={`font-semibold ${isBuy ? 'text-green-400' : 'text-red-400'}`}>
+                            {isBuy ? 'BUY' : 'SELL'}
+                          </span>
+                        </div>
+                        <div className="sm:col-span-1">
+                          <span className="sm:hidden text-gray-500 text-[10px]">Symbol </span>
+                          <span className="text-white">{p.symbol || '-'}</span>
+                        </div>
+                        <div className="sm:col-span-1 sm:text-right">
+                          <span className="sm:hidden text-gray-500 text-[10px]">Vol </span>
+                          <span className="text-gray-300">{p.volume || p.lots || '-'}</span>
+                        </div>
+                        <div className="sm:col-span-1 sm:text-right">
+                          <span className="sm:hidden text-gray-500 text-[10px]">Open </span>
+                          <span className="text-gray-300">{p.open_price || p.price_open || '-'}</span>
+                        </div>
+                        <div className="sm:col-span-1 sm:text-right">
+                          <span className="sm:hidden text-gray-500 text-[10px]">Current </span>
+                          <span className="text-gray-300">{p.current_price || p.price_current || '-'}</span>
+                        </div>
+                        <div className="sm:col-span-1 sm:text-right">
+                          <span className="sm:hidden text-gray-500 text-[10px]">P/L </span>
+                          <span className={`font-semibold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            ${profit.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Totals */}
+                  <div className="border-t border-gray-700 pt-2 mt-2 px-3 flex items-center justify-between">
+                    <span className="text-gray-400 text-xs">{positionsModal.positions.length} position(s)</span>
+                    <span className={`text-sm font-bold ${positionsModal.positions.reduce((s: number, p: any) => s + parseFloat(p.profit || '0'), 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      Total P/L: ${positionsModal.positions.reduce((s: number, p: any) => s + parseFloat(p.profit || '0'), 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

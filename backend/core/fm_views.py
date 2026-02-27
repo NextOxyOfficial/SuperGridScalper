@@ -715,6 +715,11 @@ def fm_dashboard(request):
                     'profit': str(td.account_profit),
                     'buy_positions': td.total_buy_positions,
                     'sell_positions': td.total_sell_positions,
+                    'total_buy_lots': str(td.total_buy_lots),
+                    'total_sell_lots': str(td.total_sell_lots),
+                    'total_buy_profit': str(td.total_buy_profit),
+                    'total_sell_profit': str(td.total_sell_profit),
+                    'open_positions': td.open_positions or [],
                     'last_update': td.last_update.isoformat(),
                 })
                 total_balance += td.account_balance
