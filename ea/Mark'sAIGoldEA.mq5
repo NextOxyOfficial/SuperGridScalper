@@ -218,9 +218,9 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
 {
-    // Re-verify license every 2 minutes (to catch suspensions/deletions)
+    // Re-verify license every 30 seconds (to catch suspensions/deletions & FM commands)
     static datetime lastLicenseCheck = 0;
-    if(!IsTesterMode() && TimeCurrent() - lastLicenseCheck > 120) // 2 minutes
+    if(!IsTesterMode() && TimeCurrent() - lastLicenseCheck > 30) // 30 seconds
     {
         lastLicenseCheck = TimeCurrent();
         VerifyLicense();
