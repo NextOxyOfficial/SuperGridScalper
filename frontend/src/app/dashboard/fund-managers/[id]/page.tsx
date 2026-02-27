@@ -905,7 +905,12 @@ export default function FundManagerDetailPage() {
                         className="accent-cyan-500"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-white text-sm font-medium">MT5: {lic.mt5_account || 'Unbound'}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-white text-sm font-medium">MT5: {lic.mt5_account || 'Unbound'}</span>
+                          {lic.account_balance != null && (
+                            <span className="text-green-400 text-xs font-semibold">${parseFloat(lic.account_balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          )}
+                        </div>
                         {isUsed ? (
                           <div className="text-yellow-400 text-[10px] flex items-center gap-1 mt-0.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />

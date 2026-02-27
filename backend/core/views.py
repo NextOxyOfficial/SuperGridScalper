@@ -883,6 +883,11 @@ def get_licenses(request):
             ea_settings = None
         
         fm_info = fm_stopped_map.get(lic.id)
+        
+        # Get latest trade data for balance
+        latest_td = lic.trade_data.order_by('-last_update').first()
+        account_balance = float(latest_td.account_balance) if latest_td and latest_td.account_balance else None
+        
         license_list.append({
             'id': lic.id,
             'license_key': lic.license_key,
@@ -893,6 +898,7 @@ def get_licenses(request):
             'days_remaining': lic.days_remaining(),
             'mt5_account': lic.mt5_account,
             'nickname': lic.nickname or '',
+            'account_balance': account_balance,
             'ea_settings': ea_settings,
             'fm_controlled': fm_info is not None,
             'fm_stopped': fm_info is not None and not fm_info['is_ea_active'],
