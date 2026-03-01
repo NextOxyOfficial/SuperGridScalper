@@ -2148,19 +2148,27 @@ export default function DashboardHome() {
                       const hasPendingFreeExt = (purchaseRequests || []).some(
                         (r: any) => (r.user_note || '').includes('[EXNESS_FREE_EXTENSION]') && r.status === 'pending' && r.extend_license_key === selectedLicense?.license_key
                       );
-                      const isDisabled = freeBoundAccount ? true : existingFreeClaim ? (!isClaimApproved || hasPendingFreeExt) : false;
+                      // One-time offer: disabled once user has ANY existing claim (approved/pending)
+                      const alreadyUsedOnce = !!existingFreeClaim;
+                      const isDisabled = alreadyUsedOnce || requestingFreeExtension;
+                      const badgeLabel = hasPendingFreeExt ? 'PENDING' : isClaimApproved ? 'CLAIMED' : existingFreeClaim ? 'PENDING' : null;
+                      const descText = requestingFreeExtension
+                        ? 'Submitting your free extension request...'
+                        : isClaimApproved
+                          ? 'You have already used the one-time free license offer.'
+                          : existingFreeClaim
+                            ? 'Your free claim is pending admin approval.'
+                            : 'Open an Exness account under our referral link & get a free license!';
                       return (
                         <button
                           onClick={() => {
-                            if (isThisLicenseFree) {
-                              handleRequestFreeExtension(true);
-                            } else if (!existingFreeClaim) {
+                            if (!alreadyUsedOnce) {
                               setExtendMethod('free'); setExtendStep(3);
                             }
                           }}
-                          disabled={isDisabled || requestingFreeExtension}
+                          disabled={isDisabled}
                           className={`relative overflow-hidden rounded-xl border-2 p-4 sm:p-5 text-left transition-all ${
-                            isDisabled || requestingFreeExtension
+                            isDisabled
                               ? 'border-gray-500/30 bg-gray-500/5 cursor-not-allowed opacity-60'
                               : 'border-green-500/30 bg-gradient-to-br from-green-500/5 to-emerald-500/5 hover:border-green-400/60 hover:shadow-lg hover:shadow-green-500/10 cursor-pointer'
                           }`}
@@ -2173,31 +2181,19 @@ export default function DashboardHome() {
                               <Gift className="w-5 h-5 text-green-400" />
                             )}
                             <span className="text-white font-bold text-xs sm:text-sm whitespace-nowrap" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                              {requestingFreeExtension ? 'REQUESTING...' : isThisLicenseFree ? 'FREE EXTEND' : 'GET IT FREE'}
+                              {requestingFreeExtension ? 'REQUESTING...' : 'GET IT FREE'}
                             </span>
-                            {hasPendingFreeExt ? (
-                              <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
-                            ) : freeBoundAccount ? (
-                              <span className="text-[8px] sm:text-[9px] font-bold text-gray-400 bg-gray-500/20 px-1.5 py-0.5 rounded-full border border-gray-400/40">BOUND</span>
-                            ) : existingFreeClaim && !isClaimApproved ? (
-                              <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
-                            ) : requestingFreeExtension ? null : (
+                            {badgeLabel ? (
+                              <span className={`text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                                badgeLabel === 'CLAIMED'
+                                  ? 'text-gray-400 bg-gray-500/20 border-gray-400/40'
+                                  : 'text-yellow-300 bg-yellow-500/20 border-yellow-400/40'
+                              }`}>{badgeLabel}</span>
+                            ) : !alreadyUsedOnce ? (
                               <span className="text-[8px] sm:text-[9px] font-bold text-green-200 bg-green-500/25 px-1.5 py-0.5 rounded-full border border-green-400/40 animate-pulse">$0</span>
-                            )}
+                            ) : null}
                           </div>
-                          <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">
-                            {requestingFreeExtension
-                              ? 'Submitting your free extension request...'
-                              : freeBoundAccount
-                                ? `Free license is bound to account ${freeBoundAccount} only.`
-                                : hasPendingFreeExt
-                                  ? 'You have a pending free extension request. Please wait for admin verification.'
-                                  : isThisLicenseFree
-                                    ? 'Request a free extension — admin will verify your Exness referral.'
-                                    : existingFreeClaim
-                                      ? 'You already have a pending free claim.'
-                                      : 'Open an Exness account under our referral link & get a free license!'}
-                          </p>
+                          <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">{descText}</p>
                         </button>
                       );
                     })()}
