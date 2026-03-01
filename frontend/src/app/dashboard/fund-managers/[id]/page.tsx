@@ -41,6 +41,8 @@ export default function FundManagerDetailPage() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [isFm, setIsFm] = useState(false);
   const [chatError, setChatError] = useState('');
+  const [unreadCount, setUnreadCount] = useState(0);
+  const lastSeenMessageCountRef = useRef(0);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [sendingVoice, setSendingVoice] = useState(false);
@@ -69,6 +71,8 @@ export default function FundManagerDetailPage() {
     if (activeTab === 'chat' && (mySubscription?.is_active || isOwner)) {
       fetchChat();
       connectChatWS();
+      setUnreadCount(0);
+      lastSeenMessageCountRef.current = messages.length;
     }
     return () => {
       if (wsRef.current) wsRef.current.close();
@@ -212,6 +216,10 @@ export default function FundManagerDetailPage() {
           setMessages(prev => {
             // Deduplicate by id
             if (prev.some((m: any) => m.id === data.data.id)) return prev;
+            // Only count as unread if sender is not the current user and chat tab is not active
+            if (data.data.sender_email !== user?.email) {
+              setUnreadCount(c => c + 1);
+            }
             return [...prev, data.data];
           });
           setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -510,23 +518,35 @@ export default function FundManagerDetailPage() {
                 Login to Subscribe — ${fm.monthly_price}/mo
               </button>
             ) : mySubscription?.is_active ? (
-              <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full sm:w-auto">
-                <div className="flex items-center gap-2 bg-green-500/10 text-green-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-green-500/20 w-full sm:w-auto justify-center">
-                  <Check className="w-4 h-4" />
-                  <span className="text-sm font-medium">Subscribed ({mySubscription.days_remaining}d remaining)</span>
+              <div className="flex flex-col gap-2 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+                  <div className="flex items-center gap-2 bg-green-500/10 text-green-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-green-500/20 justify-center">
+                    <Check className="w-4 h-4" />
+                    <span className="text-sm font-medium">Subscribed ({mySubscription.days_remaining}d remaining)</span>
+                  </div>
+                  <button
+                    onClick={() => { setSelectedLicenses([]); setShowSubscribeModal(true); }}
+                    className="text-cyan-400 hover:text-cyan-300 text-sm px-3 py-2 border border-cyan-500/20 rounded-lg hover:bg-cyan-500/10 transition"
+                  >
+                    + Add More Licenses
+                  </button>
+                  <button
+                    onClick={() => { setUnsubError(''); setUnsubPassword(''); setShowUnsubscribeModal(true); }}
+                    className="text-red-400 hover:text-red-300 text-sm px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition"
+                  >
+                    Unsubscribe
+                  </button>
                 </div>
-                <button
-                  onClick={() => { setSelectedLicenses([]); setShowSubscribeModal(true); }}
-                  className="text-cyan-400 hover:text-cyan-300 text-sm px-3 py-2 border border-cyan-500/20 rounded-lg hover:bg-cyan-500/10 transition w-full sm:w-auto"
-                >
-                  + Add More Licenses
-                </button>
-                <button
-                  onClick={() => { setUnsubError(''); setUnsubPassword(''); setShowUnsubscribeModal(true); }}
-                  className="text-red-400 hover:text-red-300 text-sm px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition w-full sm:w-auto"
-                >
-                  Unsubscribe
-                </button>
+                {mySubscription.assigned_accounts?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {mySubscription.assigned_accounts.map((a: any) => (
+                      <span key={a.id} className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-300">
+                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.is_ea_active ? 'bg-green-400' : 'bg-red-400'}`} />
+                        MT5: {a.mt5_account || 'Unbound'}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <button
@@ -546,8 +566,8 @@ export default function FundManagerDetailPage() {
         {(['overview', 'chat', 'schedule', 'reviews'] as const).map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2 sm:py-2.5 px-1 sm:px-3 text-[10px] sm:text-xs font-semibold rounded-lg transition capitalize whitespace-nowrap ${
+            onClick={() => { setActiveTab(tab); if (tab === 'chat') { setUnreadCount(0); lastSeenMessageCountRef.current = messages.length; } }}
+            className={`flex-1 py-2 sm:py-2.5 px-1 sm:px-3 text-[10px] sm:text-xs font-semibold rounded-lg transition capitalize whitespace-nowrap relative ${
               activeTab === tab
                 ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20'
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -555,6 +575,11 @@ export default function FundManagerDetailPage() {
             style={{ fontFamily: 'Orbitron, sans-serif' }}
           >
             {tab === 'chat' && !mySubscription?.is_active && !isOwner ? '🔒 Chat' : tab}
+            {tab === 'chat' && unreadCount > 0 && activeTab !== 'chat' && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </button>
         ))}
       </div>

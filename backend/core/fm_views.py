@@ -278,14 +278,17 @@ def subscribe_to_fm(request):
     # Check if already subscribed
     existing = FMSubscription.objects.filter(user=user, fund_manager=fm).first()
     if existing and existing.is_active:
-        # Recover from legacy ghost subscriptions (active/trial but no assigned accounts)
+        # Already has an active subscription — allow adding more licenses to it
+        # (skip ghost-recovery / rejection; just proceed to license assignment below)
+        pass
+    elif existing and not existing.is_active:
+        # Ghost subscription with no assignments — cancel and re-create below
         has_assignments = existing.assigned_accounts.exists()
-        if has_assignments:
-            return JsonResponse({'success': False, 'error': 'Already subscribed to this fund manager'}, status=400)
-        existing.status = 'cancelled'
-        existing.cancelled_at = timezone.now()
-        existing.auto_renew = False
-        existing.save(update_fields=['status', 'cancelled_at', 'auto_renew', 'updated_at'])
+        if not has_assignments:
+            existing.status = 'cancelled'
+            existing.cancelled_at = timezone.now()
+            existing.auto_renew = False
+            existing.save(update_fields=['status', 'cancelled_at', 'auto_renew', 'updated_at'])
     
     # Check max subscribers
     if fm.subscriber_count >= fm.max_subscribers:
