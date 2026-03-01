@@ -184,6 +184,30 @@ export default function FundManagerDetailPage() {
     }
   };
 
+  const handleUnassignLicense = async (licenseId: number, mt5Account: string) => {
+    if (!confirm(`Remove MT5: ${mt5Account || licenseId} from this fund manager?`)) return;
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/unassign-license/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, fund_manager_id: Number(fmId), license_id: licenseId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.auto_cancelled) {
+          setMySubscription(null);
+        } else {
+          fetchMySubscription();
+        }
+        refreshLicenses();
+      } else {
+        alert(data.error || 'Failed to remove license');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    }
+  };
+
   // Chat functions
   const fetchChat = async () => {
     try {
@@ -540,9 +564,16 @@ export default function FundManagerDetailPage() {
                 {mySubscription.assigned_accounts?.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {mySubscription.assigned_accounts.map((a: any) => (
-                      <span key={a.id} className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-300">
+                      <span key={a.id} className="group inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 hover:border-red-500/30 hover:bg-red-500/5 transition-all">
                         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.is_ea_active ? 'bg-green-400' : 'bg-red-400'}`} />
                         MT5: {a.mt5_account || 'Unbound'}
+                        <button
+                          onClick={() => handleUnassignLicense(a.license_id, a.mt5_account)}
+                          className="ml-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-gray-500 hover:text-red-400 hover:bg-red-500/20 transition-all opacity-60 group-hover:opacity-100"
+                          title="Remove this account"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
                       </span>
                     ))}
                   </div>

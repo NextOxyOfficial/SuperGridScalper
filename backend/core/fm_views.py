@@ -667,6 +667,68 @@ def assign_license_to_fm(request):
     })
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def unassign_license_from_fm(request):
+    """Remove a single license from an FM subscription (without cancelling the whole subscription)"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    email = data.get('email', '').strip()
+    fund_manager_id = data.get('fund_manager_id')
+    license_id = data.get('license_id')
+
+    user = _resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
+
+    try:
+        sub = FMSubscription.objects.select_related('fund_manager').get(
+            user=user, fund_manager_id=fund_manager_id, status__in=['active', 'trial']
+        )
+    except FMSubscription.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Active subscription not found'}, status=404)
+
+    try:
+        assignment = FMAccountAssignment.objects.select_related('license').get(
+            subscription=sub, license_id=license_id
+        )
+    except FMAccountAssignment.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'This license is not assigned to this FM'}, status=404)
+
+    mt5_account = assignment.license.mt5_account
+    lic = assignment.license
+
+    # Delete the assignment
+    assignment.delete()
+
+    # If FM had stopped this license, restore it
+    now = timezone.now()
+    if lic.status == 'suspended' and (not lic.expires_at or lic.expires_at > now):
+        lic.status = 'active'
+        lic.updated_at = now
+        lic.save(update_fields=['status', 'updated_at'])
+
+    # If no more assignments remain, auto-cancel the subscription
+    remaining = sub.assigned_accounts.count()
+    auto_cancelled = False
+    if remaining == 0:
+        sub.status = 'cancelled'
+        sub.cancelled_at = timezone.now()
+        sub.auto_renew = False
+        sub.save(update_fields=['status', 'cancelled_at', 'auto_renew', 'updated_at'])
+        auto_cancelled = True
+
+    return JsonResponse({
+        'success': True,
+        'message': f'MT5 account {mt5_account or license_id} has been removed from {sub.fund_manager.display_name}.',
+        'auto_cancelled': auto_cancelled,
+        'remaining_accounts': remaining,
+    })
+
+
 # ============================================================
 # FUND MANAGER DASHBOARD
 # ============================================================

@@ -69,6 +69,7 @@ urlpatterns = [
     path('fund-managers/unsubscribe/', fm_views.unsubscribe_from_fm, name='unsubscribe_from_fm'),
     path('fund-managers/my-subscriptions/', fm_views.get_my_fm_subscriptions, name='get_my_fm_subscriptions'),
     path('fund-managers/assign-license/', fm_views.assign_license_to_fm, name='assign_license_to_fm'),
+    path('fund-managers/unassign-license/', fm_views.unassign_license_from_fm, name='unassign_license_from_fm'),
     path('fund-managers/dashboard/', fm_views.fm_dashboard, name='fm_dashboard'),
     path('fund-managers/toggle-ea/', fm_views.fm_toggle_ea, name='fm_toggle_ea'),
     path('fund-managers/ea-status/', fm_views.check_fm_ea_status, name='check_fm_ea_status'),
