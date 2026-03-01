@@ -159,8 +159,8 @@ export default function DashboardHome() {
     fetchPaymentNetworks();
     fetchPurchaseRequests();
     fetchWaveAlerts();
-    // Refresh wave alerts every 30s from server
-    const waveInterval = setInterval(fetchWaveAlerts, 30000);
+    // Refresh wave alerts every 10s from server for near-realtime admin updates
+    const waveInterval = setInterval(fetchWaveAlerts, 10000);
     // Fetch trade data for all licenses initially
     fetchAllLicensesTradeData();
     

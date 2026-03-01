@@ -13,7 +13,7 @@ import {
 export default function FundManagerDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user, licenses, API_URL } = useDashboard();
+  const { user, licenses, API_URL, refreshLicenses } = useDashboard();
   const fmId = params.id;
 
   const [fm, setFm] = useState<any>(null);
@@ -132,6 +132,7 @@ export default function FundManagerDetailPage() {
       if (data.success) {
         setShowSubscribeModal(false);
         fetchMySubscription();
+        refreshLicenses();
       } else {
         // If conflict, refresh the license map so modal shows updated used-by info
         if (data.already_used) {
@@ -514,6 +515,12 @@ export default function FundManagerDetailPage() {
                   <Check className="w-4 h-4" />
                   <span className="text-sm font-medium">Subscribed ({mySubscription.days_remaining}d remaining)</span>
                 </div>
+                <button
+                  onClick={() => { setSelectedLicenses([]); setShowSubscribeModal(true); }}
+                  className="text-cyan-400 hover:text-cyan-300 text-sm px-3 py-2 border border-cyan-500/20 rounded-lg hover:bg-cyan-500/10 transition w-full sm:w-auto"
+                >
+                  + Add More Licenses
+                </button>
                 <button
                   onClick={() => { setUnsubError(''); setUnsubPassword(''); setShowUnsubscribeModal(true); }}
                   className="text-red-400 hover:text-red-300 text-sm px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition w-full sm:w-auto"
