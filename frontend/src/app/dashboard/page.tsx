@@ -1492,7 +1492,7 @@ export default function DashboardHome() {
             const hasPendingFreeExt = isFreeLicenseBanner && (purchaseRequests || []).some(
               (r: any) => (r.user_note || '').includes('[EXNESS_FREE_EXTENSION]') && r.status === 'pending' && r.extend_license_key === selectedLicense.license_key
             );
-            const warningThreshold = isFreeLicenseBanner ? 10 : 7;
+            const warningThreshold = 10;
             if (!isActive || daysLeft > warningThreshold) return null;
             return (
               <div className={`rounded-lg px-3 sm:px-4 py-2 sm:py-3 border ${
@@ -2009,8 +2009,8 @@ export default function DashboardHome() {
                   </div>
                 </div>
                 
-                {/* Extend Subscription - Show when ≤10 days (free) or ≤7 days (paid) */}
-                {getDaysRemaining(selectedLicense) <= ((purchaseRequests || []).some((r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status === 'approved' && r.issued_license_key === selectedLicense.license_key) ? 10 : 7) && (
+                {/* Extend Subscription - Always visible */}
+                {
                 <div className={`rounded-lg p-3 sm:p-4 border ${
                   getDaysRemaining(selectedLicense) <= 0 
                     ? 'bg-red-500/10 border-red-500/30' 
@@ -2055,7 +2055,7 @@ export default function DashboardHome() {
                     </button>
                   </div>
                 </div>
-                )}
+                }
               </div>
             </div>
           </div>
