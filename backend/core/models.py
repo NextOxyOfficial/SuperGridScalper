@@ -1341,3 +1341,59 @@ class UserBadge(models.Model):
         verbose_name_plural = "User Badges"
         unique_together = [['user', 'badge']]
         ordering = ['-awarded_at']
+
+
+class EmailOTP(models.Model):
+    """OTP codes for email verification (registration & login)"""
+    PURPOSE_REGISTER = 'register'
+    PURPOSE_LOGIN = 'login'
+    PURPOSE_CHOICES = [
+        (PURPOSE_REGISTER, 'Registration'),
+        (PURPOSE_LOGIN, 'Login'),
+    ]
+
+    email = models.EmailField()
+    code = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES)
+
+    # For registration: store pending user data so we don't create until verified
+    pending_data = models.JSONField(default=dict, blank=True)
+
+    is_used = models.BooleanField(default=False)
+    attempts = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+    def is_valid(self, code):
+        return (
+            not self.is_used
+            and not self.is_expired()
+            and self.attempts < 5
+            and self.code == code
+        )
+
+    @classmethod
+    def generate(cls, email, purpose, pending_data=None, expiry_minutes=10):
+        import random
+        cls.objects.filter(email=email, purpose=purpose, is_used=False).delete()
+        code = f"{random.randint(0, 999999):06d}"
+        return cls.objects.create(
+            email=email,
+            purpose=purpose,
+            code=code,
+            pending_data=pending_data or {},
+            expires_at=timezone.now() + timedelta(minutes=expiry_minutes),
+        )
+
+    def __str__(self):
+        return f"{self.email} [{self.purpose}] — {self.code}"
+
+    class Meta:
+        verbose_name = "Email OTP"
+        verbose_name_plural = "Email OTPs"
+        indexes = [
+            models.Index(fields=['email', 'purpose', 'is_used']),
+        ]

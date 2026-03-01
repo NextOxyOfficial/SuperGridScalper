@@ -11,7 +11,7 @@ from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.db.models import Count, F
-from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest, PayoutMethod
+from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest, PayoutMethod, EmailOTP
 from decimal import Decimal
 import json
 
@@ -503,39 +503,163 @@ def list_license_purchase_requests(request):
     return JsonResponse({'success': True, 'requests': items})
 
 
+def _send_otp_email(email, code, purpose, name='Trader'):
+    """Send OTP email for registration or login"""
+    try:
+        from core.utils import get_email_from_address, render_email_template, add_email_headers, get_unsubscribe_url
+        from django.core.mail import EmailMultiAlternatives
+
+        if purpose == 'register':
+            subject = 'MarksTrades — Email Verification Code'
+            heading = 'Verify Your Email'
+            purpose_label = 'complete your registration'
+        else:
+            subject = 'MarksTrades — Login Verification Code'
+            heading = 'Login Verification Code'
+            purpose_label = 'sign in to your account'
+
+        text_message = (
+            f"Hi {name},\n\n"
+            f"Your verification code to {purpose_label} is:\n\n"
+            f"  {code}\n\n"
+            f"This code expires in 10 minutes.\n\n"
+            "If you did not request this, please ignore this email."
+        )
+
+        html_message = render_email_template(
+            subject=subject,
+            heading=heading,
+            message=f"""
+                <p>Hi <strong>{name}</strong>,</p>
+                <p>Use the following 6-digit code to {purpose_label}:</p>
+                <div style="text-align:center;margin:28px 0;">
+                  <span style="font-size:36px;font-weight:bold;letter-spacing:12px;color:#06b6d4;font-family:monospace;">{code}</span>
+                </div>
+                <p style="color:#888;font-size:13px;">This code expires in <strong>10 minutes</strong>. Do not share it with anyone.</p>
+            """,
+            footer_note='If you did not request this code, you can safely ignore this email.',
+            preheader=f'Your verification code is {code}',
+            unsubscribe_url=get_unsubscribe_url(None)
+        )
+
+        msg = EmailMultiAlternatives(subject, text_message, get_email_from_address(), [email])
+        msg.attach_alternative(html_message, 'text/html')
+        msg = add_email_headers(msg, 'transactional', user=None)
+        msg.send(fail_silently=False)
+    except Exception as e:
+        print(f"OTP email error: {e}")
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def register(request):
-    """Register a new user"""
+    """Register a new user — sends OTP first, creates account after verification"""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
-    
+
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
     name = data.get('name', '').strip()
     referral_code = data.get('referral_code', '').strip()
-    
+
     if not email or not password:
         return JsonResponse({'success': False, 'message': 'Email and password are required'})
-    
+
     if len(password) < 6:
         return JsonResponse({'success': False, 'message': 'Password must be at least 6 characters'})
-    
-    if User.objects.filter(email=email).exists():
+
+    if User.objects.filter(email=email).exists() or User.objects.filter(username=email).exists():
         return JsonResponse({'success': False, 'message': 'Email already registered'})
-    
-    if User.objects.filter(username=email).exists():
-        return JsonResponse({'success': False, 'message': 'Email already registered'})
-    
-    # Create user
-    user = User.objects.create_user(
-        username=email,
+
+    # Generate OTP and store pending registration data
+    otp = EmailOTP.generate(
         email=email,
-        password=password,
-        first_name=name
+        purpose=EmailOTP.PURPOSE_REGISTER,
+        pending_data={
+            'password': password,
+            'name': name,
+            'referral_code': referral_code,
+        }
     )
+
+    _send_otp_email(email, otp.code, 'register', name=name or 'Trader')
+
+    return JsonResponse({
+        'success': True,
+        'requires_verification': True,
+        'message': 'Verification code sent to your email.',
+        'email': email,
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def verify_email(request):
+    """Verify OTP for registration — creates user after successful verification"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    email = data.get('email', '').strip().lower()
+    code = data.get('code', '').strip()
+
+    if not email or not code:
+        return JsonResponse({'success': False, 'message': 'Email and code are required'})
+
+    otp = EmailOTP.objects.filter(
+        email=email, purpose=EmailOTP.PURPOSE_REGISTER, is_used=False
+    ).order_by('-created_at').first()
+
+    if not otp:
+        return JsonResponse({'success': False, 'message': 'No pending verification found. Please register again.'})
+
+    # Increment attempt count
+    otp.attempts += 1
+    otp.save(update_fields=['attempts'])
+
+    if otp.is_expired():
+        return JsonResponse({'success': False, 'message': 'Code expired. Please register again to get a new code.'})
+
+    if otp.attempts > 5:
+        return JsonResponse({'success': False, 'message': 'Too many attempts. Please register again.'})
+
+    if otp.code != code:
+        return JsonResponse({'success': False, 'message': f'Invalid code. {max(0, 5 - otp.attempts)} attempt(s) remaining.'})
+
+    # Mark OTP used
+    otp.is_used = True
+    otp.save(update_fields=['is_used'])
+
+    # Check again if user was somehow created in the meantime
+    if User.objects.filter(email=email).exists() or User.objects.filter(username=email).exists():
+        return JsonResponse({'success': False, 'message': 'Email already registered. Please login.'})
+
+    # Create the user now
+    pending = otp.pending_data
+    password = pending.get('password', '')
+    name = pending.get('name', '')
+    referral_code = pending.get('referral_code', '')
+
+    user = User.objects.create_user(
+        username=email, email=email, password=password, first_name=name
+    )
+
+    try:
+        from core.models import EmailPreference
+        EmailPreference.objects.get_or_create(user=user)
+    except Exception:
+        pass
+
+    if referral_code:
+        try:
+            referral = Referral.objects.get(referral_code=referral_code)
+            Referral.objects.filter(pk=referral.pk).update(signups=F('signups') + 1)
+            ReferralAttribution.objects.get_or_create(referral=referral, referred_user=user)
+        except Exception:
+            pass
 
     try:
         from core.utils import send_admin_notification
@@ -547,62 +671,31 @@ def register(request):
                 f"<p><strong>Name:</strong> {user.first_name or '-'}</p>"
                 f"<p><strong>Time:</strong> {timezone.now().isoformat()}</p>"
             ),
-            text_body=(
-                f"New user registered\n"
-                f"Email: {user.email}\n"
-                f"Name: {user.first_name or '-'}\n"
-                f"Time: {timezone.now().isoformat()}"
-            ),
+            text_body=f"New user registered\nEmail: {user.email}\nName: {user.first_name or '-'}",
             preheader=f'New registration: {user.email}'
         )
     except Exception:
         pass
 
+    # Send welcome email
     try:
-        from core.models import EmailPreference
-        EmailPreference.objects.get_or_create(user=user)
-    except Exception:
-        pass
-    
-    # Track referral signup
-    if referral_code:
-        try:
-            referral = Referral.objects.get(referral_code=referral_code)
-            Referral.objects.filter(pk=referral.pk).update(signups=F('signups') + 1)
-
-            try:
-                ReferralAttribution.objects.get_or_create(referral=referral, referred_user=user)
-            except Exception:
-                pass
-        except Referral.DoesNotExist:
-            pass  # Invalid referral code, just ignore
-
-    try:
-        from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+        from core.utils import get_email_from_address, render_email_template, add_email_headers, get_unsubscribe_url
         from django.core.mail import EmailMultiAlternatives
-        
         base = (getattr(django_settings, 'FRONTEND_URL', '') or '').rstrip('/')
         subject = 'Welcome to MarksTrades'
-        
-        # Plain text version
         text_message = (
             f"Hi {user.first_name or 'Trader'},\n\n"
             "Welcome! Your account has been created successfully.\n\n"
             f"Login here: {base}/?auth=login\n\n"
             "If you need help, reply to this email or contact support."
         )
-        
-        if not can_send_email_to_user(user, 'transactional'):
-            raise Exception('User opted out of transactional emails')
-
-        # HTML version
         html_message = render_email_template(
             subject=subject,
             heading='Welcome to MarksTrades!',
             message=f"""
                 <p>Hi <strong>{user.first_name or 'Trader'}</strong>,</p>
-                <p>Welcome! Your account has been created successfully.</p>
-                <p>You can now access your dashboard and start your trading journey with our AI-powered Expert Advisor.</p>
+                <p>Your email has been verified and your account is ready.</p>
+                <p>You can now log in and start your trading journey with our AI-powered Expert Advisor.</p>
             """,
             cta_text='LOGIN TO DASHBOARD',
             cta_url=f'{base}/?auth=login',
@@ -610,63 +703,56 @@ def register(request):
             preheader='Your MarksTrades account is ready. Login to access your dashboard.',
             unsubscribe_url=get_unsubscribe_url(user)
         )
-
-        msg = EmailMultiAlternatives(
-            subject,
-            text_message,
-            get_email_from_address(),
-            [user.email]
-        )
-        msg.attach_alternative(html_message, "text/html")
+        msg = EmailMultiAlternatives(subject, text_message, get_email_from_address(), [user.email])
+        msg.attach_alternative(html_message, 'text/html')
         msg = add_email_headers(msg, 'transactional', user=user)
         msg.send(fail_silently=False)
     except Exception as e:
         print(f"Welcome email error: {e}")
-    
+
     return JsonResponse({
         'success': True,
-        'message': 'Registration successful',
-        'user': {
-            'id': user.id,
-            'email': user.email,
-            'name': user.first_name
-        },
-        'licenses': []  # New user has no licenses yet
+        'message': 'Email verified! Your account has been created. You can now login.',
     })
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def login(request):
-    """Login user"""
+def resend_verification(request):
+    """Resend OTP for registration verification"""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
-    
+
     email = data.get('email', '').strip().lower()
-    password = data.get('password', '')
-    
-    if not email or not password:
-        return JsonResponse({'success': False, 'message': 'Email and password are required'})
-    
-    user = authenticate(username=email, password=password)
-    
-    if user is None:
-        return JsonResponse({'success': False, 'message': 'Invalid email or password'})
-    
-    # Get all user's licenses with EA settings
+    if not email:
+        return JsonResponse({'success': False, 'message': 'Email is required'})
+
+    existing = EmailOTP.objects.filter(
+        email=email, purpose=EmailOTP.PURPOSE_REGISTER, is_used=False
+    ).order_by('-created_at').first()
+
+    pending_data = existing.pending_data if existing else {}
+    name = pending_data.get('name', 'Trader') or 'Trader'
+
+    otp = EmailOTP.generate(email=email, purpose=EmailOTP.PURPOSE_REGISTER, pending_data=pending_data)
+    _send_otp_email(email, otp.code, 'register', name=name)
+
+    return JsonResponse({'success': True, 'message': 'New verification code sent to your email.'})
+
+
+def _build_login_response(user):
+    """Build the standard login success response with user + licenses."""
     licenses = (
         License.objects.filter(user=user)
         .select_related('plan')
         .prefetch_related('ea_settings', 'mt5_accounts')
     )
-    
-    # Allow login even without license - user needs to login to purchase license
     license_list = []
     for lic in licenses:
-        # Get EA settings (BTCUSD preferred, or any)
         settings = lic.ea_settings.filter(symbol='BTCUSD').first() or lic.ea_settings.first()
+        ea_settings = None
         if settings:
             ea_settings = {
                 'symbol': settings.symbol,
@@ -677,9 +763,6 @@ def login(request):
                 'sell_range_start': float(settings.sell_range_start),
                 'sell_range_end': float(settings.sell_range_end),
             }
-        else:
-            ea_settings = None
-        
         license_list.append({
             'license_key': lic.license_key,
             'plan': lic.plan.name,
@@ -691,9 +774,8 @@ def login(request):
             'nickname': lic.nickname or '',
             'mt5_accounts': [a.mt5_account for a in lic.mt5_accounts.all().order_by('created_at')],
             'max_accounts': lic.plan.max_accounts,
-            'ea_settings': ea_settings
+            'ea_settings': ea_settings,
         })
-    
     return JsonResponse({
         'success': True,
         'message': 'Login successful',
@@ -701,10 +783,115 @@ def login(request):
             'id': user.id,
             'email': user.email or user.username,
             'username': user.username,
-            'name': user.first_name
+            'name': user.first_name,
         },
-        'licenses': license_list
+        'licenses': license_list,
     })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def login(request):
+    """Login — validates credentials then sends OTP to email for 2FA"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+
+    if not email or not password:
+        return JsonResponse({'success': False, 'message': 'Email and password are required'})
+
+    user = authenticate(username=email, password=password)
+    if user is None:
+        return JsonResponse({'success': False, 'message': 'Invalid email or password'})
+
+    # Send OTP for 2FA
+    otp = EmailOTP.generate(email=user.email or user.username, purpose=EmailOTP.PURPOSE_LOGIN)
+    _send_otp_email(otp.email, otp.code, 'login', name=user.first_name or 'Trader')
+
+    return JsonResponse({
+        'success': True,
+        'requires_otp': True,
+        'message': 'A login verification code has been sent to your email.',
+        'email': otp.email,
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def verify_login_otp(request):
+    """Verify OTP for login — returns user session data on success"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    email = data.get('email', '').strip().lower()
+    code = data.get('code', '').strip()
+
+    if not email or not code:
+        return JsonResponse({'success': False, 'message': 'Email and code are required'})
+
+    otp = EmailOTP.objects.filter(
+        email=email, purpose=EmailOTP.PURPOSE_LOGIN, is_used=False
+    ).order_by('-created_at').first()
+
+    if not otp:
+        return JsonResponse({'success': False, 'message': 'No pending login verification found. Please login again.'})
+
+    otp.attempts += 1
+    otp.save(update_fields=['attempts'])
+
+    if otp.is_expired():
+        return JsonResponse({'success': False, 'message': 'Code expired. Please login again.'})
+
+    if otp.attempts > 5:
+        return JsonResponse({'success': False, 'message': 'Too many attempts. Please login again.'})
+
+    if otp.code != code:
+        return JsonResponse({'success': False, 'message': f'Invalid code. {max(0, 5 - otp.attempts)} attempt(s) remaining.'})
+
+    otp.is_used = True
+    otp.save(update_fields=['is_used'])
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        try:
+            user = User.objects.get(username=email)
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'User not found.'})
+
+    return _build_login_response(user)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def resend_login_otp(request):
+    """Resend OTP for login verification"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    email = data.get('email', '').strip().lower()
+    if not email:
+        return JsonResponse({'success': False, 'message': 'Email is required'})
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        try:
+            user = User.objects.get(username=email)
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'User not found.'})
+
+    otp = EmailOTP.generate(email=email, purpose=EmailOTP.PURPOSE_LOGIN)
+    _send_otp_email(email, otp.code, 'login', name=user.first_name or 'Trader')
+    return JsonResponse({'success': True, 'message': 'New login code sent to your email.'})
 
 
 @csrf_exempt

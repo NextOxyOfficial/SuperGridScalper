@@ -465,6 +465,13 @@ export default function Home() {
   const [verifySuccess, setVerifySuccess] = useState('')
   const [verifying, setVerifying] = useState(false)
   const [resending, setResending] = useState(false)
+  // Login OTP state
+  const [showLoginOtpModal, setShowLoginOtpModal] = useState(false)
+  const [loginOtpEmail, setLoginOtpEmail] = useState('')
+  const [loginOtpCode, setLoginOtpCode] = useState('')
+  const [loginOtpError, setLoginOtpError] = useState('')
+  const [loginOtpVerifying, setLoginOtpVerifying] = useState(false)
+  const [loginOtpResending, setLoginOtpResending] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -1077,35 +1084,24 @@ export default function Home() {
                 setSubmitting(true)
                 try {
                   const response = await axios.post(`${API_URL}/login/`, { email, password })
-                  if (response.data.success) {
+                  if (response.data.success && response.data.requires_otp) {
+                    setLoginOtpEmail(response.data.email || email)
+                    setLoginOtpCode('')
+                    setLoginOtpError('')
+                    setShowLoginModal(false)
+                    setShowLoginOtpModal(true)
+                    clearAuthParam()
+                  } else if (response.data.success) {
                     localStorage.setItem('user', JSON.stringify(response.data.user))
                     localStorage.setItem('licenses', JSON.stringify(response.data.licenses))
                     setShowLoginModal(false)
                     clearAuthParam()
                     router.push('/dashboard')
                   } else {
-                    if (response.data.requires_verification) {
-                      setVerifyEmail(response.data.email || email)
-                      setShowLoginModal(false)
-                      setShowVerifyModal(true)
-                      setVerifyCode('')
-                      setVerifyError('')
-                      setVerifySuccess('')
-                    } else {
-                      setError(response.data.message || 'Login failed')
-                    }
+                    setError(response.data.message || 'Login failed')
                   }
                 } catch (err: any) {
-                  if (err.response?.data?.requires_verification) {
-                    setVerifyEmail(err.response?.data?.email || email)
-                    setShowLoginModal(false)
-                    setShowVerifyModal(true)
-                    setVerifyCode('')
-                    setVerifyError('')
-                    setVerifySuccess('')
-                  } else {
-                    setError(err.response?.data?.message || 'Invalid credentials')
-                  }
+                  setError(err.response?.data?.message || 'Invalid credentials')
                 }
                 setSubmitting(false)
               }} className="space-y-3 sm:space-y-3.5 relative">
@@ -1220,6 +1216,112 @@ export default function Home() {
                   <span className="text-cyan-500/30 text-[9px] uppercase tracking-wider">Secure Connection</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Login OTP Modal */}
+      {showLoginOtpModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="relative max-w-md w-full">
+            <div className="absolute -inset-[1px] bg-gradient-to-r from-cyan-500/30 via-cyan-400/10 to-cyan-500/30 rounded-2xl blur-[2px]" />
+            <div className="relative bg-[#0c0c14] border border-cyan-500/20 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-cyan-500/10">
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, #06b6d4 1px, transparent 1px), radial-gradient(circle at 75% 75%, #06b6d4 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+              <button
+                onClick={() => { setShowLoginOtpModal(false); setLoginOtpError(''); }}
+                className="absolute top-3 right-3 sm:top-4 sm:right-4 w-8 h-8 flex items-center justify-center rounded-lg border border-gray-700/50 text-gray-500 hover:text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all z-10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="text-center mb-5 relative">
+                <div className="relative inline-flex items-center justify-center w-14 h-14 mb-3">
+                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/20 to-cyan-400/10 rounded-2xl rotate-45" />
+                  <div className="absolute inset-[2px] bg-[#0a0a12] rounded-[14px] rotate-45" />
+                  <Sparkles className="w-6 h-6 text-cyan-400 relative z-10" />
+                </div>
+                <h3 className="text-xl font-bold text-white tracking-wide" style={{ fontFamily: 'Orbitron, sans-serif' }}>LOGIN VERIFICATION</h3>
+                <div className="flex items-center justify-center gap-2 mt-1.5">
+                  <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-cyan-500/50" />
+                  <p className="text-cyan-500/70 text-[10px] uppercase tracking-[0.2em]">2-Step Authentication</p>
+                  <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-cyan-500/50" />
+                </div>
+              </div>
+              <div className="bg-cyan-500/5 border border-cyan-500/15 rounded-xl px-4 py-3 text-center mb-5">
+                <p className="text-gray-400 text-xs">We sent a verification code to</p>
+                <p className="text-cyan-400 font-semibold text-sm mt-1">{loginOtpEmail}</p>
+                <p className="text-gray-500 text-[10px] mt-1">Check your inbox & spam folder</p>
+              </div>
+              <form onSubmit={async (e) => {
+                e.preventDefault()
+                setLoginOtpError('')
+                setLoginOtpVerifying(true)
+                try {
+                  const res = await axios.post(`${API_URL}/verify-login-otp/`, { email: loginOtpEmail, code: loginOtpCode })
+                  if (res.data.success) {
+                    localStorage.setItem('user', JSON.stringify(res.data.user))
+                    localStorage.setItem('licenses', JSON.stringify(res.data.licenses))
+                    setShowLoginOtpModal(false)
+                    setLoginOtpCode('')
+                    router.push('/dashboard')
+                  } else {
+                    setLoginOtpError(res.data.message || 'Invalid code')
+                  }
+                } catch (err: any) {
+                  setLoginOtpError(err.response?.data?.message || 'Verification failed. Please try again.')
+                }
+                setLoginOtpVerifying(false)
+              }} className="space-y-4">
+                <div>
+                  <label className="flex items-center gap-1.5 text-gray-500 text-[10px] mb-2 uppercase tracking-wider">
+                    <Sparkles className="w-3 h-3 text-cyan-500/50" />
+                    6-Digit Verification Code
+                  </label>
+                  <input
+                    type="text"
+                    value={loginOtpCode}
+                    onChange={(e) => setLoginOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="w-full text-center text-2xl sm:text-3xl tracking-[12px] py-3 sm:py-4 bg-[#06060a] border border-cyan-500/15 rounded-xl text-cyan-400 placeholder-gray-700 focus:outline-none focus:border-cyan-400/60 focus:shadow-[0_0_15px_rgba(6,182,212,0.1)] transition-all font-mono font-bold"
+                    placeholder="000000"
+                    maxLength={6}
+                    required
+                    autoFocus
+                  />
+                </div>
+                {loginOtpError && (
+                  <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-xl px-3 py-2.5 text-red-400 text-xs">
+                    <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse flex-shrink-0" />
+                    {loginOtpError}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={loginOtpVerifying || loginOtpCode.length !== 6}
+                  className="relative w-full py-3 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 text-black rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25 overflow-hidden group"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                  {loginOtpVerifying ? <><Loader2 className="w-4 h-4 animate-spin" /> VERIFYING...</> : <><Check className="w-4 h-4" /> VERIFY & LOGIN</>}
+                </button>
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    disabled={loginOtpResending}
+                    onClick={async () => {
+                      setLoginOtpResending(true)
+                      setLoginOtpError('')
+                      try {
+                        await axios.post(`${API_URL}/resend-login-otp/`, { email: loginOtpEmail })
+                        setLoginOtpCode('')
+                      } catch (e) {}
+                      setLoginOtpResending(false)
+                    }}
+                    className="text-cyan-500/60 hover:text-cyan-400 text-[10px] font-medium transition-colors uppercase tracking-wider disabled:opacity-50"
+                  >
+                    {loginOtpResending ? 'Sending...' : "Didn't receive code? Resend"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
