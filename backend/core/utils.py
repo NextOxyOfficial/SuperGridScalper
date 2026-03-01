@@ -4,14 +4,15 @@ from django.conf import settings as django_settings
 def get_email_from_address():
     """
     Get the properly formatted From email address with name
-    Returns: "Name <email@example.com>" format
+    Returns: RFC-compliant "Name <email@example.com>" format
     """
+    from email.utils import formataddr
     try:
         from core.models import SMTPSettings
         smtp_config = SMTPSettings.objects.filter(is_active=True).first()
         
         if smtp_config and smtp_config.from_name:
-            return f"{smtp_config.from_name} <{smtp_config.from_email}>"
+            return formataddr((smtp_config.from_name, smtp_config.from_email))
         elif smtp_config:
             return smtp_config.from_email
     except Exception:
