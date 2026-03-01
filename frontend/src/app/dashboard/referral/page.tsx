@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useDashboard } from '../context';
-import { Copy, Check, DollarSign, Users, TrendingUp, Gift, ExternalLink, MousePointerClick, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Copy, Check, DollarSign, Users, TrendingUp, Gift, ExternalLink, MousePointerClick, ChevronLeft, ChevronRight, Loader2, Share2 } from 'lucide-react';
 import axios from 'axios';
 
 export default function ReferralPage() {
@@ -328,6 +328,43 @@ export default function ReferralPage() {
           <p className="text-gray-500 text-[10px] sm:text-xs mt-2">
             Code: <span className="text-cyan-400 font-mono font-bold">{referralData.referral_code}</span>
           </p>
+
+          {/* Share Message & Button */}
+          <div className="mt-3 pt-3 border-t border-cyan-500/10">
+            <div className="bg-[#0a0a0f] border border-cyan-500/10 rounded-lg p-2.5 sm:p-3 mb-2">
+              <p className="text-gray-300 text-[11px] sm:text-xs leading-relaxed select-all">
+                🚀 Trade smarter with AI — I use Mark's AI 3.0 for automated gold trading. Try it free today! {activeLink}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const msg = `🚀 Trade smarter with AI — I use Mark's AI 3.0 for automated gold trading. Try it free today! ${activeLink}`;
+                  navigator.clipboard.writeText(msg);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 px-3 py-2 rounded-lg text-[10px] sm:text-xs font-semibold transition-all"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy Message
+              </button>
+              <button
+                onClick={() => {
+                  const msg = encodeURIComponent(`🚀 Trade smarter with AI — I use Mark's AI 3.0 for automated gold trading. Try it free today! ${activeLink}`);
+                  if (navigator.share) {
+                    navigator.share({ title: "Mark's AI 3.0 — AI Trading", text: `Trade smarter with AI — I use Mark's AI 3.0 for automated gold trading. Try it free today!`, url: activeLink }).catch(() => {});
+                  } else {
+                    window.open(`https://wa.me/?text=${msg}`, '_blank');
+                  }
+                }}
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-green-400 px-3 py-2 rounded-lg text-[10px] sm:text-xs font-semibold transition-all"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                Share
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Free Exness Promo Banner */}

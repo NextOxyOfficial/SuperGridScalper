@@ -206,10 +206,10 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                             
                             <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
                                 <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">Extension Details:</p>
-                                <p style="margin: 4px 0; color: #374151;"><strong>Plan:</strong> {obj.plan.name}</p>
-                                <p style="margin: 4px 0; color: #374151;"><strong>Added:</strong> +{obj.plan.duration_days} days</p>
-                                <p style="margin: 4px 0; color: #374151;"><strong>New Expiry:</strong> {lic.expires_at.strftime('%B %d, %Y')}</p>
-                                <p style="margin: 4px 0; color: #374151;"><strong>Days Remaining:</strong> {lic.days_remaining()}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Added:</strong> +{obj.plan.duration_days} days</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>New Expiry:</strong> {lic.expires_at.strftime('%B %d, %Y')}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Days Remaining:</strong> {lic.days_remaining()}</p>
                             </div>
                         """,
                         cta_text='OPEN DASHBOARD',
@@ -294,10 +294,10 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                                 
                                 <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
                                     <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">License Details:</p>
-                                    <p style="margin: 4px 0; color: #374151;"><strong>Request ID:</strong> #{obj.id}</p>
-                                    <p style="margin: 4px 0; color: #374151;"><strong>Plan:</strong> {obj.plan.name}</p>
-                                    <p style="margin: 4px 0; color: #374151;"><strong>License Key:</strong> <code style="background-color: rgba(6, 182, 212, 0.2); padding: 2px 6px; border-radius: 4px; color: #0891b2;">{new_license.license_key}</code></p>
-                                    <p style="margin: 4px 0; color: #374151;"><strong>Expires At:</strong> {new_license.expires_at.strftime('%B %d, %Y')}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.id}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>License Key:</strong> <code style="background-color: rgba(6, 182, 212, 0.15); padding: 2px 6px; border-radius: 4px; color: #06b6d4;">{new_license.license_key}</code></p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Expires At:</strong> {new_license.expires_at.strftime('%B %d, %Y')}</p>
                                 </div>
                                 
                                 <p>You can now access your license and start trading with our AI Expert Advisor.</p>
@@ -461,9 +461,9 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                                 <p>Your license has been <strong style="color: #10b981;">extended</strong>!</p>
                                 <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
                                     <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">Extension Details:</p>
-                                    <p style="margin: 4px 0; color: #374151;"><strong>Plan:</strong> {obj.plan.name}</p>
-                                    <p style="margin: 4px 0; color: #374151;"><strong>Added:</strong> +{obj.plan.duration_days} days</p>
-                                    <p style="margin: 4px 0; color: #374151;"><strong>New Expiry:</strong> {lic.expires_at.strftime('%B %d, %Y')}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Added:</strong> +{obj.plan.duration_days} days</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>New Expiry:</strong> {lic.expires_at.strftime('%B %d, %Y')}</p>
                                 </div>
                             """,
                             cta_text='OPEN DASHBOARD',
@@ -680,10 +680,10 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                             
                             <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
                                 <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">License Details:</p>
-                                <p style="margin: 4px 0; color: #374151;"><strong>Request ID:</strong> #{obj.id}</p>
-                                <p style="margin: 4px 0; color: #374151;"><strong>Plan:</strong> {obj.plan.name}</p>
-                                <p style="margin: 4px 0; color: #374151;"><strong>License Key:</strong> <code style="background-color: rgba(6, 182, 212, 0.2); padding: 2px 6px; border-radius: 4px; color: #0891b2;">{new_license.license_key}</code></p>
-                                <p style="margin: 4px 0; color: #374151;"><strong>Expires At:</strong> {new_license.expires_at.strftime('%B %d, %Y')}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Request ID:</strong> #{obj.id}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>License Key:</strong> <code style="background-color: rgba(6, 182, 212, 0.15); padding: 2px 6px; border-radius: 4px; color: #06b6d4;">{new_license.license_key}</code></p>
+                                <p style="margin: 4px 0; color: #d1d5db;"><strong>Expires At:</strong> {new_license.expires_at.strftime('%B %d, %Y')}</p>
                             </div>
                             
                             <p>You can now access your license and start trading with our AI Expert Advisor.</p>
