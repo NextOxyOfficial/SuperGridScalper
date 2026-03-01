@@ -2,9 +2,9 @@
 
 import { DashboardProvider, useDashboard } from './context';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
-import { Bot, Store, Gift, Download, X, Bell, Users, Star, Flame, Crown, Shield as ShieldIcon, Gem, Rocket, Trophy, Zap, Clock, TrendingUp } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect, useTransition } from 'react';
+import { Bot, Store, Gift, Download, X, Bell, Users, Star, Flame, Crown, Shield as ShieldIcon, Gem, Rocket, Trophy, Zap, Clock, TrendingUp, Loader2 } from 'lucide-react';
 import SiteLogo from '@/components/SiteLogo';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
@@ -128,9 +128,21 @@ function UserBadges({ email }: { email: string }) {
 }
 
 function DashboardNav() {
-  const { user, selectedLicense, logout, clearSelectedLicense } = useDashboard();
+  const { user, selectedLicense, clearSelectedLicense, logout } = useDashboard();
   const pathname = usePathname();
-  
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [loadingPath, setLoadingPath] = useState<string | null>(null);
+
+  const handleNavClick = (e: React.MouseEvent, href: string) => {
+    e.preventDefault();
+    setLoadingPath(href);
+    startTransition(() => {
+      router.push(href);
+      setTimeout(() => setLoadingPath(null), 500);
+    });
+  };
+
   const getDaysRemaining = (lic: any) => {
     if (!lic?.expires_at) return 0;
     const expires = new Date(lic.expires_at);

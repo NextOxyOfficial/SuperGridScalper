@@ -542,40 +542,63 @@ export default function FundManagerDetailPage() {
                 Login to Subscribe — ${fm.monthly_price}/mo
               </button>
             ) : mySubscription?.is_active ? (
-              <div className="flex flex-col gap-2 w-full sm:w-auto">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-                  <div className="flex items-center gap-2 bg-green-500/10 text-green-400 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-green-500/20 justify-center">
-                    <Check className="w-4 h-4" />
-                    <span className="text-sm font-medium">Subscribed ({mySubscription.days_remaining}d remaining)</span>
+              <div className="w-full space-y-3">
+                {/* Subscription Status Header */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-green-500/5 to-cyan-500/5 border border-green-500/20 rounded-xl p-3 sm:p-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-lg bg-green-500/10 border border-green-500/30 flex items-center justify-center">
+                      <Check className="w-5 h-5 text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>Active Subscription</p>
+                      <p className="text-green-400 text-xs">{mySubscription.days_remaining} days remaining</p>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => { setSelectedLicenses([]); setShowSubscribeModal(true); }}
-                    className="text-cyan-400 hover:text-cyan-300 text-sm px-3 py-2 border border-cyan-500/20 rounded-lg hover:bg-cyan-500/10 transition"
-                  >
-                    + Add More Licenses
-                  </button>
-                  <button
-                    onClick={() => { setUnsubError(''); setUnsubPassword(''); setShowUnsubscribeModal(true); }}
-                    className="text-red-400 hover:text-red-300 text-sm px-3 py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition"
-                  >
-                    Unsubscribe
-                  </button>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <button
+                      onClick={() => { setSelectedLicenses([]); setShowSubscribeModal(true); }}
+                      className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      <span className="text-lg leading-none">+</span>
+                      Add Licenses
+                    </button>
+                    <button
+                      onClick={() => { setUnsubError(''); setUnsubPassword(''); setShowUnsubscribeModal(true); }}
+                      className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all"
+                      style={{ fontFamily: 'Orbitron, sans-serif' }}
+                    >
+                      Unsubscribe
+                    </button>
+                  </div>
                 </div>
+
+                {/* MT5 Accounts Grid */}
                 {mySubscription.assigned_accounts?.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-1">
-                    {mySubscription.assigned_accounts.map((a: any) => (
-                      <span key={a.id} className="group inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 hover:border-red-500/30 hover:bg-red-500/5 transition-all">
-                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.is_ea_active ? 'bg-green-400' : 'bg-red-400'}`} />
-                        MT5: {a.mt5_account || 'Unbound'}
-                        <button
-                          onClick={() => handleUnassignLicense(a.license_id, a.mt5_account)}
-                          className="ml-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-gray-500 hover:text-red-400 hover:bg-red-500/20 transition-all opacity-60 group-hover:opacity-100"
-                          title="Remove this account"
-                        >
-                          <X className="w-2.5 h-2.5" />
-                        </button>
-                      </span>
-                    ))}
+                  <div>
+                    <p className="text-gray-400 text-xs font-semibold mb-2 uppercase tracking-wider" style={{ fontFamily: 'Orbitron, sans-serif' }}>Managed MT5 Accounts ({mySubscription.assigned_accounts.length})</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {mySubscription.assigned_accounts.map((a: any) => (
+                        <div key={a.id} className="group relative bg-[#0a0a0f] border border-cyan-500/20 rounded-lg p-3 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/10 transition-all">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${a.is_ea_active ? 'bg-green-400 shadow-lg shadow-green-400/50' : 'bg-red-400 shadow-lg shadow-red-400/50'}`} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-white font-bold text-xs truncate" style={{ fontFamily: 'Orbitron, sans-serif' }}>{a.mt5_account || 'Unbound'}</p>
+                                <p className="text-gray-500 text-[10px]">{a.is_ea_active ? 'EA Active' : 'EA Stopped'}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleUnassignLicense(a.license_id, a.mt5_account)}
+                              className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all"
+                              title="Remove this account"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
