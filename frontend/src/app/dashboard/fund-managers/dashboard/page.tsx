@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDashboard } from '../../context';
 import { useRouter } from 'next/navigation';
 import {
@@ -36,10 +36,26 @@ export default function FMDashboardPage() {
   const [expandedSub, setExpandedSub] = useState<number | null>(null);
   const [cancellingSubId, setCancellingSubId] = useState<number | null>(null);
   const [positionsModal, setPositionsModal] = useState<{ subscriber: string; positions: any[] } | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
     fetchDashboard();
     fetchSchedules();
+
+    // Auto-refresh every 10 seconds for real-time trading updates
+    refreshIntervalRef.current = setInterval(() => {
+      if (isMountedRef.current) {
+        silentRefresh();
+      }
+    }, 10000);
+
+    return () => {
+      isMountedRef.current = false;
+      if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
+    };
   }, []);
 
   const cancelSubscriber = async (subscriptionId: number, userEmail: string) => {
@@ -102,6 +118,7 @@ export default function FMDashboardPage() {
       const data = await res.json();
       if (data.success) {
         setDashboard(data.dashboard);
+        setLastUpdated(new Date());
       } else {
         // Not a fund manager - redirect
         router.push('/dashboard/fund-managers');
@@ -110,6 +127,24 @@ export default function FMDashboardPage() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Silent refresh — updates data without showing loading spinner
+  const silentRefresh = async () => {
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/dashboard/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      });
+      const data = await res.json();
+      if (data.success && isMountedRef.current) {
+        setDashboard(data.dashboard);
+        setLastUpdated(new Date());
+      }
+    } catch {
+      // Silent fail — don't interrupt user
     }
   };
 
@@ -261,10 +296,17 @@ export default function FMDashboardPage() {
             <button onClick={() => router.push('/dashboard/fund-managers')} className="text-cyan-400 hover:text-cyan-300 text-xs mb-1 flex items-center gap-1">
               <ArrowLeft className="w-3.5 h-3.5" /> Back
             </button>
-            <h1 className="text-xl sm:text-2xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+            <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
               FM Dashboard
+              <span className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-green-400 text-[9px] font-medium" style={{ fontFamily: 'inherit' }}>LIVE</span>
+              </span>
             </h1>
             <p className="text-gray-400 text-xs sm:text-sm">{profile.display_name} • {profile.tier} tier</p>
+            {lastUpdated && (
+              <p className="text-gray-600 text-[10px]">Updated {lastUpdated.toLocaleTimeString()}</p>
+            )}
             {avatarError && <p className="text-red-400 text-xs mt-1">{avatarError}</p>}
             <button
               onClick={() => router.push(`/dashboard/fund-managers/${profile.id}`)}
