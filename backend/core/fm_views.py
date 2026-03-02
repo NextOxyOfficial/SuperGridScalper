@@ -327,6 +327,18 @@ def subscribe_to_fm(request):
             current_period_end=timezone.now() + timedelta(days=period_days),
         )
     
+    # Determine the FM's current bot state from existing assignments
+    # If FM has all bots stopped, new assignments should also start stopped
+    existing_assignments = FMAccountAssignment.objects.filter(
+        subscription__fund_manager=fm,
+        subscription__status__in=['active', 'trial'],
+    )
+    if existing_assignments.exists():
+        # Use majority state — if most are stopped, FM is in stop mode
+        fm_bot_active = existing_assignments.filter(is_ea_active=True).count() >= existing_assignments.filter(is_ea_active=False).count()
+    else:
+        fm_bot_active = True  # Default: FM bots are running
+
     # Assign licenses — strictly enforce 1 license = 1 FM
     assigned = []
     already_used = []
@@ -348,12 +360,23 @@ def subscribe_to_fm(request):
             assignment, created = FMAccountAssignment.objects.get_or_create(
                 subscription=subscription,
                 license=lic,
-                defaults={'is_ea_active': True}
+                defaults={
+                    'is_ea_active': fm_bot_active,
+                    'last_toggled_reason': 'Inherited FM bot state on subscribe' if not fm_bot_active else '',
+                }
             )
-            # If license was user-stopped (suspended), reactivate it — FM now controls the on/off state
-            if lic.status == 'suspended' and lic.expires_at and lic.expires_at > timezone.now():
-                lic.status = 'active'
-                lic.save(update_fields=['status', 'updated_at'])
+            # Sync license status with FM's current bot state
+            now = timezone.now()
+            if fm_bot_active:
+                # FM bots are running — activate license if it was suspended
+                if lic.status == 'suspended' and lic.expires_at and lic.expires_at > now:
+                    lic.status = 'active'
+                    lic.save(update_fields=['status', 'updated_at'])
+            else:
+                # FM bots are stopped — suspend license if it was active
+                if lic.status == 'active':
+                    lic.status = 'suspended'
+                    lic.save(update_fields=['status', 'updated_at'])
             assigned.append({
                 'license_id': lic.id,
                 'mt5_account': lic.mt5_account,
@@ -653,16 +676,36 @@ def assign_license_to_fm(request):
         fm_name = conflicting.subscription.fund_manager.display_name
         return JsonResponse({'success': False, 'error': f'This license is already assigned to Fund Manager "{fm_name}". One license can only be managed by one FM at a time.'}, status=400)
     
+    # Determine FM's current bot state from existing assignments
+    fm = sub.fund_manager
+    existing_fm_assignments = FMAccountAssignment.objects.filter(
+        subscription__fund_manager=fm,
+        subscription__status__in=['active', 'trial'],
+    )
+    if existing_fm_assignments.exists():
+        fm_bot_active = existing_fm_assignments.filter(is_ea_active=True).count() >= existing_fm_assignments.filter(is_ea_active=False).count()
+    else:
+        fm_bot_active = True
+
     assignment, created = FMAccountAssignment.objects.get_or_create(
         subscription=sub,
         license=lic,
-        defaults={'is_ea_active': True}
+        defaults={
+            'is_ea_active': fm_bot_active,
+            'last_toggled_reason': 'Inherited FM bot state on assign' if not fm_bot_active else '',
+        }
     )
     
-    # If license was user-stopped (suspended), reactivate it — FM now controls the on/off state
-    if lic.status == 'suspended' and lic.expires_at and lic.expires_at > timezone.now():
-        lic.status = 'active'
-        lic.save(update_fields=['status', 'updated_at'])
+    # Sync license status with FM's current bot state
+    now = timezone.now()
+    if fm_bot_active:
+        if lic.status == 'suspended' and lic.expires_at and lic.expires_at > now:
+            lic.status = 'active'
+            lic.save(update_fields=['status', 'updated_at'])
+    else:
+        if lic.status == 'active':
+            lic.status = 'suspended'
+            lic.save(update_fields=['status', 'updated_at'])
     
     return JsonResponse({
         'success': True,
