@@ -341,21 +341,27 @@ export default function FMDashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
-        {[
-          { label: 'Active Subs', value: stats.active_subscribers, icon: Users, color: 'text-cyan-400' },
-          { label: 'Trial Subs', value: stats.trial_subscribers, icon: Clock, color: 'text-yellow-400' },
-          { label: 'Balance', value: `$${parseFloat(stats.total_managed_balance).toLocaleString()}`, icon: DollarSign, color: 'text-green-400' },
-          { label: 'Equity', value: `$${parseFloat(stats.total_managed_equity).toLocaleString()}`, icon: BarChart3, color: 'text-blue-400' },
-          { label: 'Monthly Rev', value: `$${parseFloat(stats.monthly_revenue).toLocaleString()}`, icon: TrendingUp, color: 'text-purple-400' },
-          { label: 'Net Earnings', value: `$${parseFloat(stats.net_earnings).toLocaleString()}`, icon: DollarSign, color: 'text-emerald-400' },
-        ].map((s, i) => (
-          <div key={i} className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-4">
-            <s.icon className={`w-5 h-5 ${s.color} mb-2`} />
-            <div className={`${s.color} font-bold text-lg`}>{s.value}</div>
-            <div className="text-gray-500 text-xs">{s.label}</div>
-          </div>
-        ))}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+        {(() => {
+          const totalProfit = subscribers.reduce((sum: number, sub: any) => {
+            return sum + sub.accounts.reduce((accSum: number, acc: any) => accSum + parseFloat(acc.profit || '0'), 0);
+          }, 0);
+          return [
+            { label: 'Active Subs', value: stats.active_subscribers, icon: Users, color: 'text-cyan-400' },
+            { label: 'Trial Subs', value: stats.trial_subscribers, icon: Clock, color: 'text-yellow-400' },
+            { label: 'Balance', value: `$${parseFloat(stats.total_managed_balance).toLocaleString()}`, icon: DollarSign, color: 'text-green-400' },
+            { label: 'Equity', value: `$${parseFloat(stats.total_managed_equity).toLocaleString()}`, icon: BarChart3, color: 'text-blue-400' },
+            { label: 'Total P/L', value: `$${totalProfit.toFixed(2)}`, icon: TrendingUp, color: totalProfit >= 0 ? 'text-green-400' : 'text-red-400' },
+            { label: 'Monthly Rev', value: `$${parseFloat(stats.monthly_revenue).toLocaleString()}`, icon: TrendingUp, color: 'text-purple-400' },
+            { label: 'Net Earnings', value: `$${parseFloat(stats.net_earnings).toLocaleString()}`, icon: DollarSign, color: 'text-emerald-400' },
+          ].map((s, i) => (
+            <div key={i} className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-4">
+              <s.icon className={`w-5 h-5 ${s.color} mb-2`} />
+              <div className={`${s.color} font-bold text-lg`}>{s.value}</div>
+              <div className="text-gray-500 text-xs">{s.label}</div>
+            </div>
+          ));
+        })()}
       </div>
 
       {/* Section Tabs */}
@@ -413,17 +419,6 @@ export default function FMDashboardPage() {
                         )}
                       </div>
                       <div className="text-gray-500 text-xs truncate">{sub.user_email} · {sub.accounts.length} account(s)</div>
-                      {(() => {
-                        const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
-                        return (
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-gray-500 text-[10px]">Total P/L:</span>
-                            <span className={`text-xs font-bold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              ${totalProfit.toFixed(2)}
-                            </span>
-                          </div>
-                        );
-                      })()}
                       {sub.subscriber_fm_id && (
                         <div className="text-purple-400 text-[10px] mt-0.5">Tap to view FM profile →</div>
                       )}
