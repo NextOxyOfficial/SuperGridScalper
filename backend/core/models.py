@@ -1253,17 +1253,27 @@ class TradingWaveAlert(models.Model):
         return self.get_mode_display()
 
     def save(self, *args, **kwargs):
-        # Detect if alert is being newly activated
+        # Detect if alert is being newly activated by comparing with DB state
         newly_activated = False
-        if self.is_active and not self.activated_at:
-            self.activated_at = timezone.now()
+        if self.pk:
+            try:
+                old = TradingWaveAlert.objects.get(pk=self.pk)
+                if self.is_active and not old.is_active:
+                    newly_activated = True
+            except TradingWaveAlert.DoesNotExist:
+                if self.is_active:
+                    newly_activated = True
+        elif self.is_active:
             newly_activated = True
+
+        if self.is_active and (not self.activated_at or newly_activated):
+            self.activated_at = timezone.now()
         elif not self.is_active:
             self.activated_at = None
         super().save(*args, **kwargs)
 
-        # Send email to active license users when medium/high alert is newly activated
-        if newly_activated and self.mode in ('medium', 'high'):
+        # Send email to active license users when any alert is newly activated
+        if newly_activated:
             try:
                 from core.utils import send_wave_alert_emails
                 send_wave_alert_emails(self.mode, self.minutes_before, self.tips)
