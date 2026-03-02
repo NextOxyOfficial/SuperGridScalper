@@ -413,6 +413,17 @@ export default function FMDashboardPage() {
                         )}
                       </div>
                       <div className="text-gray-500 text-xs truncate">{sub.user_email} · {sub.accounts.length} account(s)</div>
+                      {(() => {
+                        const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
+                        return (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-gray-500 text-[10px]">Total P/L:</span>
+                            <span className={`text-xs font-bold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              ${totalProfit.toFixed(2)}
+                            </span>
+                          </div>
+                        );
+                      })()}
                       {sub.subscriber_fm_id && (
                         <div className="text-purple-400 text-[10px] mt-0.5">Tap to view FM profile →</div>
                       )}
