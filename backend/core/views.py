@@ -2966,6 +2966,13 @@ def toggle_license_status(request):
             return JsonResponse({'success': False, 'message': f'Cannot deactivate: license is {license_obj.status}'})
         license_obj.status = 'suspended'
         license_obj.save(update_fields=['status', 'updated_at'])
+        # Also sync FM assignment if this license is under FM control
+        from core.models import FMAccountAssignment
+        FMAccountAssignment.objects.filter(
+            license=license_obj,
+            subscription__status__in=['active', 'trial'],
+            is_ea_active=True,
+        ).update(is_ea_active=False, last_toggled_reason='Robot stopped by user')
         
         # Send email notification for robot stop
         try:
@@ -3009,7 +3016,7 @@ def toggle_license_status(request):
         # Check if not expired
         if license_obj.expires_at < timezone.now():
             return JsonResponse({'success': False, 'message': 'Cannot activate: license has expired'})
-        # Block reactivation if FM stopped this license
+        # Check if this license is under FM control
         from core.models import FMAccountAssignment
         fm_assignment = FMAccountAssignment.objects.filter(
             license=license_obj,
@@ -3017,8 +3024,14 @@ def toggle_license_status(request):
             is_ea_active=False,
         ).select_related('subscription__fund_manager').first()
         if fm_assignment:
-            fm_name = fm_assignment.subscription.fund_manager.display_name
-            return JsonResponse({'success': False, 'message': f'This license is controlled by Fund Manager "{fm_name}". Only the FM can restart your robot.'}, status=403)
+            # If FM stopped it (not user), block reactivation
+            if fm_assignment.last_toggled_reason and 'stopped by user' not in fm_assignment.last_toggled_reason.lower():
+                fm_name = fm_assignment.subscription.fund_manager.display_name
+                return JsonResponse({'success': False, 'message': f'This license is controlled by Fund Manager "{fm_name}". Only the FM can restart your robot.'}, status=403)
+            # User stopped it themselves — allow reactivation and sync FM assignment
+            fm_assignment.is_ea_active = True
+            fm_assignment.last_toggled_reason = 'Robot restarted by user'
+            fm_assignment.save(update_fields=['is_ea_active', 'last_toggled_reason', 'last_toggled_at'])
         license_obj.status = 'active'
         license_obj.save(update_fields=['status', 'updated_at'])
         

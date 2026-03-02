@@ -332,7 +332,7 @@ def subscribe_to_fm(request):
     already_used = []
     for lic_id in license_ids:
         try:
-            lic = License.objects.get(id=lic_id, user=user, status='active')
+            lic = License.objects.get(id=lic_id, user=user, status__in=['active', 'suspended'])
             # Check if this license is already assigned to a DIFFERENT active FM subscription
             conflicting = FMAccountAssignment.objects.filter(
                 license=lic,
@@ -350,6 +350,10 @@ def subscribe_to_fm(request):
                 license=lic,
                 defaults={'is_ea_active': True}
             )
+            # If license was user-stopped (suspended), reactivate it — FM now controls the on/off state
+            if lic.status == 'suspended' and lic.expires_at and lic.expires_at > timezone.now():
+                lic.status = 'active'
+                lic.save(update_fields=['status', 'updated_at'])
             assigned.append({
                 'license_id': lic.id,
                 'mt5_account': lic.mt5_account,
@@ -375,7 +379,7 @@ def subscribe_to_fm(request):
         if already_used:
             msg = 'All selected licenses are already assigned to other fund managers. One license can only be managed by one FM at a time.'
         else:
-            msg = 'No valid active license could be assigned. Please select an active MT5 license.'
+            msg = 'No valid license could be assigned. Please select an active or stopped MT5 license.'
         return JsonResponse({
             'success': False,
             'error': msg,
@@ -636,9 +640,9 @@ def assign_license_to_fm(request):
         return JsonResponse({'success': False, 'error': 'Subscription is not active'}, status=400)
     
     try:
-        lic = License.objects.get(id=license_id, user=user, status='active')
+        lic = License.objects.get(id=license_id, user=user, status__in=['active', 'suspended'])
     except License.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'License not found'}, status=404)
+        return JsonResponse({'success': False, 'error': 'License not found or expired'}, status=404)
     
     # Check if this license is already assigned to a DIFFERENT active FM subscription
     conflicting = FMAccountAssignment.objects.filter(
@@ -654,6 +658,11 @@ def assign_license_to_fm(request):
         license=lic,
         defaults={'is_ea_active': True}
     )
+    
+    # If license was user-stopped (suspended), reactivate it — FM now controls the on/off state
+    if lic.status == 'suspended' and lic.expires_at and lic.expires_at > timezone.now():
+        lic.status = 'active'
+        lic.save(update_fields=['status', 'updated_at'])
     
     return JsonResponse({
         'success': True,

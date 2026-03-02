@@ -956,16 +956,24 @@ export default function FundManagerDetailPage() {
                 : `$${fm.monthly_price}/month`}
             </p>
 
+            {/* FM Bot Stop Warning */}
+            <div className="mb-3 p-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+              <p className="text-yellow-400 text-[11px] leading-relaxed">
+                <span className="font-bold">⚠️ Important:</span> Once subscribed, the Fund Manager controls your robot's on/off state. If the FM stops your bot, any open positions may be closed. You can unsubscribe anytime to regain full control.
+              </p>
+            </div>
+
             <div className="mb-4">
               <label className="text-gray-300 text-sm font-medium block mb-2">Select MT5 accounts to assign:</label>
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {licenses.filter((l: any) => l.status === 'active').length === 0 ? (
-                  <p className="text-gray-500 text-sm py-3 text-center">No active MT5 licenses found.</p>
-                ) : licenses.filter((l: any) => l.status === 'active').map((lic: any) => {
+                {licenses.filter((l: any) => l.status === 'active' || l.status === 'suspended').length === 0 ? (
+                  <p className="text-gray-500 text-sm py-3 text-center">No MT5 licenses found.</p>
+                ) : licenses.filter((l: any) => l.status === 'active' || l.status === 'suspended').map((lic: any) => {
                   const licenseId = Number(lic.id);
                   const hasValidId = Number.isFinite(licenseId) && licenseId > 0;
                   const usedByFM = usedLicenseMap[lic.id];
                   const isUsed = !!usedByFM;
+                  const isStopped = lic.status === 'suspended';
                   const isDisabled = isUsed || !hasValidId;
                   return (
                     <label
@@ -992,7 +1000,11 @@ export default function FundManagerDetailPage() {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isStopped ? 'bg-red-400' : 'bg-green-400'}`} />
                           <span className="text-white text-sm font-medium">MT5: {lic.mt5_account || 'Unbound'}</span>
+                          {isStopped && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-semibold">STOPPED</span>
+                          )}
                           {lic.account_balance != null && (
                             <span className="text-green-400 text-xs font-semibold">${parseFloat(lic.account_balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           )}
@@ -1005,7 +1017,7 @@ export default function FundManagerDetailPage() {
                         ) : !hasValidId ? (
                           <div className="text-red-400 text-[10px] mt-0.5">License metadata missing (refresh required)</div>
                         ) : (
-                          <div className="text-gray-500 text-xs">{lic.plan} · {lic.license_key?.slice(0, 12)}...</div>
+                          <div className="text-gray-500 text-xs">{lic.plan} · {lic.license_key?.slice(0, 12)}...{isStopped ? ' · Robot stopped by you' : ''}</div>
                         )}
                       </div>
                     </label>
