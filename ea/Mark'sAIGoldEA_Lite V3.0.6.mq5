@@ -20,8 +20,8 @@ input int       CachedLicenseMaxAgeHours = 24;
 input double    MaxDrawdownAmount = 0.0;  // Max loss in $ (0 = disabled). e.g. 200 means close all if loss >= $200
 
 //--- Per Order Stop Loss (0 = disabled)
-input double    BuyStopLossPips  = 0.0;   // Buy SL in pips (0 = no SL)
-input double    SellStopLossPips = 0.0;   // Sell SL in pips (0 = no SL)
+input double    BuyStopLossPips  = 120.0;   // Buy SL in pips (0 = no SL)
+input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       2001.0

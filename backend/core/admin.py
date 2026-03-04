@@ -1251,7 +1251,7 @@ class EAProductAdmin(admin.ModelAdmin):
             import threading
             from django.utils import timezone
             from django.contrib.auth.models import User
-            from core.utils import render_email_template, get_email_from_address, add_email_headers, should_send_email
+            from core.utils import render_email_template, get_email_from_address, add_email_headers, can_send_email_to_user
             from django.core.mail import EmailMultiAlternatives
             
             obj.last_update_notified_at = timezone.now()
@@ -1299,16 +1299,16 @@ class EAProductAdmin(admin.ModelAdmin):
             )
             
             from_email = get_email_from_address()
-            emails = list(User.objects.filter(is_active=True).values_list('email', flat=True))
+            users = list(User.objects.filter(is_active=True).only('id', 'email'))
             
             def _send_notifications():
-                for email in emails:
-                    if not email:
+                for user in users:
+                    if not user.email:
                         continue
                     try:
-                        if not should_send_email(email, 'transactional'):
+                        if not can_send_email_to_user(user, 'transactional'):
                             continue
-                        msg = EmailMultiAlternatives(subject, f'{ea_name} v{ea_version} update available', from_email, [email])
+                        msg = EmailMultiAlternatives(subject, f'{ea_name} v{ea_version} update available', from_email, [user.email])
                         msg.attach_alternative(html, "text/html")
                         msg = add_email_headers(msg, 'transactional')
                         msg.send(fail_silently=True)
@@ -1316,7 +1316,7 @@ class EAProductAdmin(admin.ModelAdmin):
                         pass
             
             threading.Thread(target=_send_notifications, daemon=True).start()
-            self.message_user(request, f'✅ Update notification is being sent to {len(emails)} users in the background!')
+            self.message_user(request, f'✅ Update notification is being sent to {len(users)} users in the background!')
 
 
 # ==================== REFERRAL SYSTEM ADMIN ====================
