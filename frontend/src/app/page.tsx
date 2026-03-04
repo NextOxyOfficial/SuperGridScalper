@@ -33,7 +33,7 @@ interface LicenseResult {
 
 const STEP_DURATION = 4000;
 
-function StepsSlideshow({ router }: { router: any }) {
+function StepsSlideshow({ router, plans }: { router: any; plans: Plan[] }) {
   const [activeStep, setActiveStep] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
@@ -150,10 +150,10 @@ function StepsSlideshow({ router }: { router: any }) {
             <p className="text-gray-300 text-sm sm:text-base leading-relaxed mb-1">Choose a subscription plan, complete payment, and get your license key activated instantly.</p>
             <p className="text-gray-500 text-xs sm:text-sm mb-4">Enter the license key in your EA settings → The AI starts trading automatically for you.</p>
             <div className="flex flex-wrap gap-3 justify-center md:justify-start mb-4">
-              {[{label:'Weekly', price:'$19'}, {label:'Monthly', price:'$49'}, {label:'Yearly', price:'$299'}].map(p => (
-                <div key={p.label} className="bg-green-500/10 border border-green-500/20 rounded-lg px-3 sm:px-4 py-2 text-center">
-                  <p className="text-green-400 font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>{p.price}</p>
-                  <p className="text-gray-500 text-[10px] sm:text-xs">{p.label}</p>
+              {plans.map(p => (
+                <div key={p.id} className="bg-green-500/10 border border-green-500/20 rounded-lg px-3 sm:px-4 py-2 text-center">
+                  <p className="text-green-400 font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>${parseFloat(p.price).toFixed(0)}</p>
+                  <p className="text-gray-500 text-[10px] sm:text-xs">{p.name}</p>
                 </div>
               ))}
             </div>
@@ -1508,7 +1508,7 @@ export default function Home() {
       <div className="relative z-10 container mx-auto px-3 sm:px-4">
 
         {/* Progress Steps - Auto-Playing Tab Slideshow */}
-        <StepsSlideshow router={router} />
+        <StepsSlideshow router={router} plans={plans} />
 
         {/* FM Engine Section */}
         <FMEngineSection router={router} />
