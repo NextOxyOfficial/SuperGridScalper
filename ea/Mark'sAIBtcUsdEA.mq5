@@ -16,6 +16,10 @@ input string    TesterAccountOverride = "";
 input bool      UseCachedLicenseInTester = true;
 input int       CachedLicenseMaxAgeHours = 24;
 
+//--- Per Order Stop Loss (0 = disabled)
+input double    BuyStopLossPips  = 0.0;   // Buy SL in pips (0 = no SL)
+input double    SellStopLossPips = 0.0;   // Sell SL in pips (0 = no SL)
+
 //--- All Settings Hardcoded (Hidden from user)
 // BTCUSD Range (pip = 100.0, so 68600 to 68700 = 1 pip, 68800 = 2 pip)
 #define BuyRangeStart       10000.0
@@ -23,14 +27,12 @@ input int       CachedLicenseMaxAgeHours = 24;
 #define BuyGapPips          5.0
 #define MaxBuyOrders        5
 #define BuyTakeProfitPips   15
-#define BuyStopLossPips     0.0
 
 #define SellRangeStart      150000.0
 #define SellRangeEnd        10000.0
 #define SellGapPips         6.0
 #define MaxSellOrders       5
 #define SellTakeProfitPips  15
-#define SellStopLossPips    0.0
 
 #define BuyRecoveryGapPips   5
 #define SellRecoveryGapPips  6

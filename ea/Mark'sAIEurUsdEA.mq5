@@ -16,6 +16,10 @@ input string    TesterAccountOverride = "";
 input bool      UseCachedLicenseInTester = true;
 input int       CachedLicenseMaxAgeHours = 24;
 
+//--- Per Order Stop Loss (0 = disabled)
+input double    BuyStopLossPips  = 0.0;   // Buy SL in pips (0 = no SL)
+input double    SellStopLossPips = 0.0;   // Sell SL in pips (0 = no SL)
+
 //--- All Settings Hardcoded (Hidden from user)
 // EURUSD Range (pip = 0.0001, so 1.18200 to 1.18210 = 1 pip)
 #define BuyRangeStart       1.00000
@@ -23,14 +27,12 @@ input int       CachedLicenseMaxAgeHours = 24;
 #define BuyGapPips          5.0
 #define MaxBuyOrders        5
 #define BuyTakeProfitPips   15
-#define BuyStopLossPips     0.0
 
 #define SellRangeStart      1.50000
 #define SellRangeEnd        1.00000
 #define SellGapPips         6.0
 #define MaxSellOrders       5
 #define SellTakeProfitPips  15
-#define SellStopLossPips    0.0
 
 #define BuyRecoveryGapPips   5
 #define SellRecoveryGapPips  6

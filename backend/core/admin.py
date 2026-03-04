@@ -1248,6 +1248,7 @@ class EAProductAdmin(admin.ModelAdmin):
         
         # If notify checkbox was checked, send update email to all users
         if form.cleaned_data.get('notify_all_users'):
+            import threading
             from django.utils import timezone
             from django.contrib.auth.models import User
             from core.utils import render_email_template, get_email_from_address, add_email_headers, should_send_email
@@ -1257,6 +1258,12 @@ class EAProductAdmin(admin.ModelAdmin):
             obj.save(update_fields=['last_update_notified_at'])
             
             base_url = 'https://markstrades.com'
+            
+            # Determine best download URL
+            download_url = (obj.external_download_url or '').strip()
+            if not download_url:
+                download_url = f'{base_url}/ea-store'
+            
             changelog_html = ''
             if obj.changelog:
                 items = [line.strip() for line in obj.changelog.strip().split('\n') if line.strip()]
@@ -1266,47 +1273,50 @@ class EAProductAdmin(admin.ModelAdmin):
                         changelog_html += f'<li>{item}</li>'
                     changelog_html += '</ul>'
             
-            subject = f'🔄 EA Update Available - {obj.name} v{obj.version}'
+            ea_name = obj.name
+            ea_version = obj.version
+            subject = f'🔄 EA Update Available - {ea_name} v{ea_version}'
             html = render_email_template(
                 subject=subject,
-                heading=f'🔄 New EA Update: v{obj.version}',
+                heading=f'🔄 {ea_name} v{ea_version}',
                 message=f"""
-                    <p>A new version of <strong>{obj.name}</strong> is now available!</p>
+                    <p style="color:#e5e7eb;font-size:15px;">A new version of <strong>{ea_name}</strong> is now available!</p>
                     
                     <div style="background-color: rgba(6, 182, 212, 0.1); border-left: 3px solid #06b6d4; padding: 14px; margin: 16px 0; border-radius: 4px;">
                         <p style="margin: 0 0 6px 0; color: #06b6d4; font-weight: 600; font-size: 13px;">Update Details:</p>
-                        <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>EA:</strong> {obj.name}</p>
-                        <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>Version:</strong> v{obj.version}</p>
+                        <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>EA:</strong> {ea_name}</p>
+                        <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>New Version:</strong> v{ea_version}</p>
                     </div>
                     
                     {f'<p style="color: #d1d5db; font-size: 13px; margin-top: 12px;"><strong>What\'s new:</strong></p>{changelog_html}' if changelog_html else ''}
                     
                     <p style="margin-top: 16px;"><strong style="color: #f59e0b;">⚠️ Important:</strong> Please download the new version and restart your EA to get the latest features and fixes.</p>
                 """,
-                cta_text='DOWNLOAD UPDATE',
-                cta_url=f'{base_url}/ea-store',
+                cta_text=f'DOWNLOAD {ea_name} v{ea_version}',
+                cta_url=download_url,
                 footer_note='Keep your EA up to date for the best trading performance.',
-                preheader=f'{obj.name} v{obj.version} is now available. Download and update your EA!',
+                preheader=f'{ea_name} v{ea_version} is now available. Download and update your EA!',
             )
             
             from_email = get_email_from_address()
-            users = User.objects.filter(is_active=True).values_list('email', flat=True)
-            sent_count = 0
-            for email in users:
-                if not email:
-                    continue
-                try:
-                    if not should_send_email(email, 'transactional'):
-                        continue
-                    msg = EmailMultiAlternatives(subject, f'{obj.name} v{obj.version} update available', from_email, [email])
-                    msg.attach_alternative(html, "text/html")
-                    msg = add_email_headers(msg, 'transactional')
-                    msg.send(fail_silently=True)
-                    sent_count += 1
-                except Exception:
-                    pass
+            emails = list(User.objects.filter(is_active=True).values_list('email', flat=True))
             
-            self.message_user(request, f'✅ Update notification sent to {sent_count} users!')
+            def _send_notifications():
+                for email in emails:
+                    if not email:
+                        continue
+                    try:
+                        if not should_send_email(email, 'transactional'):
+                            continue
+                        msg = EmailMultiAlternatives(subject, f'{ea_name} v{ea_version} update available', from_email, [email])
+                        msg.attach_alternative(html, "text/html")
+                        msg = add_email_headers(msg, 'transactional')
+                        msg.send(fail_silently=True)
+                    except Exception:
+                        pass
+            
+            threading.Thread(target=_send_notifications, daemon=True).start()
+            self.message_user(request, f'✅ Update notification is being sent to {len(emails)} users in the background!')
 
 
 # ==================== REFERRAL SYSTEM ADMIN ====================
