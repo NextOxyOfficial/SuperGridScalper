@@ -1275,7 +1275,7 @@ class EAProductAdmin(admin.ModelAdmin):
             
             ea_name = obj.name
             ea_version = obj.version
-            subject = f'🔄 EA Update Available - {ea_name} v{ea_version}'
+            subject = f'🔄 New MarksAI EA Version Released - {ea_name} v{ea_version}'
             html = render_email_template(
                 subject=subject,
                 heading=f'🔄 {ea_name} v{ea_version}',

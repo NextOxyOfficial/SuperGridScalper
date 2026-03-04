@@ -36,6 +36,8 @@ export default function FMDashboardPage() {
   const [expandedSub, setExpandedSub] = useState<number | null>(null);
   const [cancellingSubId, setCancellingSubId] = useState<number | null>(null);
   const [positionsModal, setPositionsModal] = useState<{ subscriber: string; positions: any[] } | null>(null);
+  const [deletingScheduleId, setDeletingScheduleId] = useState<number | null>(null);
+  const [creatingSchedule, setCreatingSchedule] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
@@ -216,6 +218,7 @@ export default function FMDashboardPage() {
   };
 
   const createSchedule = async () => {
+    setCreatingSchedule(true);
     try {
       const res = await fetch(`${API_URL}/fund-managers/schedules/`, {
         method: 'POST',
@@ -230,11 +233,14 @@ export default function FMDashboardPage() {
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setCreatingSchedule(false);
     }
   };
 
   const deleteSchedule = async (id: number) => {
     if (!confirm('Delete this schedule?')) return;
+    setDeletingScheduleId(id);
     try {
       await fetch(`${API_URL}/fund-managers/schedules/`, {
         method: 'POST',
@@ -244,6 +250,8 @@ export default function FMDashboardPage() {
       fetchSchedules();
     } catch (err) {
       console.error(err);
+    } finally {
+      setDeletingScheduleId(null);
     }
   };
 
@@ -326,7 +334,7 @@ export default function FMDashboardPage() {
               disabled={togglingAll}
               className="inline-flex items-center gap-2 w-auto bg-green-500/20 text-green-400 px-4 py-2.5 rounded-lg border border-green-500/30 hover:bg-green-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50 flex-shrink-0"
             >
-              {togglingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />} Start Robot
+              {togglingAll ? <><Loader2 className="w-4 h-4 animate-spin" /> Starting...</> : <><Power className="w-4 h-4" /> Start Robot</>}
             </button>
           ) : (
             <button
@@ -334,7 +342,7 @@ export default function FMDashboardPage() {
               disabled={togglingAll}
               className="inline-flex items-center gap-2 w-auto bg-red-500/20 text-red-400 px-4 py-2.5 rounded-lg border border-red-500/30 hover:bg-red-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50 flex-shrink-0"
             >
-              {togglingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <PowerOff className="w-4 h-4" />} Stop Robot
+              {togglingAll ? <><Loader2 className="w-4 h-4 animate-spin" /> Stopping...</> : <><PowerOff className="w-4 h-4" /> Stop Robot</>}
             </button>
           );
         })()}
@@ -556,7 +564,7 @@ export default function FMDashboardPage() {
                                   : 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
                               }`}
                             >
-                              {togglingId === acc.assignment_id ? <Loader2 className="w-3 h-3 animate-spin" /> : acc.is_ea_active ? 'Stop' : 'Start'}
+                              {togglingId === acc.assignment_id ? <><Loader2 className="w-3 h-3 animate-spin" /> {acc.is_ea_active ? 'Stopping...' : 'Starting...'}</> : acc.is_ea_active ? 'Stop' : 'Start'}
                             </button>
                           </div>
                         </div>
@@ -571,11 +579,10 @@ export default function FMDashboardPage() {
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg text-xs font-medium hover:bg-red-500/20 transition disabled:opacity-50"
                       >
                         {cancellingSubId === sub.subscription_id ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <><Loader2 className="w-3 h-3 animate-spin" /> Cancelling...</>
                         ) : (
-                          <UserX className="w-3 h-3" />
+                          <><UserX className="w-3 h-3" /> Cancel Subscription</>
                         )}
-                        Cancel Subscription
                       </button>
                     </div>
                   </div>
@@ -680,7 +687,9 @@ export default function FMDashboardPage() {
               />
               <div className="flex gap-2">
                 <button onClick={() => setShowScheduleForm(false)} className="px-4 py-2 text-gray-400 border border-gray-700 rounded-lg text-sm">Cancel</button>
-                <button onClick={createSchedule} className="px-4 py-2 bg-cyan-500 text-black rounded-lg text-sm font-bold">Create</button>
+                <button onClick={createSchedule} disabled={creatingSchedule} className="px-4 py-2 bg-cyan-500 text-black rounded-lg text-sm font-bold disabled:opacity-50 flex items-center gap-1.5">
+                  {creatingSchedule ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Creating...</> : 'Create'}
+                </button>
               </div>
             </div>
           )}
@@ -702,8 +711,8 @@ export default function FMDashboardPage() {
                       {s.reason && <div className="text-yellow-400/60 text-[10px]">{s.reason}</div>}
                     </div>
                   </div>
-                  <button onClick={() => deleteSchedule(s.id)} className="text-red-400/50 hover:text-red-400 transition">
-                    <Trash2 className="w-4 h-4" />
+                  <button onClick={() => deleteSchedule(s.id)} disabled={deletingScheduleId === s.id} className="text-red-400/50 hover:text-red-400 transition disabled:opacity-50">
+                    {deletingScheduleId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   </button>
                 </div>
               ))}
@@ -819,7 +828,11 @@ export default function FMDashboardPage() {
                 }`}
                 style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
-                {pendingToggle?.action === 'ea_on' ? 'Start Robot' : 'Stop Robot'}
+                {(togglingAll || togglingId !== null) ? (
+                  <><Loader2 className="w-4 h-4 animate-spin inline mr-1" />{pendingToggle?.action === 'ea_on' ? 'Starting...' : 'Stopping...'}</>
+                ) : (
+                  pendingToggle?.action === 'ea_on' ? 'Start Robot' : 'Stop Robot'
+                )}
               </button>
             </div>
           </div>

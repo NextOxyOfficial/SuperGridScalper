@@ -489,9 +489,11 @@ def unsubscribe_from_fm(request):
     sub.auto_renew = False
     sub.save()
     
-    # Re-enable all assigned accounts (give back control to user)
+    # Collect affected license IDs before deleting assignments
     affected_license_ids = list(sub.assigned_accounts.values_list('license_id', flat=True))
-    sub.assigned_accounts.update(is_ea_active=True)
+
+    # Delete all account assignments — fully release MT5 accounts from FM control
+    sub.assigned_accounts.all().delete()
 
     # If FM had stopped subscriber licenses, restore them to active (unless expired)
     now = timezone.now()
@@ -560,9 +562,11 @@ def fm_cancel_subscriber(request):
     sub.auto_renew = False
     sub.save()
 
-    # Re-enable all assigned accounts (return control to user)
+    # Collect affected license IDs before deleting assignments
     affected_license_ids = list(sub.assigned_accounts.values_list('license_id', flat=True))
-    sub.assigned_accounts.update(is_ea_active=True)
+
+    # Delete all account assignments — fully release MT5 accounts from FM control
+    sub.assigned_accounts.all().delete()
 
     # Restore subscriber licenses if they were FM-stopped (unless expired)
     now = timezone.now()
