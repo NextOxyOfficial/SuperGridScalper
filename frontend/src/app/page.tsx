@@ -490,7 +490,7 @@ export default function Home() {
   const [isDeleting, setIsDeleting] = useState(false)
   
   const typingPhrases = [
-    'Start EA trading with as little as $350 and earn 20%-700% profit every day.',
+    'Start EA trading with as little as $350 and earn 20%-70% profit every day.',
     'Make money on every move. No matter market moves up or down.',
     'The EA manages risk automatically and handles all trades for you.',
     'Fully automated gold trading with AI precision.',
