@@ -139,8 +139,16 @@ int OnInit()
     g_PlanName = "";
     g_DaysRemaining = 0;
     
-    // MANDATORY license verification on startup
-    if(StringLen(LicenseKey) == 0)
+    // Skip license verification in Strategy Tester
+    if(MQLInfoInteger(MQL_TESTER))
+    {
+        g_LicenseValid = true;
+        g_LicenseMessage = "TESTER MODE - NO LICENSE REQUIRED";
+        g_PlanName = "Tester";
+        g_DaysRemaining = 999;
+    }
+    // MANDATORY license verification on startup (live/demo only)
+    else if(StringLen(LicenseKey) == 0)
     {
         g_LicenseMessage = "NO LICENSE KEY";
         Alert("NO LICENSE KEY ENTERED!\n\nPlease enter your license key in EA settings.");
@@ -3619,6 +3627,16 @@ void CloseAllOpenPositions()
 //+------------------------------------------------------------------+
 bool VerifyLicense()
 {
+    // Auto-pass in Strategy Tester
+    if(MQLInfoInteger(MQL_TESTER))
+    {
+        g_LicenseValid = true;
+        g_LicenseMessage = "TESTER MODE";
+        g_PlanName = "Tester";
+        g_DaysRemaining = 999;
+        return true;
+    }
+    
     // Check if license key is empty
     if(StringLen(LicenseKey) == 0)
     {

@@ -349,7 +349,7 @@ export default function FMDashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3 mb-6">
         {(() => {
           const totalProfit = subscribers.reduce((sum: number, sub: any) => {
             return sum + sub.accounts.reduce((accSum: number, acc: any) => accSum + parseFloat(acc.profit || '0'), 0);
@@ -363,10 +363,10 @@ export default function FMDashboardPage() {
             { label: 'Monthly Rev', value: `$${parseFloat(stats.monthly_revenue).toLocaleString()}`, icon: TrendingUp, color: 'text-purple-400' },
             { label: 'Net Earnings', value: `$${parseFloat(stats.net_earnings).toLocaleString()}`, icon: DollarSign, color: 'text-emerald-400' },
           ].map((s, i) => (
-            <div key={i} className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-4">
-              <s.icon className={`w-5 h-5 ${s.color} mb-2`} />
-              <div className={`${s.color} font-bold text-lg`}>{s.value}</div>
-              <div className="text-gray-500 text-xs">{s.label}</div>
+            <div key={i} className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-3 sm:p-4 flex flex-col items-center justify-center text-center min-h-[90px] sm:min-h-[100px]">
+              <s.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${s.color} mb-1.5 sm:mb-2`} />
+              <div className={`${s.color} font-bold text-base sm:text-lg mb-0.5`}>{s.value}</div>
+              <div className="text-gray-500 text-[10px] sm:text-xs">{s.label}</div>
             </div>
           ));
         })()}
@@ -441,8 +441,13 @@ export default function FMDashboardPage() {
                     const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
                     const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account })));
                     const totalPos = totalBuy + totalSell;
+                    const tradingMode = sub.accounts.find((a: any) => a.trading_mode)?.trading_mode || 'Normal';
                     return (
                       <div className="hidden sm:flex items-center gap-3 flex-shrink-0 mx-3">
+                        <div className="text-right">
+                          <div className="text-gray-400 text-[10px]">Mode</div>
+                          <div className={`text-xs font-semibold ${tradingMode === 'Recovery' ? 'text-orange-400' : 'text-cyan-400'}`}>{tradingMode}</div>
+                        </div>
                         <div className="text-right">
                           <div className="text-gray-400 text-[10px]">Balance</div>
                           <div className="text-white text-xs font-semibold">${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
@@ -496,10 +501,15 @@ export default function FMDashboardPage() {
                       const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
                       const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account })));
                       const totalPos = totalBuy + totalSell;
+                      const tradingMode = sub.accounts.find((a: any) => a.trading_mode)?.trading_mode || 'Normal';
                       if (sub.accounts.length === 0 || !sub.accounts.some((a: any) => a.balance)) return null;
                       return (
                         <div className="sm:hidden flex items-center justify-between bg-[#0a0a0f] rounded-lg p-3 border border-gray-800/50">
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <div className="text-gray-500 text-[9px]">Mode</div>
+                              <div className={`text-xs font-semibold ${tradingMode === 'Recovery' ? 'text-orange-400' : 'text-cyan-400'}`}>{tradingMode}</div>
+                            </div>
                             <div>
                               <div className="text-gray-500 text-[9px]">Balance</div>
                               <div className="text-white text-xs font-semibold">${totalBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>

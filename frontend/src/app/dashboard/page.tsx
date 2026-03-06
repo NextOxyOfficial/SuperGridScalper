@@ -1954,9 +1954,9 @@ export default function DashboardHome() {
                 {/* License Key */}
                 <div>
                   <p className="text-gray-500 text-[10px] sm:text-xs mb-1.5">License Key</p>
-                  <div className="flex items-start sm:items-center gap-2">
-                    <p className="font-mono text-[10px] sm:text-xs bg-[#0a0a0f] text-cyan-400 p-2 sm:p-2.5 rounded-lg border border-cyan-500/20 break-all flex-1 leading-relaxed">{selectedLicense.license_key}</p>
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <p className="font-mono text-[10px] sm:text-xs bg-[#0a0a0f] text-cyan-400 p-2 sm:p-2.5 rounded-lg border border-cyan-500/20 break-all sm:flex-1 leading-relaxed">{selectedLicense.license_key}</p>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
                       <button
                         onClick={(e) => {
                           navigator.clipboard.writeText(selectedLicense.license_key);
