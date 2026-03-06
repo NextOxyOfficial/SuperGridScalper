@@ -85,5 +85,6 @@ urlpatterns = [
     path('fund-managers/cancel-subscriber/', fm_views.fm_cancel_subscriber, name='fm_cancel_subscriber'),
     path('fund-managers/chat/media/', fm_views.fm_chat_media_upload, name='fm_chat_media_upload'),
     path('fund-managers/chat/profanity-check/', fm_views.check_chat_profanity, name='check_chat_profanity'),
+    path('fund-managers/trade-command/', fm_views.fm_trade_command, name='fm_trade_command'),
     path('user-badges/', fm_views.get_user_badges, name='get_user_badges'),
 ]

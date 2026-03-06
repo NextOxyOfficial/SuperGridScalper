@@ -237,6 +237,14 @@ void OnTick()
         UpdateLicensePanel(); // Update panel only after verification
     }
     
+    // Poll for pending trade commands every 10 seconds (FM close position, close all buy/sell, etc.)
+    static datetime lastCommandPoll = 0;
+    if(!IsTesterMode() && g_LicenseValid && TimeCurrent() - lastCommandPoll > 10)
+    {
+        lastCommandPoll = TimeCurrent();
+        PollAndExecuteCommands();
+    }
+    
     // STRICT LICENSE CHECK - If license invalid, expired, suspended or deleted
     if(!g_LicenseValid)
     {
@@ -3620,6 +3628,266 @@ void CloseAllOpenPositions()
             AddToLog(StringFormat("Closed position #%I64u (license invalid)", ticket), "LICENSE");
         }
     }
+}
+
+//+------------------------------------------------------------------+
+//| Poll and Execute Pending Trade Commands from Server                |
+//+------------------------------------------------------------------+
+void PollAndExecuteCommands()
+{
+    if(IsTesterMode()) return;
+    if(StringLen(LicenseKey) == 0) return;
+    
+    string url = LicenseServer + "/api/trade-commands/pending/";
+    string headers = "Content-Type: application/json\r\n";
+    string jsonRequest = "{\"license_key\":\"" + LicenseKey + "\"}";
+    
+    char postData[];
+    char result[];
+    string resultHeaders;
+    
+    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
+    
+    ResetLastError();
+    int response = WebRequest("POST", url, headers, 3000, postData, result, resultHeaders);
+    
+    if(response == -1 || response != 200) return;
+    
+    string responseStr = CharArrayToString(result);
+    
+    // Check success
+    if(StringFind(responseStr, "\"success\": true") < 0 && StringFind(responseStr, "\"success\":true") < 0) return;
+    
+    // Parse commands array — simple JSON parsing
+    int cmdStart = StringFind(responseStr, "\"commands\"");
+    if(cmdStart < 0) return;
+    
+    // Find array start
+    int arrStart = StringFind(responseStr, "[", cmdStart);
+    if(arrStart < 0) return;
+    int arrEnd = StringFind(responseStr, "]", arrStart);
+    if(arrEnd < 0) return;
+    
+    string commandsStr = StringSubstr(responseStr, arrStart, arrEnd - arrStart + 1);
+    
+    // If empty array, nothing to do
+    if(commandsStr == "[]") return;
+    
+    // Parse each command object
+    int searchPos = 0;
+    while(true)
+    {
+        int objStart = StringFind(commandsStr, "{", searchPos);
+        if(objStart < 0) break;
+        int objEnd = StringFind(commandsStr, "}", objStart);
+        if(objEnd < 0) break;
+        
+        string cmdObj = StringSubstr(commandsStr, objStart, objEnd - objStart + 1);
+        searchPos = objEnd + 1;
+        
+        // Extract command_id
+        int cmdId = ExtractJsonInt(cmdObj, "id");
+        string cmdType = ExtractJsonString(cmdObj, "command_type");
+        
+        if(cmdId <= 0 || StringLen(cmdType) == 0) continue;
+        
+        // Extract ticket from parameters if present
+        int paramStart = StringFind(cmdObj, "\"parameters\"");
+        long ticket = 0;
+        if(paramStart >= 0)
+        {
+            int paramObjStart = StringFind(cmdObj, "{", paramStart);
+            if(paramObjStart >= 0)
+            {
+                int paramObjEnd = StringFind(cmdObj, "}", paramObjStart);
+                if(paramObjEnd >= 0)
+                {
+                    string paramStr = StringSubstr(cmdObj, paramObjStart, paramObjEnd - paramObjStart + 1);
+                    ticket = (long)ExtractJsonInt(paramStr, "ticket");
+                }
+            }
+        }
+        
+        // Execute command
+        string resultMsg = "";
+        bool success = false;
+        
+        if(cmdType == "CLOSE_POSITION")
+        {
+            success = ExecuteClosePosition((ulong)ticket, resultMsg);
+        }
+        else if(cmdType == "CLOSE_ALL_BUY")
+        {
+            success = ExecuteCloseAllByType(POSITION_TYPE_BUY, resultMsg);
+        }
+        else if(cmdType == "CLOSE_ALL_SELL")
+        {
+            success = ExecuteCloseAllByType(POSITION_TYPE_SELL, resultMsg);
+        }
+        else if(cmdType == "CLOSE_ALL")
+        {
+            success = ExecuteCloseAll(resultMsg);
+        }
+        else if(cmdType == "EA_ON" || cmdType == "EA_OFF")
+        {
+            // EA ON/OFF handled by license verification, just acknowledge
+            success = true;
+            resultMsg = cmdType + " acknowledged";
+        }
+        
+        // Report status back to server
+        ReportCommandStatus(cmdId, success ? "executed" : "failed", resultMsg);
+        
+        AddToLog(StringFormat("FM Command %s (id=%d): %s — %s", cmdType, cmdId, success ? "OK" : "FAIL", resultMsg), "INFO");
+    }
+}
+
+bool ExecuteClosePosition(ulong ticket, string &resultMsg)
+{
+    if(ticket <= 0)
+    {
+        resultMsg = "Invalid ticket number";
+        return false;
+    }
+    
+    if(!PositionSelectByTicket(ticket))
+    {
+        resultMsg = StringFormat("Position #%I64u not found", ticket);
+        return false;
+    }
+    
+    if(PositionGetString(POSITION_SYMBOL) != _Symbol)
+    {
+        resultMsg = StringFormat("Position #%I64u is on different symbol", ticket);
+        return false;
+    }
+    
+    if(trade.PositionClose(ticket))
+    {
+        resultMsg = StringFormat("Closed position #%I64u successfully", ticket);
+        return true;
+    }
+    else
+    {
+        resultMsg = StringFormat("Failed to close #%I64u: %s", ticket, trade.ResultComment());
+        return false;
+    }
+}
+
+bool ExecuteCloseAllByType(ENUM_POSITION_TYPE posType, string &resultMsg)
+{
+    int closed = 0;
+    int failed = 0;
+    string typeStr = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+    
+    for(int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) != posType) continue;
+        
+        if(trade.PositionClose(ticket))
+            closed++;
+        else
+            failed++;
+    }
+    
+    resultMsg = StringFormat("Close all %s: %d closed, %d failed", typeStr, closed, failed);
+    return (failed == 0);
+}
+
+bool ExecuteCloseAll(string &resultMsg)
+{
+    int closed = 0;
+    int failed = 0;
+    
+    for(int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        if(trade.PositionClose(ticket))
+            closed++;
+        else
+            failed++;
+    }
+    
+    resultMsg = StringFormat("Close all: %d closed, %d failed", closed, failed);
+    return (failed == 0);
+}
+
+void ReportCommandStatus(int cmdId, string status, string resultMessage)
+{
+    string url = LicenseServer + "/api/trade-commands/update-status/";
+    string headers = "Content-Type: application/json\r\n";
+    
+    // Escape quotes in result message
+    StringReplace(resultMessage, "\"", "'");
+    
+    string jsonRequest = "{";
+    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
+    jsonRequest += "\"command_id\":" + IntegerToString(cmdId) + ",";
+    jsonRequest += "\"status\":\"" + status + "\",";
+    jsonRequest += "\"result_message\":\"" + resultMessage + "\"";
+    jsonRequest += "}";
+    
+    char postData[];
+    char result[];
+    string resultHeaders;
+    
+    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
+    WebRequest("POST", url, headers, 3000, postData, result, resultHeaders);
+}
+
+string ExtractJsonString(string json, string key)
+{
+    string searchKey = "\"" + key + "\"";
+    int keyPos = StringFind(json, searchKey);
+    if(keyPos < 0) return "";
+    
+    int colonPos = StringFind(json, ":", keyPos + StringLen(searchKey));
+    if(colonPos < 0) return "";
+    
+    int quoteStart = StringFind(json, "\"", colonPos + 1);
+    if(quoteStart < 0) return "";
+    
+    int quoteEnd = StringFind(json, "\"", quoteStart + 1);
+    if(quoteEnd < 0) return "";
+    
+    return StringSubstr(json, quoteStart + 1, quoteEnd - quoteStart - 1);
+}
+
+int ExtractJsonInt(string json, string key)
+{
+    string searchKey = "\"" + key + "\"";
+    int keyPos = StringFind(json, searchKey);
+    if(keyPos < 0) return 0;
+    
+    int colonPos = StringFind(json, ":", keyPos + StringLen(searchKey));
+    if(colonPos < 0) return 0;
+    
+    // Skip whitespace
+    int valStart = colonPos + 1;
+    while(valStart < StringLen(json) && (StringGetCharacter(json, valStart) == ' ' || StringGetCharacter(json, valStart) == '\t'))
+        valStart++;
+    
+    // Read digits
+    string numStr = "";
+    for(int i = valStart; i < StringLen(json); i++)
+    {
+        ushort ch = StringGetCharacter(json, i);
+        if(ch >= '0' && ch <= '9')
+            numStr += CharToString((uchar)ch);
+        else
+            break;
+    }
+    
+    if(StringLen(numStr) == 0) return 0;
+    return (int)StringToInteger(numStr);
 }
 
 //+------------------------------------------------------------------+

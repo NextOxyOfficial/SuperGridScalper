@@ -12,7 +12,7 @@ from django.db.models import Avg, Count, Q, Sum, F
 from core.models import (
     FundManager, FMSubscription, FMAccountAssignment, FMCommand,
     FMChatRoom, FMChatMessage, FMReview, FMPayout, FMSchedule,
-    EconomicEvent, TradingWaveAlert, License, TradeData
+    EconomicEvent, TradingWaveAlert, License, TradeData, TradeCommand
 )
 
 
@@ -2077,3 +2077,96 @@ def get_user_badges(request):
     })
 
     return JsonResponse({'success': True, 'badges': badges, 'username': user.first_name or user.username})
+
+
+# ============================================================
+# FM TRADE COMMAND: Close positions on subscriber accounts
+# ============================================================
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def fm_trade_command(request):
+    """Fund Manager issues trade close commands for subscriber accounts"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    email = data.get('email', '').strip()
+    command_type = data.get('command_type', '')  # close_position, close_all_buy, close_all_sell, close_all
+    assignment_id = data.get('assignment_id')  # which subscriber account
+    ticket = data.get('ticket')  # for close_position
+    reason = data.get('reason', '').strip()
+
+    valid_types = ['close_position', 'close_all_buy', 'close_all_sell', 'close_all']
+    if command_type not in valid_types:
+        return JsonResponse({'success': False, 'error': f'Invalid command_type. Must be one of: {valid_types}'}, status=400)
+
+    if command_type == 'close_position' and not ticket:
+        return JsonResponse({'success': False, 'error': 'Ticket number is required for close_position'}, status=400)
+
+    if not assignment_id:
+        return JsonResponse({'success': False, 'error': 'assignment_id is required'}, status=400)
+
+    user = _resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
+
+    fm = _get_fm_from_user(user)
+    if not fm:
+        return JsonResponse({'success': False, 'error': 'Not a fund manager'}, status=403)
+
+    # Verify the assignment belongs to this FM
+    try:
+        assignment = FMAccountAssignment.objects.select_related('license', 'subscription').get(
+            id=assignment_id,
+            subscription__fund_manager=fm,
+            subscription__status__in=['active', 'trial']
+        )
+    except FMAccountAssignment.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Account assignment not found'}, status=404)
+
+    now = timezone.now()
+
+    # Map to TradeCommand types
+    type_map = {
+        'close_position': 'CLOSE_POSITION',
+        'close_all_buy': 'CLOSE_ALL_BUY',
+        'close_all_sell': 'CLOSE_ALL_SELL',
+        'close_all': 'CLOSE_ALL',
+    }
+    tc_type = type_map[command_type]
+
+    # Build parameters
+    params = {
+        'fm_id': fm.id,
+        'fm_name': fm.display_name,
+        'reason': reason or f'Trade closed by FM: {fm.display_name}',
+    }
+    if command_type == 'close_position':
+        params['ticket'] = int(ticket)
+
+    # Create TradeCommand for the license
+    cmd = TradeCommand.objects.create(
+        license=assignment.license,
+        command_type=tc_type,
+        parameters=params,
+        expires_at=now + timedelta(minutes=5),
+    )
+
+    # Log as FMCommand
+    FMCommand.objects.create(
+        fund_manager=fm,
+        command_type='ea_off',  # closest existing type
+        target_type='specific',
+        target_assignment=assignment,
+        reason=f'[TRADE] {tc_type}: {reason}' if reason else f'[TRADE] {tc_type}',
+        status='pending',
+        affected_accounts=1,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'command_id': cmd.id,
+        'message': f'{tc_type} command sent to MT5 account {assignment.license.mt5_account}. Will execute within 30 seconds.',
+    })

@@ -38,6 +38,8 @@ export default function FMDashboardPage() {
   const [positionsModal, setPositionsModal] = useState<{ subscriber: string; positions: any[] } | null>(null);
   const [deletingScheduleId, setDeletingScheduleId] = useState<number | null>(null);
   const [creatingSchedule, setCreatingSchedule] = useState(false);
+  const [tradeCommandLoading, setTradeCommandLoading] = useState<string | null>(null);
+  const [tradeCommandSuccess, setTradeCommandSuccess] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
@@ -80,6 +82,33 @@ export default function FMDashboardPage() {
       alert('Network error. Please try again.');
     } finally {
       setCancellingSubId(null);
+    }
+  };
+
+  const sendTradeCommand = async (assignmentId: number, commandType: string, ticket?: number) => {
+    const loadingKey = `${commandType}_${assignmentId}_${ticket || 'all'}`;
+    setTradeCommandLoading(loadingKey);
+    setTradeCommandSuccess(null);
+    try {
+      const payload: any = { email: user.email, command_type: commandType, assignment_id: assignmentId };
+      if (ticket) payload.ticket = ticket;
+      const res = await fetch(`${API_URL}/fund-managers/trade-command/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTradeCommandSuccess(loadingKey);
+        setTimeout(() => setTradeCommandSuccess(null), 3000);
+        silentRefresh();
+      } else {
+        alert(data.error || 'Failed to send command');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    } finally {
+      setTradeCommandLoading(null);
     }
   };
 
@@ -439,7 +468,7 @@ export default function FMDashboardPage() {
                     const totalSell = sub.accounts.reduce((s: number, a: any) => s + (a.sell_positions || 0), 0);
                     const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
                     const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
-                    const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account })));
+                    const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account, assignment_id: a.assignment_id })));
                     const totalPos = totalBuy + totalSell;
                     const tradingMode = sub.accounts.find((a: any) => a.trading_mode)?.trading_mode || 'Normal';
                     return (
@@ -499,7 +528,7 @@ export default function FMDashboardPage() {
                       const totalSell = sub.accounts.reduce((s: number, a: any) => s + (a.sell_positions || 0), 0);
                       const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
                       const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
-                      const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account })));
+                      const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account, assignment_id: a.assignment_id })));
                       const totalPos = totalBuy + totalSell;
                       const tradingMode = sub.accounts.find((a: any) => a.trading_mode)?.trading_mode || 'Normal';
                       if (sub.accounts.length === 0 || !sub.accounts.some((a: any) => a.balance)) return null;
@@ -561,7 +590,7 @@ export default function FMDashboardPage() {
                               <div className="text-yellow-400/70 text-[10px] mt-1 truncate">{acc.last_toggled_reason}</div>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 flex-wrap justify-end">
                             <span className={`text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full ${acc.is_ea_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
                               EA {acc.is_ea_active ? 'ON' : 'OFF'}
                             </span>
@@ -577,6 +606,44 @@ export default function FMDashboardPage() {
                               {togglingId === acc.assignment_id ? <><Loader2 className="w-3 h-3 animate-spin" /> {acc.is_ea_active ? 'Stopping...' : 'Starting...'}</> : acc.is_ea_active ? 'Stop' : 'Start'}
                             </button>
                           </div>
+                          {/* Trade Close Buttons */}
+                          {acc.balance && (acc.buy_positions > 0 || acc.sell_positions > 0) && (
+                            <div className="flex items-center gap-1.5 pt-2 mt-2 border-t border-gray-800/50 flex-wrap">
+                              {acc.buy_positions > 0 && (
+                                <button
+                                  onClick={() => { if(confirm(`Close ALL ${acc.buy_positions} BUY positions on MT5 ${acc.mt5_account}?`)) sendTradeCommand(acc.assignment_id, 'close_all_buy'); }}
+                                  disabled={tradeCommandLoading === `close_all_buy_${acc.assignment_id}_all`}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition disabled:opacity-50"
+                                >
+                                  {tradeCommandLoading === `close_all_buy_${acc.assignment_id}_all` ? <Loader2 className="w-3 h-3 animate-spin" /> :
+                                   tradeCommandSuccess === `close_all_buy_${acc.assignment_id}_all` ? '✓ Sent' :
+                                   `Close Buy (${acc.buy_positions})`}
+                                </button>
+                              )}
+                              {acc.sell_positions > 0 && (
+                                <button
+                                  onClick={() => { if(confirm(`Close ALL ${acc.sell_positions} SELL positions on MT5 ${acc.mt5_account}?`)) sendTradeCommand(acc.assignment_id, 'close_all_sell'); }}
+                                  disabled={tradeCommandLoading === `close_all_sell_${acc.assignment_id}_all`}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition disabled:opacity-50"
+                                >
+                                  {tradeCommandLoading === `close_all_sell_${acc.assignment_id}_all` ? <Loader2 className="w-3 h-3 animate-spin" /> :
+                                   tradeCommandSuccess === `close_all_sell_${acc.assignment_id}_all` ? '✓ Sent' :
+                                   `Close Sell (${acc.sell_positions})`}
+                                </button>
+                              )}
+                              {(acc.buy_positions + acc.sell_positions) > 1 && (
+                                <button
+                                  onClick={() => { if(confirm(`Close ALL ${acc.buy_positions + acc.sell_positions} positions on MT5 ${acc.mt5_account}?`)) sendTradeCommand(acc.assignment_id, 'close_all'); }}
+                                  disabled={tradeCommandLoading === `close_all_${acc.assignment_id}_all`}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20 transition disabled:opacity-50"
+                                >
+                                  {tradeCommandLoading === `close_all_${acc.assignment_id}_all` ? <Loader2 className="w-3 h-3 animate-spin" /> :
+                                   tradeCommandSuccess === `close_all_${acc.assignment_id}_all` ? '✓ Sent' :
+                                   `Close All (${acc.buy_positions + acc.sell_positions})`}
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))
                     )}
@@ -867,25 +934,38 @@ export default function FMDashboardPage() {
               ) : (
                 <div className="space-y-2">
                   {/* Header */}
-                  <div className="hidden sm:grid gap-2 text-gray-500 text-[10px] font-semibold uppercase px-3 pb-2 border-b border-gray-800" style={{ gridTemplateColumns: '1.8fr 0.7fr 0.8fr 1.2fr 1.2fr 1fr' }}>
+                  <div className="hidden sm:grid gap-2 text-gray-500 text-[10px] font-semibold uppercase px-3 pb-2 border-b border-gray-800" style={{ gridTemplateColumns: '1.5fr 0.6fr 0.7fr 1.1fr 1.1fr 0.9fr 0.7fr' }}>
                     <span>Ticket</span>
                     <span>Type</span>
                     <span className="text-right">Vol</span>
                     <span className="text-right">Open Price</span>
                     <span className="text-right">Current</span>
                     <span className="text-right">Profit</span>
+                    <span className="text-right">Action</span>
                   </div>
                   {positionsModal.positions.map((p: any, i: number) => {
                     const isBuy = String(p.type).toLowerCase().includes('buy') || p.type === 0 || p.type === 'POSITION_TYPE_BUY';
                     const profit = parseFloat(p.profit || '0');
+                    const closeKey = `close_position_${p.assignment_id}_${p.ticket}`;
                     return (
-                      <div key={p.ticket || i} className="hidden sm:grid gap-2 px-3 py-2 rounded-lg bg-[#0a0a0f] border border-gray-800/50 text-xs items-center" style={{ gridTemplateColumns: '1.8fr 0.7fr 0.8fr 1.2fr 1.2fr 1fr' }}>
+                      <div key={p.ticket || i} className="hidden sm:grid gap-2 px-3 py-2 rounded-lg bg-[#0a0a0f] border border-gray-800/50 text-xs items-center" style={{ gridTemplateColumns: '1.5fr 0.6fr 0.7fr 1.1fr 1.1fr 0.9fr 0.7fr' }}>
                         <span className="text-gray-300 font-mono truncate">{p.ticket || '-'}</span>
                         <span className={`font-semibold ${isBuy ? 'text-green-400' : 'text-red-400'}`}>{isBuy ? 'BUY' : 'SELL'}</span>
                         <span className="text-gray-300 text-right">{p.volume || p.lots || '-'}</span>
                         <span className="text-gray-300 text-right">{p.open_price || p.price_open || '-'}</span>
                         <span className="text-gray-300 text-right">{p.current_price || p.price_current || '-'}</span>
                         <span className={`font-semibold text-right ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${profit.toFixed(2)}</span>
+                        <div className="text-right">
+                          {p.ticket && p.assignment_id && (
+                            <button
+                              onClick={() => { if(confirm(`Close position #${p.ticket}?`)) sendTradeCommand(p.assignment_id, 'close_position', p.ticket); }}
+                              disabled={tradeCommandLoading === closeKey}
+                              className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition disabled:opacity-50"
+                            >
+                              {tradeCommandLoading === closeKey ? <Loader2 className="w-3 h-3 animate-spin inline" /> : tradeCommandSuccess === closeKey ? '✓' : 'Close'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -893,12 +973,22 @@ export default function FMDashboardPage() {
                   {positionsModal.positions.map((p: any, i: number) => {
                     const isBuy = String(p.type).toLowerCase().includes('buy') || p.type === 0 || p.type === 'POSITION_TYPE_BUY';
                     const profit = parseFloat(p.profit || '0');
+                    const closeKey = `close_position_${p.assignment_id}_${p.ticket}`;
                     return (
                       <div key={`m_${p.ticket || i}`} className="sm:hidden flex items-center justify-between px-3 py-2 rounded-lg bg-[#0a0a0f] border border-gray-800/50 text-xs gap-2">
                         <span className="text-gray-400 font-mono truncate flex-1">{p.ticket || '-'}</span>
                         <span className={`font-semibold flex-shrink-0 ${isBuy ? 'text-green-400' : 'text-red-400'}`}>{isBuy ? 'BUY' : 'SELL'}</span>
                         <span className="text-gray-400 flex-shrink-0">vol: {p.volume || p.lots || '-'}</span>
                         <span className={`font-semibold flex-shrink-0 ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${profit.toFixed(2)}</span>
+                        {p.ticket && p.assignment_id && (
+                          <button
+                            onClick={() => { if(confirm(`Close position #${p.ticket}?`)) sendTradeCommand(p.assignment_id, 'close_position', p.ticket); }}
+                            disabled={tradeCommandLoading === closeKey}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition disabled:opacity-50 flex-shrink-0"
+                          >
+                            {tradeCommandLoading === closeKey ? <Loader2 className="w-3 h-3 animate-spin inline" /> : tradeCommandSuccess === closeKey ? '✓' : 'Close'}
+                          </button>
+                        )}
                       </div>
                     );
                   })}
