@@ -549,7 +549,7 @@ export default function FMDashboardPage() {
 
                 {/* Expanded: Account Details + Cancel */}
                 {expandedSub === sub.subscription_id && (
-                  <div className="border-t border-gray-800 p-4 space-y-3">
+                  <div className="border-t border-gray-800 sm:p-4 p-1 space-y-3">
                     {/* Accounts list */}
                     {sub.accounts.length === 0 ? (
                       <div className="flex items-start gap-3 bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3">
