@@ -88,16 +88,16 @@ export default function ApplyFMPage() {
       </div>
 
       {/* Benefits */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
         {[
           { icon: DollarSign, title: 'Earn Monthly Revenue', desc: 'Set your own subscription price', color: 'text-green-400' },
           { icon: Users, title: 'Grow Your Community', desc: 'Build a subscriber base', color: 'text-cyan-400' },
           { icon: TrendingUp, title: 'Control EA Remotely', desc: 'Toggle EA on/off for all subscribers', color: 'text-purple-400' },
         ].map((b, i) => (
-          <div key={i} className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-5 text-center">
-            <b.icon className={`w-8 h-8 ${b.color} mx-auto mb-3`} />
-            <div className="text-white font-medium text-sm mb-1">{b.title}</div>
-            <div className="text-gray-500 text-xs">{b.desc}</div>
+          <div key={i} className={`bg-[#12121a] border border-cyan-500/10 rounded-xl p-4 sm:p-5 text-center ${i === 2 ? 'col-span-2 sm:col-span-1' : ''}`}>
+            <b.icon className={`w-7 h-7 sm:w-8 sm:h-8 ${b.color} mx-auto mb-2 sm:mb-3`} />
+            <div className="text-white font-medium text-xs sm:text-sm mb-1">{b.title}</div>
+            <div className="text-gray-500 text-[10px] sm:text-xs">{b.desc}</div>
           </div>
         ))}
       </div>

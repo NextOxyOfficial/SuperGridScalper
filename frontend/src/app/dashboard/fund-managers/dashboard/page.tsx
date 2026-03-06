@@ -309,11 +309,11 @@ export default function FMDashboardPage() {
   return (
     <div className="max-w-7xl mx-auto px-1 sm:px-4 py-6">
       {/* Header */}
-      <div className="flex flex-row items-start justify-between gap-4 mb-6">
-        <div className="flex items-start gap-4">
+      <div className="mb-6">
+        <div className="flex items-start gap-3 sm:gap-4">
           {/* Avatar Upload */}
           <div className="relative group flex-shrink-0" title="Tap to change profile picture">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-cyan-500/30 to-purple-500/20 border-2 border-cyan-500/30 flex items-center justify-center overflow-hidden">
+            <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-cyan-500/30 to-purple-500/20 border-2 border-cyan-500/30 flex items-center justify-center overflow-hidden">
               {avatarUrl || profile.avatar_url ? (
                 <img src={avatarUrl || profile.avatar_url} alt={profile.display_name} className="w-full h-full object-cover" />
               ) : (
@@ -329,11 +329,11 @@ export default function FMDashboardPage() {
               <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleAvatarChange} disabled={uploadingAvatar} />
             </label>
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <button onClick={() => router.push('/dashboard/fund-managers')} className="text-cyan-400 hover:text-cyan-300 text-xs mb-1 flex items-center gap-1">
               <ArrowLeft className="w-3.5 h-3.5" /> Back
             </button>
-            <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+            <h1 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
               FM Dashboard
               <span className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -345,40 +345,43 @@ export default function FMDashboardPage() {
               <p className="text-gray-600 text-[10px]">Updated {lastUpdated.toLocaleTimeString()}</p>
             )}
             {avatarError && <p className="text-red-400 text-xs mt-1">{avatarError}</p>}
-            <button
-              onClick={() => router.push(`/dashboard/fund-managers/${profile.id}`)}
-              className="mt-2 flex items-center gap-1.5 bg-purple-500/20 text-purple-300 px-3 py-1.5 rounded-lg text-xs font-medium border border-purple-500/30 hover:bg-purple-500/30 transition"
-              style={{ fontFamily: 'Orbitron, sans-serif' }}
-            >
-              <Eye className="w-3.5 h-3.5" /> My FM Funnel
-            </button>
           </div>
         </div>
-        {(() => {
-          const allAccounts = subscribers.flatMap((s: any) => s.accounts || []);
-          const allStopped = allAccounts.length > 0 && allAccounts.every((a: any) => !a.is_ea_active);
-          return allStopped ? (
-            <button
-              onClick={() => initiateToggle('ea_on', 'all')}
-              disabled={togglingAll}
-              className="inline-flex items-center gap-2 w-auto bg-green-500/20 text-green-400 px-4 py-2.5 rounded-lg border border-green-500/30 hover:bg-green-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50 flex-shrink-0"
-            >
-              {togglingAll ? <><Loader2 className="w-4 h-4 animate-spin" /> Starting...</> : <><Power className="w-4 h-4" /> Start Robot</>}
-            </button>
-          ) : (
-            <button
-              onClick={() => initiateToggle('ea_off', 'all')}
-              disabled={togglingAll}
-              className="inline-flex items-center gap-2 w-auto bg-red-500/20 text-red-400 px-4 py-2.5 rounded-lg border border-red-500/30 hover:bg-red-500/30 transition text-xs sm:text-sm font-medium disabled:opacity-50 flex-shrink-0"
-            >
-              {togglingAll ? <><Loader2 className="w-4 h-4 animate-spin" /> Stopping...</> : <><PowerOff className="w-4 h-4" /> Stop Robot</>}
-            </button>
-          );
-        })()}
+        {/* Action Buttons Row */}
+        <div className="flex max-sm:justify-center items-center gap-2 mt-3">
+          <button
+            onClick={() => router.push(`/dashboard/fund-managers/${profile.id}`)}
+            className="flex items-center gap-1.5 bg-purple-500/20 text-purple-300 px-3 py-1.5 rounded-lg text-xs font-medium border border-purple-500/30 hover:bg-purple-500/30 transition"
+            style={{ fontFamily: 'Orbitron, sans-serif' }}
+          >
+            <Eye className="w-3.5 h-3.5" /> My FM Funnel
+          </button>
+          {(() => {
+            const allAccounts = subscribers.flatMap((s: any) => s.accounts || []);
+            const allStopped = allAccounts.length > 0 && allAccounts.every((a: any) => !a.is_ea_active);
+            return allStopped ? (
+              <button
+                onClick={() => initiateToggle('ea_on', 'all')}
+                disabled={togglingAll}
+                className="inline-flex items-center gap-2 bg-green-500/20 text-green-400 px-3 py-1.5 rounded-lg border border-green-500/30 hover:bg-green-500/30 transition text-xs font-medium disabled:opacity-50"
+              >
+                {togglingAll ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting...</> : <><Power className="w-3.5 h-3.5" /> Start Robot</>}
+              </button>
+            ) : (
+              <button
+                onClick={() => initiateToggle('ea_off', 'all')}
+                disabled={togglingAll}
+                className="inline-flex items-center gap-2 bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg border border-red-500/30 hover:bg-red-500/30 transition text-xs font-medium disabled:opacity-50"
+              >
+                {togglingAll ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Stopping...</> : <><PowerOff className="w-3.5 h-3.5" /> Stop Robot</>}
+              </button>
+            );
+          })()}
+        </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3 mb-6">
+      <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3 mb-6">
         {(() => {
           const totalProfit = subscribers.reduce((sum: number, sub: any) => {
             return sum + sub.accounts.reduce((accSum: number, acc: any) => accSum + parseFloat(acc.profit || '0'), 0);
@@ -617,7 +620,7 @@ export default function FMDashboardPage() {
                                 >
                                   {tradeCommandLoading === `close_all_buy_${acc.assignment_id}_all` ? <Loader2 className="w-3 h-3 animate-spin" /> :
                                    tradeCommandSuccess === `close_all_buy_${acc.assignment_id}_all` ? '✓ Sent' :
-                                   `Close Buy (${acc.buy_positions})`}
+                                   `Close All Buy (${acc.buy_positions})`}
                                 </button>
                               )}
                               {acc.sell_positions > 0 && (
@@ -628,7 +631,7 @@ export default function FMDashboardPage() {
                                 >
                                   {tradeCommandLoading === `close_all_sell_${acc.assignment_id}_all` ? <Loader2 className="w-3 h-3 animate-spin" /> :
                                    tradeCommandSuccess === `close_all_sell_${acc.assignment_id}_all` ? '✓ Sent' :
-                                   `Close Sell (${acc.sell_positions})`}
+                                   `Close All Sell (${acc.sell_positions})`}
                                 </button>
                               )}
                               {(acc.buy_positions + acc.sell_positions) > 1 && (
@@ -802,7 +805,7 @@ export default function FMDashboardPage() {
       {activeSection === 'earnings' && (
         <div className="bg-[#12121a] border border-cyan-500/10 rounded-xl p-4 sm:p-6">
           <h3 className="text-white text-sm sm:text-base font-semibold mb-4 sm:mb-6">Earnings Summary</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-6">
             <div className="bg-[#0a0a0f] rounded-xl p-4 sm:p-5 border border-gray-800">
               <div className="text-gray-500 text-xs mb-1.5">Monthly Revenue</div>
               <div className="text-green-400 font-bold text-xl sm:text-2xl">${parseFloat(stats.monthly_revenue).toLocaleString()}</div>
@@ -813,7 +816,7 @@ export default function FMDashboardPage() {
               <div className="text-red-400 font-bold text-xl sm:text-2xl">-${parseFloat(stats.platform_fee).toLocaleString()}</div>
               <div className="text-gray-600 text-[10px] sm:text-xs mt-1">15% platform commission</div>
             </div>
-            <div className="bg-[#0a0a0f] rounded-xl p-4 sm:p-5 border border-gray-800">
+            <div className="bg-[#0a0a0f] rounded-xl p-4 sm:p-5 border border-gray-800 col-span-2 sm:col-span-1">
               <div className="text-gray-500 text-xs mb-1.5">Net Earnings</div>
               <div className="text-emerald-400 font-bold text-xl sm:text-2xl">${parseFloat(stats.net_earnings).toLocaleString()}</div>
               <div className="text-gray-600 text-[10px] sm:text-xs mt-1">Your monthly take-home</div>
