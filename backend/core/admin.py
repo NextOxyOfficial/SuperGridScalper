@@ -1275,12 +1275,12 @@ class EAProductAdmin(admin.ModelAdmin):
             
             ea_name = obj.name
             ea_version = obj.version
-            subject = f'🔄 New MarksAI EA Version Released - {ea_name} v{ea_version}'
+            subject = f'� New MarksAI EA Version Released - {ea_name} v{ea_version}'
             html = render_email_template(
                 subject=subject,
-                heading=f'🔄 {ea_name} v{ea_version}',
+                heading=f'� {ea_name} v{ea_version} Available!',
                 message=f"""
-                    <p style="color:#e5e7eb;font-size:15px;">A new version of <strong>{ea_name}</strong> is now available!</p>
+                    <p style="color:#e5e7eb;font-size:15px;">A new version of <strong>{ea_name}</strong> is now available with powerful new features!</p>
                     
                     <div style="background-color: rgba(6, 182, 212, 0.1); border-left: 3px solid #06b6d4; padding: 14px; margin: 16px 0; border-radius: 4px;">
                         <p style="margin: 0 0 6px 0; color: #06b6d4; font-weight: 600; font-size: 13px;">Update Details:</p>
@@ -1288,14 +1288,25 @@ class EAProductAdmin(admin.ModelAdmin):
                         <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>New Version:</strong> v{ea_version}</p>
                     </div>
                     
-                    {f'<p style="color: #d1d5db; font-size: 13px; margin-top: 12px;"><strong>What\'s new:</strong></p>{changelog_html}' if changelog_html else ''}
+                    {f'<div style="background-color: rgba(139, 92, 246, 0.1); border-left: 3px solid #8b5cf6; padding: 14px; margin: 16px 0; border-radius: 4px;"><p style="margin: 0 0 8px 0; color: #8b5cf6; font-weight: 600; font-size: 13px;">✨ What\'s New:</p>{changelog_html}</div>' if changelog_html else ''}
                     
-                    <p style="margin-top: 16px;"><strong style="color: #f59e0b;">⚠️ Important:</strong> Please download the new version and restart your EA to get the latest features and fixes.</p>
+                    <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 14px; margin: 16px 0; border-radius: 4px;">
+                        <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600; font-size: 13px;">🎯 Key Features in This Update:</p>
+                        <ul style="margin: 0; padding-left: 20px; color: #d1d5db; font-size: 13px; line-height: 1.8;">
+                            <li><strong>Remote Trade Management:</strong> Fund Managers can now remotely close your positions</li>
+                            <li><strong>Command Polling:</strong> EA polls for FM commands every 10 seconds</li>
+                            <li><strong>Close Individual Positions:</strong> FM can close specific trades by ticket number</li>
+                            <li><strong>Close All Buy/Sell:</strong> FM can close all BUY or SELL positions with one click</li>
+                            <li><strong>Emergency Close All:</strong> FM can instantly close all your open positions if needed</li>
+                        </ul>
+                    </div>
+                    
+                    <p style="margin-top: 16px;"><strong style="color: #f59e0b;">⚠️ Important:</strong> Please download the new version and restart your EA to enable remote trade management features. Your Fund Manager will be able to help manage your positions for better risk control.</p>
                 """,
                 cta_text=f'DOWNLOAD {ea_name} v{ea_version}',
                 cta_url=download_url,
-                footer_note='Keep your EA up to date for the best trading performance.',
-                preheader=f'{ea_name} v{ea_version} is now available. Download and update your EA!',
+                footer_note='Keep your EA up to date for the best trading performance and latest features.',
+                preheader=f'{ea_name} v{ea_version} with Remote Trade Management - Download now!',
             )
             
             from_email = get_email_from_address()

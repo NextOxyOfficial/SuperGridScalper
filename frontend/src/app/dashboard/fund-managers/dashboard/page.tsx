@@ -449,7 +449,7 @@ export default function FMDashboardPage() {
                     <div className="w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center flex-shrink-0">
                       <span className="text-cyan-400 font-bold">{sub.user_name.charAt(0).toUpperCase()}</span>
                     </div>
-                    <div className="text-left min-w-0">
+                    <div className="text-left min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-white font-medium text-sm">{sub.user_name}</span>
                         {sub.subscriber_fm_id && (
@@ -462,6 +462,31 @@ export default function FMDashboardPage() {
                       {sub.subscriber_fm_id && (
                         <div className="text-purple-400 text-[10px] mt-0.5">Tap to view FM profile →</div>
                       )}
+                      {/* Mobile: Balance/P/L/Positions at a glance */}
+                      {(() => {
+                        const totalBuy = sub.accounts.reduce((s: number, a: any) => s + (a.buy_positions || 0), 0);
+                        const totalSell = sub.accounts.reduce((s: number, a: any) => s + (a.sell_positions || 0), 0);
+                        const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
+                        const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
+                        const totalPos = totalBuy + totalSell;
+                        if (!sub.accounts.some((a: any) => a.balance)) return null;
+                        return (
+                          <div className="sm:hidden flex items-center gap-3 mt-1.5 text-[10px]">
+                            <div>
+                              <span className="text-gray-500">Bal: </span>
+                              <span className="text-white font-semibold">${totalBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">P/L: </span>
+                              <span className={`font-semibold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${totalProfit.toFixed(2)}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Pos: </span>
+                              <span className="text-white font-semibold">{totalPos}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </button>
 
@@ -525,56 +550,6 @@ export default function FMDashboardPage() {
                 {/* Expanded: Account Details + Cancel */}
                 {expandedSub === sub.subscription_id && (
                   <div className="border-t border-gray-800 p-4 space-y-3">
-                    {/* Mobile Trade Summary (hidden on desktop where it's inline) */}
-                    {(() => {
-                      const totalBuy = sub.accounts.reduce((s: number, a: any) => s + (a.buy_positions || 0), 0);
-                      const totalSell = sub.accounts.reduce((s: number, a: any) => s + (a.sell_positions || 0), 0);
-                      const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account, assignment_id: a.assignment_id })));
-                      const totalPos = totalBuy + totalSell;
-                      const tradingMode = sub.accounts.find((a: any) => a.trading_mode)?.trading_mode || 'Normal';
-                      if (sub.accounts.length === 0) return null;
-                      return (
-                        <div className="sm:hidden flex items-center justify-between bg-[#0a0a0f] rounded-lg p-3 border border-gray-800/50">
-                          <div>
-                            <div className="text-gray-500 text-[9px]">Trading Mode</div>
-                            <div className={`text-xs font-semibold ${tradingMode === 'Recovery' ? 'text-orange-400' : 'text-cyan-400'}`}>{tradingMode}</div>
-                          </div>
-                          {totalPos > 0 && (
-                            <button
-                              onClick={() => setPositionsModal({ subscriber: sub.user_name, positions: allPositions })}
-                              className="text-[10px] px-2 py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition whitespace-nowrap"
-                            >
-                              View Positions
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })()}
-                    {/* Summary Stats in Dropdown */}
-                    {(() => {
-                      const totalBuy = sub.accounts.reduce((s: number, a: any) => s + (a.buy_positions || 0), 0);
-                      const totalSell = sub.accounts.reduce((s: number, a: any) => s + (a.sell_positions || 0), 0);
-                      const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
-                      const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
-                      const totalPos = totalBuy + totalSell;
-                      if (!sub.accounts.some((a: any) => a.balance)) return null;
-                      return (
-                        <div className="grid grid-cols-3 gap-2 bg-[#0a0a0f] rounded-lg p-3 border border-gray-800/50">
-                          <div>
-                            <div className="text-gray-500 text-[9px]">Balance</div>
-                            <div className="text-white text-xs font-semibold">${totalBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-500 text-[9px]">P/L</div>
-                            <div className={`text-xs font-semibold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${totalProfit.toFixed(2)}</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-500 text-[9px]">Positions</div>
-                            <div className="text-white text-xs font-semibold">{totalPos}</div>
-                          </div>
-                        </div>
-                      );
-                    })()}
                     {/* Accounts list */}
                     {sub.accounts.length === 0 ? (
                       <div className="flex items-start gap-3 bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3">
@@ -588,39 +563,41 @@ export default function FMDashboardPage() {
                       </div>
                     ) : (
                       sub.accounts.map((acc: any) => (
-                        <div key={acc.assignment_id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-[#0a0a0f] rounded-lg p-3 gap-2">
-                          <div className="min-w-0 flex-1">
+                        <div key={acc.assignment_id} className="bg-[#0a0a0f] rounded-lg p-3 space-y-2">
+                          {/* MT5 Account + EA Toggle */}
+                          <div className="flex items-center justify-between gap-2">
                             <div className="text-white text-xs sm:text-sm font-medium">MT5: {acc.mt5_account}</div>
-                            {acc.balance && (
-                              <div className="text-gray-500 text-[10px] sm:text-xs mt-1 flex flex-wrap gap-x-2">
-                                <span>Bal: ${parseFloat(acc.balance).toLocaleString()}</span>
-                                <span>Eq: ${parseFloat(acc.equity).toLocaleString()}</span>
-                                <span>P/L: <span className={parseFloat(acc.profit) >= 0 ? 'text-green-400' : 'text-red-400'}>${acc.profit}</span></span>
-                              </div>
-                            )}
-                            {acc.last_toggled_reason && (
-                              <div className="text-yellow-400/70 text-[10px] mt-1 truncate">{acc.last_toggled_reason}</div>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${acc.is_ea_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                                EA {acc.is_ea_active ? 'ON' : 'OFF'}
+                              </span>
+                              <button
+                                onClick={() => initiateToggle(acc.is_ea_active ? 'ea_off' : 'ea_on', acc.assignment_id)}
+                                disabled={togglingId === acc.assignment_id}
+                                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition ${
+                                  acc.is_ea_active
+                                    ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                                    : 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                                }`}
+                              >
+                                {togglingId === acc.assignment_id ? <><Loader2 className="w-3 h-3 animate-spin" /> {acc.is_ea_active ? 'Stopping...' : 'Starting...'}</> : acc.is_ea_active ? 'Stop' : 'Start'}
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 flex-wrap justify-end">
-                            <span className={`text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full ${acc.is_ea_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                              EA {acc.is_ea_active ? 'ON' : 'OFF'}
-                            </span>
-                            <button
-                              onClick={() => initiateToggle(acc.is_ea_active ? 'ea_off' : 'ea_on', acc.assignment_id)}
-                              disabled={togglingId === acc.assignment_id}
-                              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-medium transition ${
-                                acc.is_ea_active
-                                  ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
-                                  : 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
-                              }`}
-                            >
-                              {togglingId === acc.assignment_id ? <><Loader2 className="w-3 h-3 animate-spin" /> {acc.is_ea_active ? 'Stopping...' : 'Starting...'}</> : acc.is_ea_active ? 'Stop' : 'Start'}
-                            </button>
-                          </div>
+                          {/* Balance/Equity/Profit */}
+                          {acc.balance && (
+                            <div className="text-gray-500 text-[10px] sm:text-xs flex flex-wrap gap-x-2">
+                              <span>Bal: ${parseFloat(acc.balance).toLocaleString()}</span>
+                              <span>Eq: ${parseFloat(acc.equity).toLocaleString()}</span>
+                              <span>P/L: <span className={parseFloat(acc.profit) >= 0 ? 'text-green-400' : 'text-red-400'}>${acc.profit}</span></span>
+                            </div>
+                          )}
+                          {acc.last_toggled_reason && (
+                            <div className="text-yellow-400/70 text-[10px] truncate">{acc.last_toggled_reason}</div>
+                          )}
                           {/* Trade Close Buttons */}
                           {acc.balance && (acc.buy_positions > 0 || acc.sell_positions > 0) && (
-                            <div className="flex items-center gap-1.5 pt-2 mt-2 border-t border-gray-800/50 flex-wrap">
+                            <div className="flex items-center justify-center sm:justify-start gap-1.5 pt-2 border-t border-gray-800/50 flex-wrap">
                               {acc.buy_positions > 0 && (
                                 <button
                                   onClick={() => { if(confirm(`Close ALL ${acc.buy_positions} BUY positions on MT5 ${acc.mt5_account}?`)) sendTradeCommand(acc.assignment_id, 'close_all_buy'); }}
