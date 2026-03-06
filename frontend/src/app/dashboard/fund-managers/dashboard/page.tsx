@@ -488,20 +488,18 @@ export default function FMDashboardPage() {
                                 <span className="text-white font-semibold">{totalPos}</span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-[10px]">
-                                <span className="text-gray-500">Mode: </span>
-                                <span className={`font-semibold ${tradingMode === 'Recovery' ? 'text-orange-400' : 'text-cyan-400'}`}>{tradingMode}</span>
-                              </div>
-                              {totalPos > 0 && (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setPositionsModal({ subscriber: sub.user_name, positions: allPositions }); }}
-                                  className="text-[9px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition whitespace-nowrap"
-                                >
-                                  View Positions
-                                </button>
-                              )}
+                            <div className="text-[10px]">
+                              <span className="text-gray-500">Mode: </span>
+                              <span className={`font-semibold ${tradingMode === 'Recovery' ? 'text-orange-400' : 'text-cyan-400'}`}>{tradingMode}</span>
                             </div>
+                            {totalPos > 0 && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setPositionsModal({ subscriber: sub.user_name, positions: allPositions }); }}
+                                className="text-[9px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition whitespace-nowrap"
+                              >
+                                View Positions
+                              </button>
+                            )}
                           </div>
                         );
                       })()}
