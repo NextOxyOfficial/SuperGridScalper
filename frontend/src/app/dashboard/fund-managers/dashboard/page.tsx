@@ -462,27 +462,45 @@ export default function FMDashboardPage() {
                       {sub.subscriber_fm_id && (
                         <div className="text-purple-400 text-[10px] mt-0.5">Tap to view FM profile →</div>
                       )}
-                      {/* Mobile: Balance/P/L/Positions at a glance */}
+                      {/* Mobile: Balance/P/L/Positions/Mode/View Positions at a glance */}
                       {(() => {
                         const totalBuy = sub.accounts.reduce((s: number, a: any) => s + (a.buy_positions || 0), 0);
                         const totalSell = sub.accounts.reduce((s: number, a: any) => s + (a.sell_positions || 0), 0);
                         const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
                         const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
                         const totalPos = totalBuy + totalSell;
+                        const tradingMode = sub.accounts.find((a: any) => a.trading_mode)?.trading_mode || 'Normal';
+                        const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account, assignment_id: a.assignment_id })));
                         if (!sub.accounts.some((a: any) => a.balance)) return null;
                         return (
-                          <div className="sm:hidden flex items-center gap-3 mt-1.5 text-[10px]">
-                            <div>
-                              <span className="text-gray-500">Bal: </span>
-                              <span className="text-white font-semibold">${totalBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                          <div className="sm:hidden mt-1.5 space-y-1">
+                            <div className="flex items-center gap-3 text-[10px]">
+                              <div>
+                                <span className="text-gray-500">Bal: </span>
+                                <span className="text-white font-semibold">${totalBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">P/L: </span>
+                                <span className={`font-semibold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${totalProfit.toFixed(2)}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">Pos: </span>
+                                <span className="text-white font-semibold">{totalPos}</span>
+                              </div>
                             </div>
-                            <div>
-                              <span className="text-gray-500">P/L: </span>
-                              <span className={`font-semibold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${totalProfit.toFixed(2)}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Pos: </span>
-                              <span className="text-white font-semibold">{totalPos}</span>
+                            <div className="flex items-center gap-2">
+                              <div className="text-[10px]">
+                                <span className="text-gray-500">Mode: </span>
+                                <span className={`font-semibold ${tradingMode === 'Recovery' ? 'text-orange-400' : 'text-cyan-400'}`}>{tradingMode}</span>
+                              </div>
+                              {totalPos > 0 && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setPositionsModal({ subscriber: sub.user_name, positions: allPositions }); }}
+                                  className="text-[9px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition whitespace-nowrap"
+                                >
+                                  View Positions
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -529,8 +547,26 @@ export default function FMDashboardPage() {
                     );
                   })()}
 
-                  {/* Right: status + expand toggle */}
+                  {/* Right: EA status (mobile) + status + expand toggle */}
                   <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    {/* Mobile: EA ON/OFF indicator */}
+                    {(() => {
+                      const allAccounts = sub.accounts || [];
+                      const anyActive = allAccounts.some((a: any) => a.is_ea_active);
+                      const allActive = allAccounts.length > 0 && allAccounts.every((a: any) => a.is_ea_active);
+                      if (allAccounts.length === 0) return null;
+                      return (
+                        <div className="sm:hidden flex items-center gap-1">
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                            allActive ? 'bg-green-500/20 text-green-400' :
+                            anyActive ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-red-500/20 text-red-400'
+                          }`}>
+                            {allActive ? 'ON' : anyActive ? 'MIXED' : 'OFF'}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     <span className={`text-xs px-2 py-1 rounded-full ${
                       sub.status === 'active' ? 'bg-green-500/20 text-green-400' :
                       sub.status === 'trial' ? 'bg-yellow-500/20 text-yellow-400' :
