@@ -35,7 +35,7 @@ export default function FMDashboardPage() {
   const [avatarError, setAvatarError] = useState('');
   const [expandedSub, setExpandedSub] = useState<number | null>(null);
   const [cancellingSubId, setCancellingSubId] = useState<number | null>(null);
-  const [positionsModal, setPositionsModal] = useState<{ subscriber: string; positions: any[] } | null>(null);
+  const [positionsModal, setPositionsModal] = useState<{ subscriber: string; mt5_account?: string; positions: any[] } | null>(null);
   const [deletingScheduleId, setDeletingScheduleId] = useState<number | null>(null);
   const [creatingSchedule, setCreatingSchedule] = useState(false);
   const [tradeCommandLoading, setTradeCommandLoading] = useState<string | null>(null);
@@ -492,14 +492,6 @@ export default function FMDashboardPage() {
                               <span className="text-gray-500">Mode: </span>
                               <span className={`font-semibold ${tradingMode === 'Recovery' ? 'text-orange-400' : 'text-cyan-400'}`}>{tradingMode}</span>
                             </div>
-                            {totalPos > 0 && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setPositionsModal({ subscriber: sub.user_name, positions: allPositions }); }}
-                                className="text-[9px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition whitespace-nowrap"
-                              >
-                                View Positions
-                              </button>
-                            )}
                           </div>
                         );
                       })()}
@@ -598,7 +590,7 @@ export default function FMDashboardPage() {
                     ) : (
                       sub.accounts.map((acc: any) => (
                         <div key={acc.assignment_id} className="bg-[#0a0a0f] rounded-lg p-3 space-y-2">
-                          {/* MT5 Account + EA Toggle */}
+                          {/* MT5 Account + EA Toggle + View Positions */}
                           <div className="flex items-center justify-between gap-2">
                             <div className="text-white text-xs sm:text-sm font-medium">MT5: {acc.mt5_account}</div>
                             <div className="flex items-center gap-1.5">
@@ -616,6 +608,14 @@ export default function FMDashboardPage() {
                               >
                                 {togglingId === acc.assignment_id ? <><Loader2 className="w-3 h-3 animate-spin" /> {acc.is_ea_active ? 'Stopping...' : 'Starting...'}</> : acc.is_ea_active ? 'Stop' : 'Start'}
                               </button>
+                              {acc.open_positions && acc.open_positions.length > 0 && (
+                                <button
+                                  onClick={() => setPositionsModal({ subscriber: sub.user_name, mt5_account: acc.mt5_account, positions: acc.open_positions.map((p: any) => ({ ...p, mt5_account: acc.mt5_account, assignment_id: acc.assignment_id })) })}
+                                  className="text-[10px] px-2 py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition whitespace-nowrap"
+                                >
+                                  View Positions
+                                </button>
+                              )}
                             </div>
                           </div>
                           {/* Balance/Equity/Profit */}
@@ -944,9 +944,14 @@ export default function FMDashboardPage() {
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setPositionsModal(null)}>
           <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-              <h2 className="text-white text-sm sm:text-base font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                Open Positions — {positionsModal.subscriber}
-              </h2>
+              <div>
+                <h2 className="text-white text-sm sm:text-base font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  Open Positions — {positionsModal.subscriber}
+                </h2>
+                {positionsModal.mt5_account && (
+                  <p className="text-gray-400 text-xs mt-0.5">MT5: {positionsModal.mt5_account}</p>
+                )}
+              </div>
               <button onClick={() => setPositionsModal(null)} className="text-gray-400 hover:text-white transition">
                 <X className="w-5 h-5" />
               </button>
