@@ -2155,7 +2155,14 @@ void ManageRecoveryGrid(bool isBuy)
                     // Recalculate TP based on new avg if positions changed
                     double newTP = breakevenTP;
                     
-                    if(trade.OrderModify(ticket, newPrice, 0, newTP, ORDER_TIME_GTC, 0))
+                    // Calculate SL for relocated recovery order
+                    double relocSL = 0;
+                    if(isBuy && BuyStopLossPips > 0)
+                        relocSL = NormalizeDouble(newPrice - (BuyStopLossPips * pip), _Digits);
+                    else if(!isBuy && SellStopLossPips > 0)
+                        relocSL = NormalizeDouble(newPrice + (SellStopLossPips * pip), _Digits);
+                    
+                    if(trade.OrderModify(ticket, newPrice, relocSL, newTP, ORDER_TIME_GTC, 0))
                     {
                         AddToLog(StringFormat("%s Recovery RELOCATED pending order #%I64u: %.2f -> %.2f (was %.1f pips from expected)", 
                             isBuy ? "BUY" : "SELL", ticket, orderPrice, newPrice, distFromExpected / pip), "RECOVERY");
@@ -2417,15 +2424,22 @@ void ManageRecoveryGrid(bool isBuy)
         recoveryLot = MathFloor(recoveryLot / lotStep) * lotStep;
         recoveryLot = MathMax(minLot, MathMin(effectiveMaxLot, recoveryLot));
         
+        // Calculate SL for recovery orders (same as normal mode SL for safety)
+        double recoverySL = 0;
+        if(isBuy && BuyStopLossPips > 0)
+            recoverySL = NormalizeDouble(recoveryPrice - (BuyStopLossPips * pip), _Digits);
+        else if(!isBuy && SellStopLossPips > 0)
+            recoverySL = NormalizeDouble(recoveryPrice + (SellStopLossPips * pip), _Digits);
+        
         // Place recovery order
-        AddToLog(StringFormat("Attempting to place %s recovery order | Price: %.2f | Lot: %.2f | TP: %.2f", 
-            isBuy ? "BUY" : "SELL", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
+        AddToLog(StringFormat("Attempting to place %s recovery order | Price: %.2f | Lot: %.2f | TP: %.2f | SL: %.2f", 
+            isBuy ? "BUY" : "SELL", recoveryPrice, recoveryLot, breakevenTP, recoverySL), "RECOVERY");
             
         if(isBuy)
         {
-            if(trade.BuyLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_BUY"))
+            if(trade.BuyLimit(recoveryLot, recoveryPrice, _Symbol, recoverySL, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_BUY"))
             {
-                AddToLog(StringFormat("✅ Recovery BUY placed @ %.2f | Lot: %.2f | TP: %.2f", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
+                AddToLog(StringFormat("✅ Recovery BUY placed @ %.2f | Lot: %.2f | TP: %.2f | SL: %.2f", recoveryPrice, recoveryLot, breakevenTP, recoverySL), "RECOVERY");
             }
             else
             {
@@ -2435,9 +2449,9 @@ void ManageRecoveryGrid(bool isBuy)
         }
         else
         {
-            if(trade.SellLimit(recoveryLot, recoveryPrice, _Symbol, 0, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_SELL"))
+            if(trade.SellLimit(recoveryLot, recoveryPrice, _Symbol, recoverySL, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_SELL"))
             {
-                AddToLog(StringFormat("✅ Recovery SELL placed @ %.2f | Lot: %.2f | TP: %.2f", recoveryPrice, recoveryLot, breakevenTP), "RECOVERY");
+                AddToLog(StringFormat("✅ Recovery SELL placed @ %.2f | Lot: %.2f | TP: %.2f | SL: %.2f", recoveryPrice, recoveryLot, breakevenTP, recoverySL), "RECOVERY");
             }
             else
             {
@@ -2893,6 +2907,25 @@ void ApplyTrailing()
         double profitPips = type == POSITION_TYPE_BUY ?
             (currentPrice - basePrice) / pip :
             (basePrice - currentPrice) / pip;
+        
+        // ===== Safety SL: Ensure every position has at least initial SL =====
+        // If position has NO SL (SL=0), set safety SL based on individual open price
+        // This protects recovery positions that were placed without SL before this fix
+        if(currentSL == 0)
+        {
+            double safetySL = 0;
+            if(type == POSITION_TYPE_BUY && BuyStopLossPips > 0)
+                safetySL = NormalizeDouble(openPrice - (BuyStopLossPips * pip), _Digits);
+            else if(type == POSITION_TYPE_SELL && SellStopLossPips > 0)
+                safetySL = NormalizeDouble(openPrice + (SellStopLossPips * pip), _Digits);
+            
+            if(safetySL > 0)
+            {
+                trade.PositionModify(ticket, safetySL, currentTP);
+                AddToLog(StringFormat("Safety SL set: %s #%I64u | Open: %.2f | SL: %.2f", 
+                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", ticket, openPrice, safetySL), "TRAILING");
+            }
+        }
         
         // ===== Trailing Apply =====
         // শুধুমাত্র profit >= trailingStart হলে trailing শুরু হবে
