@@ -365,18 +365,9 @@ def subscribe_to_fm(request):
                     'last_toggled_reason': 'Inherited FM bot state on subscribe' if not fm_bot_active else '',
                 }
             )
-            # Sync license status with FM's current bot state
-            now = timezone.now()
-            if fm_bot_active:
-                # FM bots are running — activate license if it was suspended
-                if lic.status == 'suspended' and lic.expires_at and lic.expires_at > now:
-                    lic.status = 'active'
-                    lic.save(update_fields=['status', 'updated_at'])
-            else:
-                # FM bots are stopped — suspend license if it was active
-                if lic.status == 'active':
-                    lic.status = 'suspended'
-                    lic.save(update_fields=['status', 'updated_at'])
+            # Note: We do NOT sync license status here on subscribe
+            # License status will only be synced when FM explicitly toggles EA on/off
+            # This prevents the FM dashboard button from changing state when new users subscribe
             assigned.append({
                 'license_id': lic.id,
                 'mt5_account': lic.mt5_account,
@@ -700,16 +691,9 @@ def assign_license_to_fm(request):
         }
     )
     
-    # Sync license status with FM's current bot state
-    now = timezone.now()
-    if fm_bot_active:
-        if lic.status == 'suspended' and lic.expires_at and lic.expires_at > now:
-            lic.status = 'active'
-            lic.save(update_fields=['status', 'updated_at'])
-    else:
-        if lic.status == 'active':
-            lic.status = 'suspended'
-            lic.save(update_fields=['status', 'updated_at'])
+    # Note: We do NOT sync license status here on assign
+    # License status will only be synced when FM explicitly toggles EA on/off
+    # This prevents the FM dashboard button from changing state when licenses are added
     
     return JsonResponse({
         'success': True,
