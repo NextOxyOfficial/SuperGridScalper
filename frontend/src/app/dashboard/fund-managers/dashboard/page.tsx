@@ -529,31 +529,15 @@ export default function FMDashboardPage() {
                     {(() => {
                       const totalBuy = sub.accounts.reduce((s: number, a: any) => s + (a.buy_positions || 0), 0);
                       const totalSell = sub.accounts.reduce((s: number, a: any) => s + (a.sell_positions || 0), 0);
-                      const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
-                      const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
                       const allPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account, assignment_id: a.assignment_id })));
                       const totalPos = totalBuy + totalSell;
                       const tradingMode = sub.accounts.find((a: any) => a.trading_mode)?.trading_mode || 'Normal';
-                      if (sub.accounts.length === 0 || !sub.accounts.some((a: any) => a.balance)) return null;
+                      if (sub.accounts.length === 0) return null;
                       return (
                         <div className="sm:hidden flex items-center justify-between bg-[#0a0a0f] rounded-lg p-3 border border-gray-800/50">
-                          <div className="flex items-center gap-3">
-                            <div>
-                              <div className="text-gray-500 text-[9px]">Mode</div>
-                              <div className={`text-xs font-semibold ${tradingMode === 'Recovery' ? 'text-orange-400' : 'text-cyan-400'}`}>{tradingMode}</div>
-                            </div>
-                            <div>
-                              <div className="text-gray-500 text-[9px]">Balance</div>
-                              <div className="text-white text-xs font-semibold">${totalBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                            </div>
-                            <div>
-                              <div className="text-gray-500 text-[9px]">P/L</div>
-                              <div className={`text-xs font-semibold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${totalProfit.toFixed(2)}</div>
-                            </div>
-                            <div>
-                              <div className="text-gray-500 text-[9px]">Positions</div>
-                              <div className="text-white text-xs font-semibold">{totalPos}</div>
-                            </div>
+                          <div>
+                            <div className="text-gray-500 text-[9px]">Trading Mode</div>
+                            <div className={`text-xs font-semibold ${tradingMode === 'Recovery' ? 'text-orange-400' : 'text-cyan-400'}`}>{tradingMode}</div>
                           </div>
                           {totalPos > 0 && (
                             <button
@@ -563,6 +547,31 @@ export default function FMDashboardPage() {
                               View Positions
                             </button>
                           )}
+                        </div>
+                      );
+                    })()}
+                    {/* Summary Stats in Dropdown */}
+                    {(() => {
+                      const totalBuy = sub.accounts.reduce((s: number, a: any) => s + (a.buy_positions || 0), 0);
+                      const totalSell = sub.accounts.reduce((s: number, a: any) => s + (a.sell_positions || 0), 0);
+                      const totalProfit = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.profit || '0'), 0);
+                      const totalBalance = sub.accounts.reduce((s: number, a: any) => s + parseFloat(a.balance || '0'), 0);
+                      const totalPos = totalBuy + totalSell;
+                      if (!sub.accounts.some((a: any) => a.balance)) return null;
+                      return (
+                        <div className="grid grid-cols-3 gap-2 bg-[#0a0a0f] rounded-lg p-3 border border-gray-800/50">
+                          <div>
+                            <div className="text-gray-500 text-[9px]">Balance</div>
+                            <div className="text-white text-xs font-semibold">${totalBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500 text-[9px]">P/L</div>
+                            <div className={`text-xs font-semibold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${totalProfit.toFixed(2)}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500 text-[9px]">Positions</div>
+                            <div className="text-white text-xs font-semibold">{totalPos}</div>
+                          </div>
                         </div>
                       );
                     })()}
