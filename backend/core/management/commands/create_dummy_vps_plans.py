@@ -3,10 +3,11 @@ from core.models import VPSPlan
 
 
 class Command(BaseCommand):
-    help = 'Create single VPS plan for testing (simplified system)'
+    help = 'Create single VPS plan (simplified system) - Live Server Pricing'
 
     def handle(self, *args, **options):
         # Single VPS configuration - pricing varies by billing cycle only
+        # Live server pricing: Starting from $16/month
         plan_data = {
             'name': 'Forex VPS',
             'description': 'Perfect for running your EA 24/7',
@@ -16,9 +17,9 @@ class Command(BaseCommand):
             'os': 'Windows Server 2022',
             'bandwidth': 'Unlimited',
             'location': 'New York, USA',
-            'price_monthly': 20.00,
-            'price_quarterly': 54.00,
-            'price_yearly': 192.00,
+            'price_monthly': 16.00,      # Starting from $16/month
+            'price_quarterly': 43.00,    # 3 months - ~10% savings
+            'price_yearly': 160.00,      # 12 months - ~17% savings
             'features': [
                 'Windows Server 2022',
                 'MetaTrader 5 Pre-Installed',
