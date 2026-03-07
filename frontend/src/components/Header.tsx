@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Store, LogOut, Menu, X, Users } from 'lucide-react';
+import { Store, LogOut, Menu, X, Users, Server } from 'lucide-react';
 import SiteLogo from './SiteLogo';
 
 interface HeaderProps {
@@ -75,13 +75,6 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                   Guidelines
                 </Link>
                 <Link
-                  href="/demo"
-                  className="px-4 py-2 rounded-lg text-sm font-medium transition text-green-300 hover:text-white hover:bg-green-500/20 border border-green-500/30"
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
-                  Demo
-                </Link>
-                <Link
                   href="/dashboard/fund-managers"
                   className="px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 text-purple-300 hover:text-white hover:bg-purple-500/20 border border-purple-500/30"
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
@@ -105,6 +98,13 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                     Pricing
                   </Link>
                 )}
+                <Link
+                  href="/vps"
+                  className="px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 text-orange-300 hover:text-white hover:bg-orange-500/20 border border-orange-500/30"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <Server className="w-4 h-4" /> VPS
+                </Link>
                 <div className="h-5 w-px bg-cyan-500/30 mx-2"></div>
                 <span className="text-cyan-300 text-sm">{userName}</span>
                 <button
@@ -131,13 +131,6 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                   Guidelines
                 </Link>
                 <Link
-                  href="/demo"
-                  className="px-4 py-2 text-green-300 hover:text-white hover:bg-green-500/20 rounded-lg text-sm font-medium transition border border-green-500/30"
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
-                  Demo
-                </Link>
-                <Link
                   href="/dashboard/fund-managers"
                   className="px-4 py-2 text-purple-300 hover:text-white hover:bg-purple-500/20 rounded-lg text-sm font-medium transition border border-purple-500/30 flex items-center gap-2"
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
@@ -161,6 +154,13 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                     Pricing
                   </Link>
                 )}
+                <Link
+                  href="/vps"
+                  className="px-4 py-2 text-orange-300 hover:text-white hover:bg-orange-500/20 rounded-lg text-sm font-medium transition border border-orange-500/30 flex items-center gap-2"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <Server className="w-4 h-4" /> VPS
+                </Link>
 
                 {onLoginClick ? (
                   <button
@@ -264,14 +264,6 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                   Guidelines
                 </Link>
                 <Link
-                  href="/demo"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="px-3 py-2 rounded-lg text-xs font-medium transition border border-green-500/30 text-green-300 hover:text-white hover:bg-green-500/20"
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
-                  Demo
-                </Link>
-                <Link
                   href="/dashboard/fund-managers"
                   onClick={() => setMobileMenuOpen(false)}
                   className="px-3 py-2 rounded-lg text-xs font-medium transition border border-purple-500/30 text-purple-300 hover:text-white hover:bg-purple-500/20 inline-flex items-center justify-center gap-1"
@@ -287,7 +279,7 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                       setMobileMenuOpen(false);
                       scrollToPricing();
                     }}
-                    className="px-3 py-2 rounded-lg text-xs font-medium transition border border-purple-500/30 text-purple-300 hover:text-white hover:bg-purple-500/20"
+                    className="px-3 py-2 rounded-lg text-xs font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
                     Pricing
@@ -296,12 +288,20 @@ export default function Header({ onLoginClick, onRegisterClick, scrollToPricing 
                   <Link
                     href={pricingHref}
                     onClick={() => setMobileMenuOpen(false)}
-                    className="px-3 py-2 rounded-lg text-xs font-medium transition border border-purple-500/30 text-purple-300 hover:text-white hover:bg-purple-500/20 text-center"
+                    className="px-3 py-2 rounded-lg text-xs font-medium transition border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20 text-center"
                     style={{ fontFamily: 'Orbitron, sans-serif' }}
                   >
                     Pricing
                   </Link>
                 )}
+                <Link
+                  href="/vps"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-2 rounded-lg text-xs font-medium transition border border-orange-500/30 text-orange-300 hover:text-white hover:bg-orange-500/20 inline-flex items-center justify-center gap-1"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <Server className="w-3.5 h-3.5" /> VPS
+                </Link>
 
                 {isLoggedIn ? (
                   <button
