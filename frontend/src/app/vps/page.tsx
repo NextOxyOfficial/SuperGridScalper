@@ -8,7 +8,7 @@ import { Server, Cpu, HardDrive, Globe, Shield, Zap, CheckCircle, Loader2, Uploa
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
 
-// Single VPS Configuration
+// Single VPS Configuration (fallback if API fails)
 const VPS_CONFIG = {
   name: 'Forex VPS',
   description: 'Perfect for running your EA 24/7',
@@ -26,7 +26,6 @@ const VPS_CONFIG = {
     'MetaTrader 5 Pre-Installed',
     "Mark's AI EA Pre-Loaded",
     'Full RDP Access',
-    'Up to 3 MT5 Instances',
     '99.99% Uptime SLA',
     '24/7 Priority Support',
     'Faster Execution Speed',
