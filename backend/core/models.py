@@ -1407,3 +1407,137 @@ class EmailOTP(models.Model):
         indexes = [
             models.Index(fields=['email', 'purpose', 'is_used']),
         ]
+
+
+# =====================================================
+# VPS / Windows RDP Server Models
+# =====================================================
+
+class VPSPlan(models.Model):
+    """Admin-managed VPS/RDP plans for sale"""
+    name = models.CharField(max_length=100, help_text="e.g. 'Starter VPS', 'Pro VPS'")
+    description = models.TextField(blank=True)
+    cpu = models.CharField(max_length=50, help_text="e.g. '2 vCPU'")
+    ram = models.CharField(max_length=50, help_text="e.g. '4 GB'")
+    storage = models.CharField(max_length=50, help_text="e.g. '60 GB SSD'")
+    os = models.CharField(max_length=100, default='Windows Server 2022', help_text="Operating system")
+    bandwidth = models.CharField(max_length=50, default='Unlimited', blank=True)
+    location = models.CharField(max_length=100, default='New York, USA', blank=True)
+    
+    price_monthly = models.DecimalField(max_digits=10, decimal_places=2, help_text="Monthly price in USD")
+    price_quarterly = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="3-month price (optional discount)")
+    price_yearly = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="12-month price (optional discount)")
+    
+    features = models.JSONField(default=list, blank=True, help_text="List of feature strings, e.g. ['24/7 Uptime', 'Full Admin Access']")
+    is_popular = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} - ${self.price_monthly}/mo"
+
+    class Meta:
+        ordering = ['sort_order', 'price_monthly']
+        verbose_name = "VPS Plan"
+        verbose_name_plural = "VPS Plans"
+
+
+class VPSOrder(models.Model):
+    """User order for a VPS/RDP server"""
+    STATUS_CHOICES = [
+        ('pending', 'Pending Activation'),
+        ('active', 'Active'),
+        ('expired', 'Expired'),
+        ('cancelled', 'Cancelled'),
+        ('suspended', 'Suspended'),
+    ]
+    BILLING_CHOICES = [
+        ('monthly', 'Monthly'),
+        ('quarterly', 'Quarterly (3 months)'),
+        ('yearly', 'Yearly (12 months)'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='vps_orders')
+    plan = models.ForeignKey(VPSPlan, on_delete=models.PROTECT, related_name='orders')
+    order_number = models.CharField(max_length=10, unique=True, editable=False)
+    
+    billing_cycle = models.CharField(max_length=20, choices=BILLING_CHOICES, default='monthly')
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    # Payment proof (reuse existing payment system pattern)
+    network = models.ForeignKey('PaymentNetwork', on_delete=models.SET_NULL, null=True, blank=True)
+    txid = models.CharField(max_length=255, blank=True)
+    proof = models.FileField(upload_to='vps_payment_proofs/', blank=True, null=True)
+    user_note = models.TextField(blank=True)
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    admin_note = models.TextField(blank=True)
+    
+    # Dates
+    activated_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            self.order_number = self.generate_order_number()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def generate_order_number():
+        import random
+        while True:
+            number = 'VPS' + str(random.randint(100000, 999999))
+            if not VPSOrder.objects.filter(order_number=number).exists():
+                return number
+
+    @property
+    def is_active(self):
+        if self.status != 'active':
+            return False
+        if self.expires_at and timezone.now() > self.expires_at:
+            return False
+        return True
+
+    @property
+    def days_remaining(self):
+        if not self.is_active or not self.expires_at:
+            return 0
+        delta = self.expires_at - timezone.now()
+        return max(0, delta.days)
+
+    def __str__(self):
+        return f"#{self.order_number} - {self.user.email} - {self.plan.name} ({self.status})"
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "VPS Order"
+        verbose_name_plural = "VPS Orders"
+
+
+class VPSServer(models.Model):
+    """Server details filled by admin after purchasing from reseller"""
+    order = models.OneToOneField(VPSOrder, on_delete=models.CASCADE, related_name='server')
+    
+    ip_address = models.CharField(max_length=45, help_text="Server IP address")
+    rdp_port = models.IntegerField(default=3389, help_text="RDP port")
+    username = models.CharField(max_length=100, help_text="RDP login username")
+    password = models.CharField(max_length=255, help_text="RDP login password")
+    
+    hostname = models.CharField(max_length=255, blank=True, help_text="Server hostname (optional)")
+    additional_info = models.TextField(blank=True, help_text="Any extra info for the user")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.ip_address} → {self.order.user.email}"
+
+    class Meta:
+        verbose_name = "VPS Server"
+        verbose_name_plural = "VPS Servers"

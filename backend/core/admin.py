@@ -15,7 +15,8 @@ from .models import (
     SMTPSettings, EmailPreference, PayoutMethod,
     FundManager, FMSubscription, FMAccountAssignment, FMCommand,
     FMChatRoom, FMChatMessage, FMReview, FMPayout, FMSchedule, EconomicEvent,
-    TradingWaveAlert, Badge, UserBadge
+    TradingWaveAlert, Badge, UserBadge,
+    VPSPlan, VPSOrder, VPSServer
 )
 
 
@@ -1790,3 +1791,130 @@ class UserBadgeAdmin(admin.ModelAdmin):
     search_fields = ['user__email', 'user__username', 'badge__name']
     readonly_fields = ['awarded_at']
     autocomplete_fields = ['badge', 'user']
+
+
+# =====================================================
+# VPS / Windows RDP Server Admin
+# =====================================================
+
+@admin.register(VPSPlan)
+class VPSPlanAdmin(admin.ModelAdmin):
+    list_display = ['name', 'cpu', 'ram', 'storage', 'price_monthly', 'price_quarterly', 'price_yearly', 'is_popular', 'is_active', 'sort_order']
+    list_filter = ['is_active', 'is_popular']
+    list_editable = ['is_active', 'is_popular', 'sort_order', 'price_monthly']
+    search_fields = ['name']
+    fieldsets = (
+        ('Plan Info', {'fields': ('name', 'description', 'is_active', 'is_popular', 'sort_order')}),
+        ('Specs', {'fields': ('cpu', 'ram', 'storage', 'os', 'bandwidth', 'location')}),
+        ('Pricing', {'fields': ('price_monthly', 'price_quarterly', 'price_yearly')}),
+        ('Features', {'fields': ('features',), 'description': 'JSON list of feature strings shown on the plan card'}),
+    )
+
+
+class VPSServerInline(admin.StackedInline):
+    model = VPSServer
+    extra = 0
+    fields = ['ip_address', 'rdp_port', 'username', 'password', 'hostname', 'additional_info']
+
+
+@admin.register(VPSOrder)
+class VPSOrderAdmin(admin.ModelAdmin):
+    list_display = ['order_number', 'user', 'plan', 'billing_cycle', 'amount_paid', 'status_display', 'days_remaining_display', 'has_server', 'created_at']
+    list_filter = ['status', 'billing_cycle', 'plan', 'created_at']
+    search_fields = ['order_number', 'user__email', 'txid']
+    readonly_fields = ['order_number', 'created_at', 'updated_at']
+    autocomplete_fields = ['user', 'plan', 'network']
+    radio_fields = {'status': admin.HORIZONTAL}
+    inlines = [VPSServerInline]
+    fieldsets = (
+        ('Order Info', {'fields': ('order_number', 'user', 'plan', 'billing_cycle', 'status')}),
+        ('Payment', {'fields': ('amount_paid', 'network', 'txid', 'proof', 'user_note')}),
+        ('Admin', {'fields': ('admin_note', 'activated_at', 'expires_at')}),
+        ('Timestamps', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
+    )
+
+    def status_display(self, obj):
+        colors = {
+            'pending': '#fbbf24',
+            'active': '#10b981',
+            'expired': '#6b7280',
+            'cancelled': '#ef4444',
+            'suspended': '#f97316',
+        }
+        color = colors.get(obj.status, '#6b7280')
+        return format_html('<span style="color: {}; font-weight: bold;">{}</span>', color, obj.get_status_display())
+    status_display.short_description = 'Status'
+
+    def days_remaining_display(self, obj):
+        days = obj.days_remaining
+        if days <= 0 and obj.status == 'active':
+            return format_html('<span style="color: #ef4444;">EXPIRED</span>')
+        if days <= 7:
+            return format_html('<span style="color: #f97316;">{}d</span>', days)
+        return f'{days}d'
+    days_remaining_display.short_description = 'Days Left'
+
+    def has_server(self, obj):
+        return hasattr(obj, 'server') and obj.server is not None
+    has_server.boolean = True
+    has_server.short_description = 'Server'
+
+    def save_model(self, request, obj, form, change):
+        """When admin activates an order, set dates and send email"""
+        if change and obj.status == 'active' and not obj.activated_at:
+            from datetime import timedelta
+            obj.activated_at = timezone.now()
+            billing_days = {'monthly': 30, 'quarterly': 90, 'yearly': 365}
+            days = billing_days.get(obj.billing_cycle, 30)
+            obj.expires_at = timezone.now() + timedelta(days=days)
+            
+            # Send activation email if server details exist
+            try:
+                server = obj.server if hasattr(obj, 'server') else None
+                if server:
+                    from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+                    from django.core.mail import EmailMultiAlternatives
+                    base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+                    subject = f'Your VPS Server is Ready - Order #{obj.order_number}'
+                    if can_send_email_to_user(obj.user, 'transactional'):
+                        html_message = render_email_template(
+                            subject=subject,
+                            heading='Your VPS Server is Ready!',
+                            message=f"""
+                                <p>Hi <strong>{obj.user.first_name or 'Trader'}</strong>,</p>
+                                <p>Great news! Your Windows RDP Server has been set up and is <strong style="color: #10b981;">ready to use</strong>.</p>
+                                <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                                    <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">Server Details:</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Order:</strong> #{obj.order_number}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {obj.plan.name}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>IP Address:</strong> {server.ip_address}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>RDP Port:</strong> {server.rdp_port}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Username:</strong> {server.username}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Password:</strong> {server.password}</p>
+                                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Expires:</strong> {obj.expires_at.strftime('%B %d, %Y')}</p>
+                                </div>
+                                <p>You can view your server details anytime from your dashboard.</p>
+                            """,
+                            cta_text='OPEN DASHBOARD',
+                            cta_url=f'{base}/dashboard/vps',
+                            footer_note='Keep your credentials secure. Do not share them with anyone.',
+                            preheader=f'Your VPS server #{obj.order_number} is ready! Connect via RDP now.',
+                            unsubscribe_url=get_unsubscribe_url(obj.user)
+                        )
+                        text_msg = f"Hi {obj.user.first_name or 'Trader'},\n\nYour VPS is ready!\nIP: {server.ip_address}\nPort: {server.rdp_port}\nUser: {server.username}\nPass: {server.password}\nExpires: {obj.expires_at.strftime('%B %d, %Y')}\n\nDashboard: {base}/dashboard/vps"
+                        msg = EmailMultiAlternatives(subject, text_msg, get_email_from_address(), [obj.user.email])
+                        msg.attach_alternative(html_message, "text/html")
+                        msg = add_email_headers(msg, 'transactional', user=obj.user)
+                        msg.send(fail_silently=False)
+                        self.message_user(request, f'Activation email sent to {obj.user.email}')
+            except Exception as e:
+                print(f'[VPS ADMIN] Failed to send activation email: {e}')
+        
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(VPSServer)
+class VPSServerAdmin(admin.ModelAdmin):
+    list_display = ['order', 'ip_address', 'rdp_port', 'username', 'created_at']
+    search_fields = ['ip_address', 'hostname', 'order__order_number', 'order__user__email']
+    readonly_fields = ['created_at', 'updated_at']

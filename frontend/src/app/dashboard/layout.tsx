@@ -4,7 +4,7 @@ import { DashboardProvider, useDashboard } from './context';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect, useTransition } from 'react';
-import { Bot, Store, Gift, Download, X, Bell, Users, Star, Flame, Crown, Shield as ShieldIcon, Gem, Rocket, Trophy, Zap, Clock, TrendingUp, Loader2 } from 'lucide-react';
+import { Bot, Store, Gift, Download, X, Bell, Users, Star, Flame, Crown, Shield as ShieldIcon, Gem, Rocket, Trophy, Zap, Clock, TrendingUp, Loader2, Server } from 'lucide-react';
 import SiteLogo from '@/components/SiteLogo';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://markstrades.com/api';
@@ -152,6 +152,7 @@ function DashboardNav() {
 
   // Simple nav for license selection page or EA store without license
   const isFundManagersPage = pathname.startsWith('/dashboard/fund-managers');
+  const isVPSPage = pathname.startsWith('/dashboard/vps');
 
   // Guest nav for non-logged-in users browsing FM Engine
   if (!user && isFundManagersPage) {
@@ -205,7 +206,7 @@ function DashboardNav() {
     );
   }
 
-  if (!selectedLicense && (pathname === '/dashboard' || pathname === '/dashboard/ea-store' || pathname === '/dashboard/referral' || isFundManagersPage)) {
+  if (!selectedLicense && (pathname === '/dashboard' || pathname === '/dashboard/ea-store' || pathname === '/dashboard/referral' || isFundManagersPage || isVPSPage)) {
     return (
       <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
         <div className="max-w-7xl mx-auto px-1 sm:px-4 py-2 sm:py-3">
@@ -268,6 +269,17 @@ function DashboardNav() {
             >
               <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Referral
             </Link>
+            <Link
+              href="/dashboard/vps"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                isVPSPage 
+                  ? 'bg-orange-500 text-black' 
+                  : 'text-orange-300 hover:text-white hover:bg-orange-500/20 border border-orange-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> VPS
+            </Link>
           </div>
         </div>
       </nav>
@@ -278,6 +290,7 @@ function DashboardNav() {
   const isEAStorePage = pathname === '/dashboard/ea-store';
   const isReferralPage = pathname === '/dashboard/referral';
   const isDashboardPage = pathname === '/dashboard' && selectedLicense;
+  const isVPSPageSelected = isVPSPage;
 
   return (
     <nav className="bg-[#0a0a0f] border-b border-cyan-500/20">
@@ -361,6 +374,17 @@ function DashboardNav() {
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
               <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Referral
+            </Link>
+            <Link
+              href="/dashboard/vps"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                isVPSPageSelected 
+                  ? 'bg-orange-500 text-black' 
+                  : 'text-orange-300 hover:text-white hover:bg-orange-500/20 border border-orange-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> VPS
             </Link>
           </div>
         )}

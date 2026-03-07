@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Check, CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift, Users } from 'lucide-react'
+import { Check, CheckCircle, Shield, Zap, Clock, TrendingUp, Star, ArrowRight, X, Copy, Loader2, LogIn, LogOut, Bot, Cpu, Activity, Target, Sparkles, Store, BookOpen, Settings, Gift, Users, Server, Monitor, Wifi, HardDrive, Globe } from 'lucide-react'
 import axios from 'axios'
 import ExnessBroker from '@/components/ExnessBroker'
 import Header from '@/components/Header'
@@ -1842,6 +1842,61 @@ export default function Home() {
           </div>
           <div className="max-w-3xl mx-auto">
             <ExnessBroker variant="full" />
+          </div>
+        </div>
+
+        {/* Forex VPS Section */}
+        <div className="mb-12 sm:mb-24">
+          <div className="relative bg-gradient-to-br from-[#0d1117] via-[#12121a] to-[#0d1117] border border-orange-500/20 rounded-2xl sm:rounded-3xl p-5 sm:p-10 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 via-transparent to-yellow-500/5" />
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-orange-500/50 to-transparent" />
+            
+            <div className="relative">
+              <div className="text-center mb-6 sm:mb-10">
+                <div className="inline-flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-full px-4 py-2 mb-4">
+                  <Server className="w-4 h-4 text-orange-400" />
+                  <span className="text-orange-300 text-xs sm:text-sm font-semibold" style={{ fontFamily: 'Orbitron, sans-serif' }}>FOREX VPS</span>
+                </div>
+                <h2 className="text-xl sm:text-4xl font-bold text-white mb-2 sm:mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                  Windows RDP <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">Server</span>
+                </h2>
+                <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto">
+                  Keep your EA running 24/7 with ultra-low latency VPS. Never miss a trade again.
+                </p>
+              </div>
+
+              {/* VPS Features Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+                {[
+                  { icon: Zap, label: 'Ultra-Low Latency', desc: '<1ms to broker servers', color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
+                  { icon: Shield, label: '99.99% Uptime', desc: 'Enterprise-grade SLA', color: 'text-green-400', bg: 'bg-green-500/10' },
+                  { icon: Monitor, label: 'Full RDP Access', desc: 'Windows Server Desktop', color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+                  { icon: Wifi, label: '24/7 Online', desc: 'Always-on trading', color: 'text-purple-400', bg: 'bg-purple-500/10' },
+                ].map((f, i) => (
+                  <div key={i} className="bg-black/30 border border-white/5 rounded-xl p-3 sm:p-4 text-center hover:border-orange-500/20 transition">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 ${f.bg} rounded-xl flex items-center justify-center mx-auto mb-2`}>
+                      <f.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${f.color}`} />
+                    </div>
+                    <div className="text-white text-xs sm:text-sm font-semibold mb-0.5">{f.label}</div>
+                    <div className="text-gray-500 text-[10px] sm:text-xs">{f.desc}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* CTA */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+                <Link
+                  href="/dashboard/vps"
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500 to-yellow-400 hover:from-orange-400 hover:to-yellow-300 text-black px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl font-bold text-sm sm:text-base transition-all shadow-lg shadow-orange-500/20 hover:shadow-orange-500/30 hover:scale-105 w-full sm:w-auto justify-center"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  <Server className="w-4 h-4 sm:w-5 sm:h-5" /> ORDER VPS NOW
+                </Link>
+                <div className="text-gray-500 text-xs sm:text-sm">
+                  Starting from <span className="text-orange-400 font-bold">$10/mo</span> · Instant Setup
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
