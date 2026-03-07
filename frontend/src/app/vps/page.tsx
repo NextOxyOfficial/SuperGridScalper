@@ -45,8 +45,10 @@ type BillingCycle = 'monthly' | 'quarterly' | 'yearly';
 
 export default function VPSLandingPage() {
   const router = useRouter();
+  const [vpsConfig, setVpsConfig] = useState(VPS_CONFIG); // Start with hardcoded fallback
   const [networks, setNetworks] = useState<PaymentNetwork[]>([]);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
+  const [loading, setLoading] = useState(true);
 
   // Order modal state
   const [showOrderModal, setShowOrderModal] = useState(false);
@@ -60,6 +62,7 @@ export default function VPSLandingPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
+    fetchVPSPlan();
     fetchNetworks();
     // Pre-fill email if logged in
     const userData = localStorage.getItem('user');
@@ -71,6 +74,33 @@ export default function VPSLandingPage() {
     }
   }, []);
 
+  const fetchVPSPlan = async () => {
+    try {
+      const res = await fetch(`${API_URL}/vps/plans/`);
+      const data = await res.json();
+      if (data.success && data.plans && data.plans.length > 0) {
+        const plan = data.plans[0]; // Get first (and only) plan
+        setVpsConfig({
+          name: plan.name,
+          description: plan.description,
+          cpu: plan.cpu,
+          ram: plan.ram,
+          storage: plan.storage,
+          os: plan.os,
+          bandwidth: plan.bandwidth,
+          location: plan.location,
+          price_monthly: plan.price_monthly,
+          price_quarterly: plan.price_quarterly || plan.price_monthly * 3,
+          price_yearly: plan.price_yearly || plan.price_monthly * 12,
+          features: plan.features || [],
+        });
+      }
+    } catch (e) { 
+      console.error('Failed to fetch VPS plan:', e);
+    }
+    setLoading(false);
+  };
+
   const fetchNetworks = async () => {
     try {
       const res = await fetch(`${API_URL}/payment-networks/`);
@@ -80,15 +110,15 @@ export default function VPSLandingPage() {
   };
 
   const getPrice = (cycle: BillingCycle) => {
-    if (cycle === 'quarterly') return VPS_CONFIG.price_quarterly;
-    if (cycle === 'yearly') return VPS_CONFIG.price_yearly;
-    return VPS_CONFIG.price_monthly;
+    if (cycle === 'quarterly') return vpsConfig.price_quarterly;
+    if (cycle === 'yearly') return vpsConfig.price_yearly;
+    return vpsConfig.price_monthly;
   };
 
   const getSavings = (cycle: BillingCycle) => {
-    const monthly = VPS_CONFIG.price_monthly;
-    if (cycle === 'quarterly') return Math.round((1 - VPS_CONFIG.price_quarterly / (monthly * 3)) * 100);
-    if (cycle === 'yearly') return Math.round((1 - VPS_CONFIG.price_yearly / (monthly * 12)) * 100);
+    const monthly = vpsConfig.price_monthly;
+    if (cycle === 'quarterly') return Math.round((1 - vpsConfig.price_quarterly / (monthly * 3)) * 100);
+    if (cycle === 'yearly') return Math.round((1 - vpsConfig.price_yearly / (monthly * 12)) * 100);
     return 0;
   };
 
@@ -116,7 +146,7 @@ export default function VPSLandingPage() {
 
     const formData = new FormData();
     formData.append('email', email.trim());
-    formData.append('plan_id', '1'); // Single VPS plan ID
+    formData.append('plan_id', '1'); // Single VPS plan ID (always 1 for Forex VPS)
     formData.append('billing_cycle', billingCycle);
     formData.append('network_id', String(selectedNetwork));
     formData.append('txid', txid);
@@ -249,15 +279,15 @@ export default function VPSLandingPage() {
             {/* Mobile: Single VPS Card */}
             <div className="md:hidden max-w-md mx-auto">
               <div className="relative bg-gradient-to-br from-[#12121a] to-[#0a0a0f] border border-orange-400 ring-2 ring-orange-400/30 shadow-lg shadow-orange-500/10 rounded-2xl p-5">
-                <h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>{VPS_CONFIG.name}</h3>
-                <p className="text-gray-400 text-xs mb-4">{VPS_CONFIG.description}</p>
+                <h3 className="text-lg font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>{vpsConfig.name}</h3>
+                <p className="text-gray-400 text-xs mb-4">{vpsConfig.description}</p>
 
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   {[
-                    { icon: Cpu, label: 'CPU', value: VPS_CONFIG.cpu, color: 'text-orange-400' },
-                    { icon: Zap, label: 'RAM', value: VPS_CONFIG.ram, color: 'text-cyan-400' },
-                    { icon: HardDrive, label: 'Storage', value: VPS_CONFIG.storage, color: 'text-green-400' },
-                    { icon: Globe, label: 'Location', value: VPS_CONFIG.location, color: 'text-purple-400' },
+                    { icon: Cpu, label: 'CPU', value: vpsConfig.cpu, color: 'text-orange-400' },
+                    { icon: Zap, label: 'RAM', value: vpsConfig.ram, color: 'text-cyan-400' },
+                    { icon: HardDrive, label: 'Storage', value: vpsConfig.storage, color: 'text-green-400' },
+                    { icon: Globe, label: 'Location', value: vpsConfig.location, color: 'text-purple-400' },
                   ].map((s, i) => (
                     <div key={i} className="bg-white/5 rounded-lg p-2 text-center">
                       <s.icon className={`w-4 h-4 ${s.color} mx-auto mb-0.5`} />
@@ -274,7 +304,7 @@ export default function VPSLandingPage() {
                 </div>
 
                 <ul className="space-y-1.5 mb-5">
-                  {VPS_CONFIG.features.map((f, i) => (
+                  {vpsConfig.features.map((f, i) => (
                     <li key={i} className="flex items-center gap-2 text-gray-300 text-xs">
                       <CheckCircle className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
                       {f}
@@ -476,8 +506,8 @@ export default function VPSLandingPage() {
 
               {/* Plan Summary */}
               <div className="bg-white/5 rounded-xl p-4 mb-5">
-                <div className="text-white font-semibold text-sm mb-1">{VPS_CONFIG.name}</div>
-                <div className="text-gray-400 text-xs">{VPS_CONFIG.cpu} · {VPS_CONFIG.ram} · {VPS_CONFIG.storage}</div>
+                <div className="text-white font-semibold text-sm mb-1">{vpsConfig.name}</div>
+                <div className="text-gray-400 text-xs">{vpsConfig.cpu} · {vpsConfig.ram} · {vpsConfig.storage}</div>
                 <div className="text-orange-400 font-bold mt-1">${getPrice(billingCycle)} / {billingCycle === 'monthly' ? 'month' : billingCycle === 'quarterly' ? '3 months' : 'year'}</div>
               </div>
 
