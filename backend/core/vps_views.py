@@ -4,8 +4,9 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.conf import settings as django_settings
-from .models import VPSPlan, VPSOrder, VPSServer, PaymentNetwork
+from .models import VPSPlan, VPSOrder, VPSServer, PaymentNetwork, VPSDiscount
 from .views import resolve_user
+from decimal import Decimal
 
 
 @require_http_methods(["GET"])
@@ -70,22 +71,36 @@ def create_vps_order(request):
 
     # Calculate amount based on billing cycle
     if billing_cycle == 'quarterly' and plan.price_quarterly:
-        amount = plan.price_quarterly
+        original_amount = plan.price_quarterly
     elif billing_cycle == 'yearly' and plan.price_yearly:
-        amount = plan.price_yearly
+        original_amount = plan.price_yearly
     else:
-        amount = plan.price_monthly
+        original_amount = plan.price_monthly
         billing_cycle = 'monthly'
+
+    # Check for VPS discount
+    discount_applied = Decimal('0')
+    discount_percentage = Decimal('0')
+    final_amount = original_amount
+    
+    try:
+        vps_discount = VPSDiscount.objects.get(user=user)
+        if vps_discount.is_valid():
+            discount_percentage = vps_discount.discount_percentage
+            discount_applied = (original_amount * discount_percentage / Decimal('100')).quantize(Decimal('0.01'))
+            final_amount = (original_amount - discount_applied).quantize(Decimal('0.01'))
+    except VPSDiscount.DoesNotExist:
+        pass
 
     order = VPSOrder.objects.create(
         user=user,
         plan=plan,
         billing_cycle=billing_cycle,
-        amount_paid=amount,
+        amount_paid=final_amount,
         network=network,
         txid=txid,
         proof=proof,
-        user_note=user_note,
+        user_note=user_note if not discount_applied else f"{user_note}\n[{discount_percentage}% VPS discount applied: ${discount_applied} off]".strip(),
         status='pending',
     )
 
@@ -238,3 +253,39 @@ def get_my_vps_orders(request):
         })
 
     return JsonResponse({'success': True, 'orders': items})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def get_vps_discount(request):
+    """Get VPS discount info for a user"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid request'}, status=400)
+
+    email = (data.get('email') or '').strip()
+    if not email:
+        return JsonResponse({'success': False, 'error': 'Email is required'}, status=400)
+
+    user = resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
+
+    try:
+        vps_discount = VPSDiscount.objects.get(user=user)
+        if vps_discount.is_valid():
+            return JsonResponse({
+                'success': True,
+                'has_discount': True,
+                'discount_percentage': float(vps_discount.discount_percentage),
+                'expires_at': vps_discount.expires_at.isoformat() if vps_discount.expires_at else None,
+            })
+    except VPSDiscount.DoesNotExist:
+        pass
+
+    return JsonResponse({
+        'success': True,
+        'has_discount': False,
+        'discount_percentage': 0,
+    })

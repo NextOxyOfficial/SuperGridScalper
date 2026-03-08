@@ -68,6 +68,7 @@ export default function VPSPage() {
   const [orders, setOrders] = useState<VPSOrder[]>([]);
   const [networks, setNetworks] = useState<PaymentNetwork[]>([]);
   const [loading, setLoading] = useState(true);
+  const [vpsDiscount, setVpsDiscount] = useState<{ has_discount: boolean; discount_percentage: number } | null>(null);
 
   // Order form state
   const [showOrderForm, setShowOrderForm] = useState(false);
@@ -89,7 +90,10 @@ export default function VPSPage() {
   useEffect(() => {
     fetchPlans();
     fetchNetworks();
-    if (user?.email) fetchOrders();
+    if (user?.email) {
+      fetchOrders();
+      fetchVPSDiscount();
+    }
   }, [user]);
 
   const fetchPlans = async () => {
@@ -122,6 +126,19 @@ export default function VPSPage() {
     } catch (e) { console.error(e); }
   };
 
+  const fetchVPSDiscount = async () => {
+    if (!user?.email) return;
+    try {
+      const res = await fetch(`${API_URL}/vps/discount/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      });
+      const data = await res.json();
+      if (data.success) setVpsDiscount(data);
+    } catch (e) { console.error(e); }
+  };
+
   const getPrice = (plan: VPSPlan, cycle: BillingCycle) => {
     if (cycle === 'quarterly' && plan.price_quarterly) return plan.price_quarterly;
     if (cycle === 'yearly' && plan.price_yearly) return plan.price_yearly;
@@ -137,6 +154,17 @@ export default function VPSPage() {
       return Math.round((1 - plan.price_yearly / (monthly * 12)) * 100);
     }
     return 0;
+  };
+
+  const getDiscountedPrice = (originalPrice: number) => {
+    if (!vpsDiscount?.has_discount) return originalPrice;
+    const discount = (originalPrice * vpsDiscount.discount_percentage) / 100;
+    return originalPrice - discount;
+  };
+
+  const getDiscountAmount = (originalPrice: number) => {
+    if (!vpsDiscount?.has_discount) return 0;
+    return (originalPrice * vpsDiscount.discount_percentage) / 100;
   };
 
   const handleOrder = (plan: VPSPlan) => {
@@ -621,10 +649,36 @@ export default function VPSPage() {
                 </div>
               </div>
 
+              {/* VPS Discount Info */}
+              {vpsDiscount?.has_discount && (
+                <div className="mb-4 bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle className="w-4 h-4 text-green-400" />
+                    <span className="text-green-400 text-xs font-bold">VPS Discount Active: {vpsDiscount.discount_percentage}% OFF</span>
+                  </div>
+                  <div className="text-gray-400 text-[10px] space-y-1">
+                    <div className="flex justify-between">
+                      <span>Original Price:</span>
+                      <span className="line-through">${getPrice(selectedPlan, billingCycle).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-green-400">
+                      <span>Discount ({vpsDiscount.discount_percentage}%):</span>
+                      <span>-${getDiscountAmount(getPrice(selectedPlan, billingCycle)).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-white font-bold text-xs pt-1 border-t border-green-500/20">
+                      <span>Final Price:</span>
+                      <span>${getDiscountedPrice(getPrice(selectedPlan, billingCycle)).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Wallet Address */}
               {selectedNetworkObj && (
                 <div className="mb-4 bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">
-                  <div className="text-orange-300 text-[10px] mb-1">Send ${getPrice(selectedPlan, billingCycle)} {selectedNetworkObj.token_symbol} to:</div>
+                  <div className="text-orange-300 text-[10px] mb-1">
+                    Send ${vpsDiscount?.has_discount ? getDiscountedPrice(getPrice(selectedPlan, billingCycle)).toFixed(2) : getPrice(selectedPlan, billingCycle)} {selectedNetworkObj.token_symbol} to:
+                  </div>
                   <div className="flex items-center gap-2">
                     <code className="text-white text-[10px] sm:text-xs break-all flex-1 font-mono">{selectedNetworkObj.wallet_address}</code>
                     <button onClick={() => copyToClipboard(selectedNetworkObj.wallet_address, 'wallet')} className="p-1.5 text-orange-400 hover:text-orange-300 transition flex-shrink-0">
@@ -682,7 +736,11 @@ export default function VPSPage() {
                 className="w-full py-3 rounded-xl font-bold text-sm transition-all bg-gradient-to-r from-orange-500 to-yellow-400 hover:from-orange-400 hover:to-yellow-300 text-black shadow-lg shadow-orange-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 style={{ fontFamily: 'Orbitron, sans-serif' }}
               >
-                {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <>SUBMIT ORDER · ${getPrice(selectedPlan, billingCycle)}</>}
+                {submitting ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</>
+                ) : (
+                  <>SUBMIT ORDER · ${vpsDiscount?.has_discount ? getDiscountedPrice(getPrice(selectedPlan, billingCycle)).toFixed(2) : getPrice(selectedPlan, billingCycle)}</>
+                )}
               </button>
             </div>
           </div>

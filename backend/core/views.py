@@ -225,16 +225,18 @@ def api_health(request):
 @require_http_methods(["GET"])
 def get_plans(request):
     """Get available subscription plans"""
+    from core.models import SiteSettings
     plans = SubscriptionPlan.objects.filter(is_active=True).values(
         'id', 'name', 'description', 'price', 'duration_days', 'max_accounts'
-    )
-    plans_list = list(plans)
-    # Convert Decimal to float for JSON serialization
-    for plan in plans_list:
-        plan['price'] = float(plan['price'])
+    ).order_by('price')
+    
+    settings = SiteSettings.get_settings()
+    default_vps_discount = float(settings.default_vps_discount_percent or 10.00)
+    
     return JsonResponse({
-        'success': True,
-        'plans': plans_list
+        'success': True, 
+        'plans': list(plans),
+        'default_vps_discount': default_vps_discount
     })
 
 
@@ -268,6 +270,7 @@ def create_license_purchase_request(request):
     mt5_account = (request.POST.get('mt5_account') or '').strip()
     txid = (request.POST.get('txid') or '').strip()
     user_note = (request.POST.get('user_note') or '').strip()
+    want_vps_discount = (request.POST.get('want_vps_discount') or '').strip().lower() == 'true'
     proof = request.FILES.get('proof')
 
     if not email or not plan_id or not network_id:
@@ -306,6 +309,7 @@ def create_license_purchase_request(request):
         txid=txid,
         proof=proof,
         user_note=user_note,
+        want_vps_discount=want_vps_discount,
         status='pending',
     )
 

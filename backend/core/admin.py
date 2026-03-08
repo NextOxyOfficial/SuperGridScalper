@@ -16,7 +16,7 @@ from .models import (
     FundManager, FMSubscription, FMAccountAssignment, FMCommand,
     FMChatRoom, FMChatMessage, FMReview, FMPayout, FMSchedule, EconomicEvent,
     TradingWaveAlert, Badge, UserBadge,
-    VPSPlan, VPSOrder, VPSServer
+    VPSPlan, VPSOrder, VPSServer, VPSDiscount
 )
 
 
@@ -124,10 +124,10 @@ class PaymentNetworkAdmin(admin.ModelAdmin):
 
 @admin.register(LicensePurchaseRequest)
 class LicensePurchaseRequestAdmin(admin.ModelAdmin):
-    list_display = ['created_at', 'request_type_display', 'user', 'plan', 'payment_method_display', 'amount_usd', 'status', 'mt5_account', 'txid', 'reviewed_at', 'license_link']
-    list_filter = ['status', 'request_type', 'network', 'plan', 'created_at']
+    list_display = ['created_at', 'request_type_display', 'user', 'plan', 'payment_method_display', 'amount_usd', 'status', 'mt5_account', 'want_vps_discount', 'txid', 'reviewed_at', 'license_link']
+    list_filter = ['status', 'request_type', 'network', 'plan', 'want_vps_discount', 'created_at']
     search_fields = ['user__email', 'txid', 'mt5_account']
-    readonly_fields = ['created_at', 'updated_at', 'issued_license', 'reviewed_at', 'reviewed_by', 'request_type', 'extend_license']
+    readonly_fields = ['created_at', 'updated_at', 'issued_license', 'reviewed_at', 'reviewed_by', 'request_type', 'extend_license', 'want_vps_discount']
     autocomplete_fields = ['user', 'plan', 'network']
     radio_fields = {'status': admin.HORIZONTAL}
     actions = ['approve_requests', 'reject_requests']
@@ -317,6 +317,28 @@ class LicensePurchaseRequestAdmin(admin.ModelAdmin):
                         self.message_user(request, f'Approval email sent to {obj.user.email}')
                 except Exception as e:
                     print(f'[ADMIN] Failed to send approval email: {e}')
+                
+                # Create VPS discount if user requested it (only for paid licenses, not free Exness claims)
+                is_free_claim = '[EXNESS_FREE_CLAIM]' in (obj.user_note or '')
+                if obj.want_vps_discount and not is_free_claim:
+                    try:
+                        from core.models import VPSDiscount, SiteSettings
+                        settings = SiteSettings.get_settings()
+                        discount_percent = settings.default_vps_discount_percent or Decimal('10.00')
+                        
+                        VPSDiscount.objects.get_or_create(
+                            user=obj.user,
+                            defaults={
+                                'discount_percentage': discount_percent,
+                                'is_active': True,
+                                'notes': f'Auto-created from paid license purchase request #{obj.request_number}'
+                            }
+                        )
+                        self.message_user(request, f'VPS discount ({discount_percent}%) created for {obj.user.email}')
+                    except Exception as e:
+                        self.message_user(request, f'Warning: Failed to create VPS discount: {e}', level='warning')
+                elif obj.want_vps_discount and is_free_claim:
+                    self.message_user(request, 'VPS discount NOT created - free Exness claims are not eligible for VPS discount', level='warning')
                 
                 # Track referral commission
                 try:
@@ -1543,6 +1565,10 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         ('📞 Support Contacts', {
             'fields': ('support_email', 'admin_notification_email', ('telegram_en', 'telegram_en_url'), ('telegram_cn', 'telegram_cn_url'))
         }),
+        ('💰 VPS Discount Settings', {
+            'fields': ('default_vps_discount_percent',),
+            'description': 'Set default VPS discount percentage for paid license purchases. This discount applies ONLY to paid licenses, NOT to free Exness claims.'
+        }),
     )
     
     def has_add_permission(self, request):
@@ -1918,3 +1944,29 @@ class VPSServerAdmin(admin.ModelAdmin):
     list_display = ['order', 'ip_address', 'rdp_port', 'username', 'created_at']
     search_fields = ['ip_address', 'hostname', 'order__order_number', 'order__user__email']
     readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(VPSDiscount)
+class VPSDiscountAdmin(admin.ModelAdmin):
+    list_display = ['user', 'discount_percentage', 'is_active', 'is_valid_display', 'granted_at', 'expires_at']
+    list_filter = ['is_active', 'granted_at']
+    search_fields = ['user__email', 'user__username']
+    readonly_fields = ['granted_at']
+    fieldsets = (
+        ('User', {
+            'fields': ('user',)
+        }),
+        ('Discount Details', {
+            'fields': ('discount_percentage', 'is_active', 'expires_at')
+        }),
+        ('Notes', {
+            'fields': ('notes', 'granted_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def is_valid_display(self, obj):
+        if obj.is_valid():
+            return format_html('<span style="color: green;">✓ Valid</span>')
+        return format_html('<span style="color: red;">✗ Invalid</span>')
+    is_valid_display.short_description = 'Status'

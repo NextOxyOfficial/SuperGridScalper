@@ -654,6 +654,13 @@ class SiteSettings(models.Model):
     telegram_cn = models.CharField(max_length=100, default="@MarksAISupportChinese", help_text="Chinese Telegram handle")
     telegram_cn_url = models.URLField(default="https://t.me/MarksAISupportChinese", blank=True)
     
+    default_vps_discount_percent = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=10.00,
+        help_text="Default VPS discount % for paid license purchases (e.g., 10.00 for 10% off). Does NOT apply to free Exness claims."
+    )
+    
     updated_at = models.DateTimeField(auto_now=True)
     
     def save(self, *args, **kwargs):
@@ -714,6 +721,7 @@ class LicensePurchaseRequest(models.Model):
     request_number = models.CharField(max_length=6, unique=True, editable=False, null=True, blank=True)
     request_type = models.CharField(max_length=20, choices=REQUEST_TYPE_CHOICES, default='new')
     extend_license = models.ForeignKey(License, on_delete=models.SET_NULL, null=True, blank=True, related_name='extension_requests', help_text='License to extend (for extension requests)')
+    want_vps_discount = models.BooleanField(default=False, help_text='User wants VPS discount eligibility')
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     admin_note = models.TextField(blank=True)
@@ -1541,3 +1549,33 @@ class VPSServer(models.Model):
     class Meta:
         verbose_name = "VPS Server"
         verbose_name_plural = "VPS Servers"
+
+
+class VPSDiscount(models.Model):
+    """VPS discount eligibility for users who purchased license with VPS option"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='vps_discount')
+    discount_percentage = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0,
+        help_text="VPS discount percentage (e.g., 10.00 for 10% off)"
+    )
+    is_active = models.BooleanField(default=True)
+    granted_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True, help_text="Optional expiry date for discount")
+    notes = models.TextField(blank=True, help_text="Admin notes about this discount")
+
+    def __str__(self):
+        return f"{self.user.email} - {self.discount_percentage}% VPS discount"
+
+    def is_valid(self):
+        """Check if discount is still valid"""
+        if not self.is_active:
+            return False
+        if self.expires_at and timezone.now() > self.expires_at:
+            return False
+        return True
+
+    class Meta:
+        verbose_name = "VPS Discount"
+        verbose_name_plural = "VPS Discounts"

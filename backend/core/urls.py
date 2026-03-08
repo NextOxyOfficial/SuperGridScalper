@@ -93,4 +93,5 @@ urlpatterns = [
     path('vps/plans/', vps_views.get_vps_plans, name='get_vps_plans'),
     path('vps/order/', vps_views.create_vps_order, name='create_vps_order'),
     path('vps/my-orders/', vps_views.get_my_vps_orders, name='get_my_vps_orders'),
+    path('vps/discount/', vps_views.get_vps_discount, name='get_vps_discount'),
 ]

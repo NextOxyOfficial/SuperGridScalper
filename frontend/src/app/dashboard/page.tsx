@@ -53,6 +53,12 @@ export default function DashboardHome() {
   const [refreshedMsg, setRefreshedMsg] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [walletCopied, setWalletCopied] = useState(false);
+  const [wantVpsDiscount, setWantVpsDiscount] = useState(false);
+  const [selectedVpsPackage, setSelectedVpsPackage] = useState<any>(null);
+  const [selectedVpsCycle, setSelectedVpsCycle] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
+  const [vpsPlans, setVpsPlans] = useState<any[]>([]);
+  const [loadingVpsPlans, setLoadingVpsPlans] = useState(false);
+  const [defaultVpsDiscount, setDefaultVpsDiscount] = useState<number>(10);
 
   const lastAutoLicenseRefreshRef = useRef<number>(0);
   const purchaseRequestsPollingRef = useRef<NodeJS.Timeout | null>(null);
@@ -519,6 +525,9 @@ export default function DashboardHome() {
       console.log('Plans response:', data);
       if (data.success) {
         setPlans(data.plans);
+        if (data.default_vps_discount) {
+          setDefaultVpsDiscount(data.default_vps_discount);
+        }
       } else {
         console.error('Plans fetch failed:', data);
       }
@@ -896,6 +905,7 @@ export default function DashboardHome() {
       form.append('txid', txid.trim());
       form.append('user_note', userNote.trim());
       form.append('proof', proofFile);
+      form.append('want_vps_discount', wantVpsDiscount ? 'true' : 'false');
 
       const res = await fetch(`${API_URL}/license-purchase-requests/create/`, {
         method: 'POST',
@@ -2580,7 +2590,7 @@ export default function DashboardHome() {
             <svg className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
           </div>
         </summary>
-        <div className="px-3 sm:px-4 pb-4 border-t border-cyan-500/20">
+        <div className="px-1 sm:px-4 pb-4 border-t border-cyan-500/20">
           {purchaseSuccess ? (
             <div className={`border rounded-lg p-4 mt-4 ${
               purchaseSuccess.status === 'approved' 
@@ -2868,6 +2878,157 @@ export default function DashboardHome() {
                     </div>
                   </div>
 
+                  {/* VPS Discount Opt-in (Inline) */}
+                  <div className="bg-gradient-to-br from-orange-500/10 to-yellow-500/10 border border-orange-500/30 rounded-xl p-1 sm:p-4">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={wantVpsDiscount}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setWantVpsDiscount(checked);
+                          if (checked && vpsPlans.length === 0) {
+                            setLoadingVpsPlans(true);
+                            fetch(`${API_URL}/vps/plans/`)
+                              .then(res => res.json())
+                              .then(data => {
+                                if (data.success) {
+                                  setVpsPlans(data.plans);
+                                  if (data.plans.length > 0) setSelectedVpsPackage(data.plans[0]);
+                                }
+                                setLoadingVpsPlans(false);
+                              })
+                              .catch(() => setLoadingVpsPlans(false));
+                          }
+                          if (!checked) {
+                            setSelectedVpsPackage(null);
+                          }
+                        }}
+                        className="mt-0.5 w-4 h-4 rounded border-orange-500/50 bg-black/50 text-orange-500 focus:ring-orange-500/50 focus:ring-offset-0 cursor-pointer"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-white text-xs sm:text-sm font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                            I want VPS at discounted price!
+                          </span>
+                          <span className="text-[8px] sm:text-[9px] font-bold text-orange-200 bg-orange-500/25 px-1.5 py-0.5 rounded-full border border-orange-400/40">
+                            {defaultVpsDiscount}% OFF
+                          </span>
+                        </div>
+                        <p className="text-gray-400 text-[10px] sm:text-xs leading-relaxed">
+                          Get special VPS discount when you purchase a VPS with paid license subscription plan.
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Inline VPS Package Display */}
+                    {wantVpsDiscount && (
+                      <div className="mt-3 space-y-3">
+                        {loadingVpsPlans ? (
+                          <div className="text-center py-3">
+                            <Loader2 className="w-5 h-5 animate-spin text-orange-500 mx-auto" />
+                          </div>
+                        ) : vpsPlans.length > 0 && selectedVpsPackage ? (
+                          <>
+                            {/* VPS Package Info (Auto-displayed, not clickable) */}
+                            <div className="rounded-xl border border-orange-400/50 bg-orange-500/5 p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-white font-bold text-xs" style={{ fontFamily: 'Orbitron, sans-serif' }}>{selectedVpsPackage.name}</h4>
+                                {selectedVpsPackage.is_popular && (
+                                  <span className="text-[7px] font-bold text-orange-200 bg-orange-500/25 px-1.5 py-0.5 rounded-full border border-orange-400/40">POPULAR</span>
+                                )}
+                              </div>
+                              {selectedVpsPackage.description && <p className="text-gray-400 text-[10px] mb-2">{selectedVpsPackage.description}</p>}
+                              
+                              {/* Specs Grid */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-2">
+                                <div className="bg-white/5 rounded p-1.5 text-center">
+                                  <div className="text-white text-[10px] font-semibold">{selectedVpsPackage.cpu}</div>
+                                  <div className="text-gray-600 text-[8px]">CPU</div>
+                                </div>
+                                <div className="bg-white/5 rounded p-1.5 text-center">
+                                  <div className="text-white text-[10px] font-semibold">{selectedVpsPackage.ram}</div>
+                                  <div className="text-gray-600 text-[8px]">RAM</div>
+                                </div>
+                                <div className="bg-white/5 rounded p-1.5 text-center">
+                                  <div className="text-white text-[10px] font-semibold">{selectedVpsPackage.storage}</div>
+                                  <div className="text-gray-600 text-[8px]">Storage</div>
+                                </div>
+                                <div className="bg-white/5 rounded p-1.5 text-center">
+                                  <div className="text-white text-[10px] font-semibold">{selectedVpsPackage.location || 'US'}</div>
+                                  <div className="text-gray-600 text-[8px]">Location</div>
+                                </div>
+                              </div>
+
+                              {/* Features */}
+                              {selectedVpsPackage.features && selectedVpsPackage.features.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {selectedVpsPackage.features.map((f: string, i: number) => (
+                                    <span key={i} className="text-[8px] text-gray-400 bg-white/5 px-1.5 py-0.5 rounded">{f}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Billing Duration Selection (Only Interactive Element) */}
+                            <div>
+                              <label className="text-gray-400 text-[10px] mb-1.5 block">Select Duration:</label>
+                              <div className="grid grid-cols-3 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedVpsCycle('monthly')}
+                                  className={`rounded-lg border p-2.5 text-center transition-all ${
+                                    selectedVpsCycle === 'monthly'
+                                      ? 'border-orange-400 bg-orange-500/10'
+                                      : 'border-white/10 hover:border-orange-500/30 bg-[#0a0a0f]'
+                                  }`}
+                                >
+                                  <div className="text-white text-[10px] font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>Monthly</div>
+                                  <div className="text-gray-500 line-through text-[9px]">${selectedVpsPackage.price_monthly}</div>
+                                  <div className="text-orange-400 text-xs font-bold">${(selectedVpsPackage.price_monthly * (1 - defaultVpsDiscount / 100)).toFixed(2)}</div>
+                                </button>
+
+                                {selectedVpsPackage.price_quarterly && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedVpsCycle('quarterly')}
+                                    className={`rounded-lg border p-2.5 text-center transition-all ${
+                                      selectedVpsCycle === 'quarterly'
+                                        ? 'border-orange-400 bg-orange-500/10'
+                                        : 'border-white/10 hover:border-orange-500/30 bg-[#0a0a0f]'
+                                    }`}
+                                  >
+                                    <div className="text-white text-[10px] font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>Quarterly</div>
+                                    <div className="text-gray-500 line-through text-[9px]">${selectedVpsPackage.price_quarterly}</div>
+                                    <div className="text-orange-400 text-xs font-bold">${(selectedVpsPackage.price_quarterly * (1 - defaultVpsDiscount / 100)).toFixed(2)}</div>
+                                  </button>
+                                )}
+
+                                {selectedVpsPackage.price_yearly && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedVpsCycle('yearly')}
+                                    className={`rounded-lg border p-2.5 text-center transition-all ${
+                                      selectedVpsCycle === 'yearly'
+                                        ? 'border-orange-400 bg-orange-500/10'
+                                        : 'border-white/10 hover:border-orange-500/30 bg-[#0a0a0f]'
+                                    }`}
+                                  >
+                                    <div className="text-white text-[10px] font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>Yearly</div>
+                                    <div className="text-gray-500 line-through text-[9px]">${selectedVpsPackage.price_yearly}</div>
+                                    <div className="text-orange-400 text-xs font-bold">${(selectedVpsPackage.price_yearly * (1 - defaultVpsDiscount / 100)).toFixed(2)}</div>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        ) : vpsPlans.length === 0 ? (
+                          <p className="text-gray-500 text-xs text-center">No VPS packages available</p>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Section 2: Wallet & QR */}
                   {selectedPlan && selectedNetwork ? (
                     <div className="bg-[#0a0a12] border border-cyan-500/15 rounded-xl p-3 sm:p-4">
@@ -2875,15 +3036,60 @@ export default function DashboardHome() {
                         <Wallet className="w-4 h-4 text-yellow-400" />
                         <p className="text-xs text-gray-400">Send exactly</p>
                       </div>
+
+                      {/* Price Breakdown */}
+                      {wantVpsDiscount && selectedVpsPackage ? (
+                        <div className="mb-2 space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-400">License ({selectedPlan.name})</span>
+                            <span className="text-white font-semibold">${selectedPlan.price}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-400">VPS ({selectedVpsPackage.name} - {selectedVpsCycle === 'monthly' ? '1mo' : selectedVpsCycle === 'quarterly' ? '3mo' : '1yr'})</span>
+                            <span className="text-orange-400 font-semibold">
+                              <span className="text-gray-600 line-through mr-1 text-[10px]">
+                                ${selectedVpsCycle === 'monthly' ? selectedVpsPackage.price_monthly :
+                                  selectedVpsCycle === 'quarterly' ? selectedVpsPackage.price_quarterly :
+                                  selectedVpsPackage.price_yearly}
+                              </span>
+                              ${(() => {
+                                const price = selectedVpsCycle === 'monthly' ? selectedVpsPackage.price_monthly :
+                                             selectedVpsCycle === 'quarterly' ? selectedVpsPackage.price_quarterly :
+                                             selectedVpsPackage.price_yearly;
+                                return (price * (1 - defaultVpsDiscount / 100)).toFixed(2);
+                              })()}
+                            </span>
+                          </div>
+                          <div className="border-t border-white/10 pt-1 mt-1 flex items-center justify-between text-xs">
+                            <span className="text-white font-bold">Total</span>
+                            <span className="text-yellow-300 font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                              ${(() => {
+                                const vpsPrice = selectedVpsCycle === 'monthly' ? selectedVpsPackage.price_monthly :
+                                               selectedVpsCycle === 'quarterly' ? selectedVpsPackage.price_quarterly :
+                                               selectedVpsPackage.price_yearly;
+                                const discountedVps = vpsPrice * (1 - defaultVpsDiscount / 100);
+                                return (parseFloat(selectedPlan.price) + discountedVps).toFixed(2);
+                              })()}
+                            </span>
+                          </div>
+                        </div>
+                      ) : null}
+
                       <p className="text-xl sm:text-2xl font-bold text-yellow-300 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                        ${selectedPlan.price} {selectedNetwork.token_symbol}
+                        ${wantVpsDiscount && selectedVpsPackage ? (() => {
+                          const vpsPrice = selectedVpsCycle === 'monthly' ? selectedVpsPackage.price_monthly :
+                                         selectedVpsCycle === 'quarterly' ? selectedVpsPackage.price_quarterly :
+                                         selectedVpsPackage.price_yearly;
+                          const discountedVps = vpsPrice * (1 - defaultVpsDiscount / 100);
+                          return (parseFloat(selectedPlan.price) + discountedVps).toFixed(2);
+                        })() : selectedPlan.price} {selectedNetwork.token_symbol}
                       </p>
                       <p className="text-[10px] text-gray-500 mb-3">To wallet ({selectedNetwork.name})</p>
 
                       <div className="flex items-start gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 bg-black/50 rounded-lg p-2.5 border border-cyan-500/15">
-                            <code className="text-cyan-400 text-[10px] sm:text-xs break-all flex-1 leading-relaxed">
+                            <code className="text-cyan-400 text-md sm:text-xs break-all flex-1 leading-relaxed">
                               {selectedNetwork.wallet_address}
                             </code>
                             <button
@@ -3871,6 +4077,7 @@ export default function DashboardHome() {
           </div>
         </>
       )}
+
     </div>
   );
 }
