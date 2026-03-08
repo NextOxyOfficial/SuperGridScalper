@@ -2887,20 +2887,23 @@ export default function DashboardHome() {
                         onChange={(e) => {
                           const checked = e.target.checked;
                           setWantVpsDiscount(checked);
-                          if (checked && vpsPlans.length === 0) {
-                            setLoadingVpsPlans(true);
-                            fetch(`${API_URL}/vps/plans/`)
-                              .then(res => res.json())
-                              .then(data => {
-                                if (data.success) {
-                                  setVpsPlans(data.plans);
-                                  if (data.plans.length > 0) setSelectedVpsPackage(data.plans[0]);
-                                }
-                                setLoadingVpsPlans(false);
-                              })
-                              .catch(() => setLoadingVpsPlans(false));
-                          }
-                          if (!checked) {
+                          if (checked) {
+                            if (vpsPlans.length === 0) {
+                              setLoadingVpsPlans(true);
+                              fetch(`${API_URL}/vps/plans/`)
+                                .then(res => res.json())
+                                .then(data => {
+                                  if (data.success) {
+                                    setVpsPlans(data.plans);
+                                    if (data.plans.length > 0) setSelectedVpsPackage(data.plans[0]);
+                                  }
+                                  setLoadingVpsPlans(false);
+                                })
+                                .catch(() => setLoadingVpsPlans(false));
+                            } else {
+                              if (vpsPlans.length > 0) setSelectedVpsPackage(vpsPlans[0]);
+                            }
+                          } else {
                             setSelectedVpsPackage(null);
                           }
                         }}
