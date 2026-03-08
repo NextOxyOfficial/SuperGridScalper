@@ -508,27 +508,30 @@ export default function VPSPage() {
                           <Monitor className="w-4 h-4 text-green-400" />
                           <span className="text-green-400 text-sm font-semibold">Server Credentials</span>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-2">
                           {[
                             { label: 'IP Address', value: order.server.ip_address, field: `ip_${order.id}` },
                             { label: 'RDP Port', value: String(order.server.rdp_port), field: `port_${order.id}` },
                             { label: 'Username', value: order.server.username, field: `user_${order.id}` },
                             { label: 'Password', value: order.server.password, field: `pass_${order.id}`, isPassword: true },
+                            ...(order.server.hostname ? [{ label: 'Hostname', value: order.server.hostname, field: `host_${order.id}` }] : []),
                           ].map((item) => (
-                            <div key={item.field} className="bg-black/30 rounded-lg p-2.5">
-                              <div className="text-gray-500 text-[10px] mb-1">{item.label}</div>
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-white text-xs font-mono">
-                                  {item.isPassword && !showPasswords[order.id] ? '••••••••' : item.value}
-                                </span>
-                                <div className="flex items-center gap-1">
+                            <div key={item.field} className="bg-black/30 rounded-lg p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-gray-500 text-[10px] mb-1">{item.label}</div>
+                                  <span className="text-white text-xs font-mono block truncate">
+                                    {item.isPassword && !showPasswords[order.id] ? '••••••••' : item.value}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
                                   {item.isPassword && (
-                                    <button onClick={() => setShowPasswords(p => ({ ...p, [order.id]: !p[order.id] }))} className="p-1 text-gray-500 hover:text-white transition">
-                                      {showPasswords[order.id] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                    <button onClick={() => setShowPasswords(p => ({ ...p, [order.id]: !p[order.id] }))} className="p-1.5 text-gray-500 hover:text-white transition bg-white/5 rounded">
+                                      {showPasswords[order.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                                     </button>
                                   )}
-                                  <button onClick={() => copyToClipboard(item.value, item.field)} className="p-1 text-gray-500 hover:text-orange-400 transition">
-                                    {copiedField === item.field ? <CheckCircle className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                                  <button onClick={() => copyToClipboard(item.value, item.field)} className="p-1.5 text-gray-500 hover:text-orange-400 transition bg-white/5 rounded">
+                                    {copiedField === item.field ? <CheckCircle className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                                   </button>
                                 </div>
                               </div>
@@ -536,7 +539,10 @@ export default function VPSPage() {
                           ))}
                         </div>
                         {order.server.additional_info && (
-                          <div className="mt-3 text-gray-400 text-xs bg-black/20 rounded-lg p-2">{order.server.additional_info}</div>
+                          <div className="mt-3 bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
+                            <div className="text-blue-400 text-[10px] font-semibold mb-1">Additional Information</div>
+                            <div className="text-gray-300 text-xs whitespace-pre-wrap">{order.server.additional_info}</div>
+                          </div>
                         )}
                       </div>
                     ) : order.status === 'pending' ? (

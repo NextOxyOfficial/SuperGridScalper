@@ -1547,75 +1547,56 @@ class VPSServer(models.Model):
         is_new = self.pk is None
         super().save(*args, **kwargs)
         
-        # Send email notification when credentials are added
-        if is_new:
+        # Send email notification when credentials are added for an active order
+        if is_new and self.order.status == 'active':
             self.send_credentials_email()
     
     def send_credentials_email(self):
         """Send VPS credentials to user via email"""
-        from .utils import send_email
-        
-        user = self.order.user
-        subject = f"🎉 Your VPS Server is Ready! - {self.order.plan.name}"
-        
-        message = f"""
-Hello {user.email},
-
-Great news! Your VPS server is now active and ready to use.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🖥️  VPS SERVER CREDENTIALS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Order Number: {self.order.order_number}
-Plan: {self.order.plan.name}
-Billing Cycle: {self.order.get_billing_cycle_display()}
-
-📍 Server Details:
-• IP Address: {self.ip_address}
-• RDP Port: {self.rdp_port}
-• Username: {self.username}
-• Password: {self.password}
-{f"• Hostname: {self.hostname}" if self.hostname else ""}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 SERVER SPECIFICATIONS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-• CPU: {self.order.plan.cpu}
-• RAM: {self.order.plan.ram}
-• Storage: {self.order.plan.storage}
-• OS: {self.order.plan.os}
-• Location: {self.order.plan.location}
-
-{f"ℹ️  Additional Information:\\n{self.additional_info}\\n" if self.additional_info else ""}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔗 QUICK ACCESS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-View your VPS details anytime in your dashboard:
-👉 https://markstrades.com/dashboard/vps
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚠️ IMPORTANT SECURITY NOTES:
-• Keep your credentials secure and private
-• Change your password after first login (recommended)
-• Do not share your server access with others
-
-Need help? Contact our support team:
-📧 Email: support@markstrades.com
-💬 Telegram: @MarksAISupportEnglish
-
-Best regards,
-Mark's AI Team
-"""
-        
-        send_email(
-            to_email=user.email,
-            subject=subject,
-            message=message
-        )
+        try:
+            from core.utils import get_email_from_address, render_email_template, add_email_headers, can_send_email_to_user, get_unsubscribe_url
+            from django.core.mail import EmailMultiAlternatives
+            from django.conf import settings as django_settings
+            
+            user = self.order.user
+            base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+            subject = f'Your VPS Server is Ready - Order #{self.order.order_number}'
+            
+            if can_send_email_to_user(user, 'transactional'):
+                html_message = render_email_template(
+                    subject=subject,
+                    heading='Your VPS Server is Ready!',
+                    message=f"""
+                        <p>Hi <strong>{user.first_name or 'Trader'}</strong>,</p>
+                        <p>Great news! Your Windows RDP Server has been set up and is <strong style="color: #10b981;">ready to use</strong>.</p>
+                        <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                            <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">Server Details:</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Order:</strong> #{self.order.order_number}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {self.order.plan.name}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>IP Address:</strong> {self.ip_address}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>RDP Port:</strong> {self.rdp_port}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Username:</strong> {self.username}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Password:</strong> {self.password}</p>
+                            {f'<p style="margin: 4px 0; color: #d1d5db;"><strong>Hostname:</strong> {self.hostname}</p>' if self.hostname else ''}
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Expires:</strong> {self.order.expires_at.strftime('%B %d, %Y') if self.order.expires_at else 'N/A'}</p>
+                        </div>
+                        {f'<div style="background-color: rgba(59, 130, 246, 0.1); border-left: 3px solid #3b82f6; padding: 12px; margin: 16px 0; border-radius: 4px;"><p style="margin: 0; color: #93c5fd; font-size: 13px;"><strong>Additional Info:</strong> {self.additional_info}</p></div>' if self.additional_info else ''}
+                        <p>You can view your server details anytime from your dashboard.</p>
+                    """,
+                    cta_text='OPEN DASHBOARD',
+                    cta_url=f'{base}/dashboard/vps',
+                    footer_note='Keep your credentials secure. Do not share them with anyone.',
+                    preheader=f'Your VPS server #{self.order.order_number} is ready! Connect via RDP now.',
+                    unsubscribe_url=get_unsubscribe_url(user)
+                )
+                text_msg = f"Hi {user.first_name or 'Trader'},\n\nYour VPS is ready!\nIP: {self.ip_address}\nPort: {self.rdp_port}\nUser: {self.username}\nPass: {self.password}\nExpires: {self.order.expires_at.strftime('%B %d, %Y') if self.order.expires_at else 'N/A'}\n\nDashboard: {base}/dashboard/vps"
+                msg = EmailMultiAlternatives(subject, text_msg, get_email_from_address(), [user.email])
+                msg.attach_alternative(html_message, "text/html")
+                msg = add_email_headers(msg, 'transactional', user=user)
+                msg.send(fail_silently=False)
+                print(f'[VPS] Credentials email sent to {user.email}')
+        except Exception as e:
+            print(f'[VPS] Failed to send credentials email: {e}')
 
     def __str__(self):
         return f"{self.ip_address} → {self.order.user.email}"
