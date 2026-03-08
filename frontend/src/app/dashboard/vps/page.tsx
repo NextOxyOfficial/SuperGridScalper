@@ -211,7 +211,23 @@ export default function VPSPage() {
         </p>
       </div>
 
-      
+      {/* Tabs */}
+      <div className="flex gap-1 mb-8 bg-[#12121a] p-1 rounded-xl border border-orange-500/10 max-w-md mx-auto">
+        {[{ key: 'plans', label: 'Plans & Order', count: plans.length }, { key: 'orders', label: 'My Servers', count: orders.length }].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key as any)}
+            className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-semibold rounded-lg transition ${
+              activeTab === tab.key
+                ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+            style={{ fontFamily: 'Orbitron, sans-serif' }}
+          >
+            {tab.label} {tab.count > 0 && <span className="ml-1 text-[10px]">({tab.count})</span>}
+          </button>
+        ))}
+      </div>
 
       {/* Plans Tab */}
       {activeTab === 'plans' && (
@@ -231,23 +247,7 @@ export default function VPSPage() {
               </div>
             ))}
           </div>
-{/* Tabs */}
-      <div className="flex gap-1 mb-8 bg-[#12121a] p-1 rounded-xl border border-orange-500/10 max-w-md mx-auto">
-        {[{ key: 'plans', label: 'Plans & Order', count: plans.length }, { key: 'orders', label: 'My Servers', count: orders.length }].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key as any)}
-            className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-semibold rounded-lg transition ${
-              activeTab === tab.key
-                ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-            style={{ fontFamily: 'Orbitron, sans-serif' }}
-          >
-            {tab.label} {tab.count > 0 && <span className="ml-1 text-[10px]">({tab.count})</span>}
-          </button>
-        ))}
-      </div>
+
           {/* Loading/Empty States */}
           {loading ? (
             <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-4" /><p className="text-gray-400">Loading plans...</p></div>
