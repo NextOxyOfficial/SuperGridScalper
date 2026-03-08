@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock, Pencil, Gift, Search } from 'lucide-react';
+import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock, Pencil, Gift, Search, Server } from 'lucide-react';
 import { useDashboard } from './context';
 import axios from 'axios';
 import ExnessBroker from '@/components/ExnessBroker';
@@ -59,6 +59,7 @@ export default function DashboardHome() {
   const [vpsPlans, setVpsPlans] = useState<any[]>([]);
   const [loadingVpsPlans, setLoadingVpsPlans] = useState(false);
   const [defaultVpsDiscount, setDefaultVpsDiscount] = useState<number>(10);
+  const [vpsOrders, setVpsOrders] = useState<any[]>([]);
 
   const lastAutoLicenseRefreshRef = useRef<number>(0);
   const purchaseRequestsPollingRef = useRef<NodeJS.Timeout | null>(null);
@@ -165,6 +166,7 @@ export default function DashboardHome() {
     fetchPaymentNetworks();
     fetchPurchaseRequests();
     fetchWaveAlerts();
+    fetchVpsOrders();
     // Refresh wave alerts every 10s from server for near-realtime admin updates
     const waveInterval = setInterval(fetchWaveAlerts, 10000);
     // Fetch trade data for all licenses initially
@@ -533,6 +535,24 @@ export default function DashboardHome() {
       }
     } catch (e) {
       console.error('Failed to fetch plans:', e);
+    }
+  };
+
+  const fetchVpsOrders = async () => {
+    const identifier = user?.email || (user as any)?.username;
+    if (!identifier) return;
+    try {
+      const res = await fetch(`${API_URL}/vps/my-orders/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: identifier }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setVpsOrders(data.orders || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch VPS orders:', e);
     }
   };
 
@@ -3473,6 +3493,46 @@ export default function DashboardHome() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* VPS Access Notification */}
+      {vpsOrders.filter(o => o.status === 'active' && o.server).length > 0 && (
+        <div className="mb-4 bg-gradient-to-r from-orange-500/10 to-yellow-500/10 border border-orange-500/30 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+              <Server className="w-5 h-5 text-orange-400" />
+            </div>
+            <div className="flex-1">
+              <h4 className="text-white font-bold text-sm mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                VPS Server Ready! 🎉
+              </h4>
+              <p className="text-gray-300 text-xs mb-2">
+                Your VPS server{vpsOrders.filter(o => o.status === 'active' && o.server).length > 1 ? 's are' : ' is'} active and ready to use. Access your server credentials now.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {vpsOrders.filter(o => o.status === 'active' && o.server).slice(0, 2).map(order => (
+                  <div key={order.id} className="bg-black/30 rounded-lg px-3 py-1.5 text-xs">
+                    <span className="text-gray-400">{order.plan.name}</span>
+                    <span className="text-orange-400 font-semibold ml-2">{order.server.ip_address}</span>
+                  </div>
+                ))}
+                {vpsOrders.filter(o => o.status === 'active' && o.server).length > 2 && (
+                  <div className="bg-black/30 rounded-lg px-3 py-1.5 text-xs text-gray-400">
+                    +{vpsOrders.filter(o => o.status === 'active' && o.server).length - 2} more
+                  </div>
+                )}
+              </div>
+              <a
+                href="/dashboard/vps"
+                className="inline-flex items-center gap-2 mt-3 bg-gradient-to-r from-orange-500 to-yellow-400 hover:from-orange-400 hover:to-yellow-300 text-black px-4 py-2 rounded-lg font-bold text-xs transition-all shadow-lg shadow-orange-500/20"
+                style={{ fontFamily: 'Orbitron, sans-serif' }}
+              >
+                <Server className="w-4 h-4" />
+                ACCESS MY VPS
+              </a>
+            </div>
+          </div>
         </div>
       )}
       

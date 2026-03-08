@@ -1543,6 +1543,80 @@ class VPSServer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        
+        # Send email notification when credentials are added
+        if is_new:
+            self.send_credentials_email()
+    
+    def send_credentials_email(self):
+        """Send VPS credentials to user via email"""
+        from .utils import send_email
+        
+        user = self.order.user
+        subject = f"🎉 Your VPS Server is Ready! - {self.order.plan.name}"
+        
+        message = f"""
+Hello {user.email},
+
+Great news! Your VPS server is now active and ready to use.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🖥️  VPS SERVER CREDENTIALS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Order Number: {self.order.order_number}
+Plan: {self.order.plan.name}
+Billing Cycle: {self.order.get_billing_cycle_display()}
+
+📍 Server Details:
+• IP Address: {self.ip_address}
+• RDP Port: {self.rdp_port}
+• Username: {self.username}
+• Password: {self.password}
+{f"• Hostname: {self.hostname}" if self.hostname else ""}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 SERVER SPECIFICATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• CPU: {self.order.plan.cpu}
+• RAM: {self.order.plan.ram}
+• Storage: {self.order.plan.storage}
+• OS: {self.order.plan.os}
+• Location: {self.order.plan.location}
+
+{f"ℹ️  Additional Information:\\n{self.additional_info}\\n" if self.additional_info else ""}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔗 QUICK ACCESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+View your VPS details anytime in your dashboard:
+👉 https://markstrades.com/dashboard/vps
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ IMPORTANT SECURITY NOTES:
+• Keep your credentials secure and private
+• Change your password after first login (recommended)
+• Do not share your server access with others
+
+Need help? Contact our support team:
+📧 Email: support@markstrades.com
+💬 Telegram: @MarksAISupportEnglish
+
+Best regards,
+Mark's AI Team
+"""
+        
+        send_email(
+            to_email=user.email,
+            subject=subject,
+            message=message
+        )
+
     def __str__(self):
         return f"{self.ip_address} → {self.order.user.email}"
 
