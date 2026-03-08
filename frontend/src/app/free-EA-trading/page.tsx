@@ -256,18 +256,18 @@ export default function FreeTradingPage() {
           </div>
 
           {/* Stats */}
-          <div className="mt-8 sm:mt-12 grid grid-cols-3 gap-3 sm:gap-4">
-            <div className="bg-gradient-to-br from-green-500/10 to-transparent border border-green-500/20 rounded-xl p-4 sm:p-6 text-center">
-              <p className="text-2xl sm:text-4xl font-bold text-green-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>5%-250%</p>
-              <p className="text-gray-400 text-[10px] sm:text-xs">Expected Daily Profit</p>
+          <div className="mt-8 sm:mt-12 grid grid-cols-3 gap-2 sm:gap-4">
+            <div className="bg-gradient-to-br from-green-500/10 to-transparent border border-green-500/20 rounded-xl p-2.5 sm:p-6 text-center">
+              <p className="text-sm sm:text-4xl font-bold text-green-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>5%-250%</p>
+              <p className="text-gray-400 text-[8px] sm:text-xs">Expected Daily Profit</p>
             </div>
-            <div className="bg-gradient-to-br from-cyan-500/10 to-transparent border border-cyan-500/20 rounded-xl p-4 sm:p-6 text-center">
-              <p className="text-2xl sm:text-4xl font-bold text-cyan-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>24/5</p>
-              <p className="text-gray-400 text-[10px] sm:text-xs">Automated Trading</p>
+            <div className="bg-gradient-to-br from-cyan-500/10 to-transparent border border-cyan-500/20 rounded-xl p-2.5 sm:p-6 text-center">
+              <p className="text-sm sm:text-4xl font-bold text-cyan-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>24/5</p>
+              <p className="text-gray-400 text-[8px] sm:text-xs">Automated Trading</p>
             </div>
-            <div className="bg-gradient-to-br from-yellow-500/10 to-transparent border border-yellow-500/20 rounded-xl p-4 sm:p-6 text-center">
-              <p className="text-2xl sm:text-4xl font-bold text-yellow-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>$0</p>
-              <p className="text-gray-400 text-[10px] sm:text-xs">License Cost</p>
+            <div className="bg-gradient-to-br from-yellow-500/10 to-transparent border border-yellow-500/20 rounded-xl p-2.5 sm:p-6 text-center">
+              <p className="text-sm sm:text-4xl font-bold text-yellow-400 mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>$0</p>
+              <p className="text-gray-400 text-[8px] sm:text-xs">License Cost</p>
             </div>
           </div>
         </div>

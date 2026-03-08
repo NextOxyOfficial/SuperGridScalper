@@ -281,8 +281,12 @@ function DashboardNav() {
               <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Referral
             </Link>
             <Link
-              href="/vps"
-              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 text-orange-300 hover:text-white hover:bg-orange-500/20 border border-orange-500/30`}
+              href="/dashboard/vps"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                isVPSPage 
+                  ? 'bg-orange-500 text-black' 
+                  : 'text-orange-300 hover:text-white hover:bg-orange-500/20 border border-orange-500/30'
+              }`}
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
               <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> VPS
@@ -321,11 +325,22 @@ function DashboardNav() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <div className="hidden md:flex flex-col items-end gap-0.5">
               <span className="text-cyan-300 text-xs">{user?.email}</span>
               {user?.email && <UserBadges email={user.email} />}
             </div>
+            <Link
+              href="/dashboard"
+              className={`sm:hidden flex-shrink-0 text-center px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition ${
+                isDashboardPage 
+                  ? 'bg-cyan-500 text-black' 
+                  : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
+              }`}
+              style={{ fontFamily: 'Orbitron, sans-serif' }}
+            >
+              Dashboard
+            </Link>
             <button 
               onClick={logout} 
               className="text-cyan-300 hover:text-white text-[10px] sm:text-xs px-2.5 py-1.5 hover:bg-cyan-500/20 rounded-lg transition border border-cyan-500/30"
@@ -340,7 +355,7 @@ function DashboardNav() {
           <div className="flex items-center justify-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
             <Link
               href="/dashboard"
-              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
+              className={`hidden sm:block flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition ${
                 isDashboardPage 
                   ? 'bg-cyan-500 text-black' 
                   : 'text-cyan-300 hover:text-white hover:bg-cyan-500/20 border border-cyan-500/30'
@@ -383,8 +398,12 @@ function DashboardNav() {
               <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Referral
             </Link>
             <Link
-              href="/vps"
-              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 text-orange-300 hover:text-white hover:bg-orange-500/20 border border-orange-500/30`}
+              href="/dashboard/vps"
+              className={`flex-shrink-0 text-center px-3 sm:px-4 py-2 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition flex items-center gap-1 sm:gap-2 ${
+                isVPSPageSelected 
+                  ? 'bg-orange-500 text-black' 
+                  : 'text-orange-300 hover:text-white hover:bg-orange-500/20 border border-orange-500/30'
+              }`}
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
               <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> VPS
