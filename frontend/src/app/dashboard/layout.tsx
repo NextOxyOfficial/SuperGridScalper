@@ -289,7 +289,7 @@ function DashboardNav() {
               }`}
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> VPS
+              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> My VPS
             </Link>
           </div>
         </div>
@@ -406,7 +406,7 @@ function DashboardNav() {
               }`}
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> VPS
+              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> My VPS
             </Link>
           </div>
         )}

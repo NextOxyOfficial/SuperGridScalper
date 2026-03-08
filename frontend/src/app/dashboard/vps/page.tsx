@@ -196,7 +196,7 @@ export default function VPSPage() {
   const selectedNetworkObj = networks.find(n => n.id === selectedNetwork);
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 sm:py-10">
+    <div className="max-w-7xl mx-auto px-1 sm:px-6 py-6 sm:py-10">
       {/* Hero Section */}
       <div className="text-center mb-8 sm:mb-12">
         <div className="inline-flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-full px-4 py-2 mb-4">
@@ -248,25 +248,7 @@ export default function VPSPage() {
             ))}
           </div>
 
-          {/* Billing Toggle */}
-          <div className="flex justify-center gap-2 mb-6">
-            {(['monthly', 'quarterly', 'yearly'] as BillingCycle[]).map(cycle => (
-              <button
-                key={cycle}
-                onClick={() => setBillingCycle(cycle)}
-                className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition ${
-                  billingCycle === cycle
-                    ? 'bg-orange-500 text-black'
-                    : 'bg-white/5 text-gray-400 border border-white/10 hover:border-orange-500/30'
-                }`}
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
-                {cycle === 'monthly' ? 'Monthly' : cycle === 'quarterly' ? '3 Months' : 'Yearly'}
-              </button>
-            ))}
-          </div>
-
-          {/* Plan Cards */}
+          {/* Loading/Empty States */}
           {loading ? (
             <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-4" /><p className="text-gray-400">Loading plans...</p></div>
           ) : plans.length === 0 ? (
@@ -275,12 +257,33 @@ export default function VPSPage() {
               <p className="text-gray-400">No VPS plans available yet. Check back soon!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-12">
-              {plans.map((plan) => {
-                const price = getPrice(plan, billingCycle);
-                const savings = getSavings(plan, billingCycle);
-                return (
-                  <div key={plan.id} className={`relative bg-gradient-to-br from-[#12121a] to-[#0a0a0f] border rounded-2xl p-5 sm:p-6 transition-all hover:scale-[1.02] ${plan.is_popular ? 'border-orange-400 ring-2 ring-orange-400/30 shadow-lg shadow-orange-500/10' : 'border-white/10 hover:border-orange-500/30'}`}>
+            <>
+              {/* Mobile: Billing Cycle Tabs */}
+              <div className="md:hidden flex gap-2 mb-6 overflow-x-auto scrollbar-hide">
+                {(['monthly', 'quarterly', 'yearly'] as BillingCycle[]).map(cycle => (
+                  <button
+                    key={cycle}
+                    onClick={() => setBillingCycle(cycle)}
+                    className={`flex-shrink-0 px-4 py-2.5 rounded-lg text-xs font-bold transition ${
+                      billingCycle === cycle
+                        ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20'
+                        : 'bg-white/5 text-gray-400 border border-white/10'
+                    }`}
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    {cycle === 'monthly' ? 'Monthly' : cycle === 'quarterly' ? '3 Months' : 'Yearly'}
+                    {cycle === 'yearly' && <span className="ml-1 text-[10px] text-green-400 font-bold">SAVE</span>}
+                  </button>
+                ))}
+              </div>
+
+              {/* Mobile: Single Card */}
+              <div className="md:hidden max-w-md mx-auto mb-12">
+                {plans.map((plan) => {
+                  const price = getPrice(plan, billingCycle);
+                  const savings = getSavings(plan, billingCycle);
+                  return (
+                    <div key={plan.id} className={`relative bg-gradient-to-br from-[#12121a] to-[#0a0a0f] border rounded-2xl p-5 transition-all ${plan.is_popular ? 'border-orange-400 ring-2 ring-orange-400/30 shadow-lg shadow-orange-500/10' : 'border-white/10'}`}>
                     {plan.is_popular && (
                       <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                         <span className="bg-gradient-to-r from-orange-500 to-yellow-400 text-black text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full" style={{ fontFamily: 'Orbitron, sans-serif' }}>MOST POPULAR</span>
@@ -346,7 +349,83 @@ export default function VPSPage() {
                   </div>
                 );
               })}
-            </div>
+              </div>
+
+              {/* Desktop: 3 Cards Side-by-Side */}
+              <div className="hidden md:grid md:grid-cols-3 gap-6 mb-12">
+                {(['monthly', 'quarterly', 'yearly'] as BillingCycle[]).map(cycle => {
+                  const plan = plans[0];
+                  if (!plan) return null;
+                  const price = cycle === 'quarterly' && plan.price_quarterly ? plan.price_quarterly : cycle === 'yearly' && plan.price_yearly ? plan.price_yearly : plan.price_monthly;
+                  const savings = cycle === 'quarterly' && plan.price_quarterly ? Math.round((1 - plan.price_quarterly / (plan.price_monthly * 3)) * 100) : cycle === 'yearly' && plan.price_yearly ? Math.round((1 - plan.price_yearly / (plan.price_monthly * 12)) * 100) : 0;
+                  const isPopular = cycle === 'yearly';
+                  
+                  return (
+                    <div key={cycle} className={`relative bg-gradient-to-br from-[#12121a] to-[#0a0a0f] border rounded-2xl p-6 transition-all hover:scale-[1.02] ${isPopular ? 'border-orange-400 ring-2 ring-orange-400/30 shadow-lg shadow-orange-500/10' : 'border-white/10 hover:border-orange-500/30'}`}>
+                      {isPopular && (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                          <span className="bg-gradient-to-r from-orange-500 to-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full" style={{ fontFamily: 'Orbitron, sans-serif' }}>MOST POPULAR</span>
+                        </div>
+                      )}
+                      <h3 className="text-xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>{plan.name}</h3>
+                      <p className="text-gray-400 text-sm mb-4">{cycle === 'monthly' ? 'Monthly Plan' : cycle === 'quarterly' ? '3 Months Plan' : 'Yearly Plan'}</p>
+
+                      <div className="grid grid-cols-2 gap-2 mb-4">
+                        <div className="bg-white/5 rounded-lg p-2 text-center">
+                          <Cpu className="w-4 h-4 text-orange-400 mx-auto mb-1" />
+                          <div className="text-white text-xs font-semibold">{plan.cpu}</div>
+                          <div className="text-gray-500 text-[10px]">CPU</div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-2 text-center">
+                          <Zap className="w-4 h-4 text-cyan-400 mx-auto mb-1" />
+                          <div className="text-white text-xs font-semibold">{plan.ram}</div>
+                          <div className="text-gray-500 text-[10px]">RAM</div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-2 text-center">
+                          <HardDrive className="w-4 h-4 text-green-400 mx-auto mb-1" />
+                          <div className="text-white text-xs font-semibold">{plan.storage}</div>
+                          <div className="text-gray-500 text-[10px]">Storage</div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-2 text-center">
+                          <Globe className="w-4 h-4 text-purple-400 mx-auto mb-1" />
+                          <div className="text-white text-xs font-semibold truncate">{plan.location || 'US'}</div>
+                          <div className="text-gray-500 text-[10px]">Location</div>
+                        </div>
+                      </div>
+
+                      <div className="mb-4 text-center">
+                        <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400" style={{ fontFamily: 'Orbitron, sans-serif' }}>${price}</span>
+                        <span className="text-gray-500 text-sm">/{cycle === 'monthly' ? 'mo' : cycle === 'quarterly' ? '3mo' : 'yr'}</span>
+                        {savings > 0 && <div className="text-green-400 text-xs font-semibold mt-1">Save {savings}%</div>}
+                      </div>
+
+                      {plan.features && plan.features.length > 0 && (
+                        <ul className="space-y-1.5 mb-5">
+                          {plan.features.map((f, i) => (
+                            <li key={i} className="flex items-center gap-2 text-gray-300 text-xs">
+                              <CheckCircle className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      <button
+                        onClick={() => { setBillingCycle(cycle); handleOrder(plan); }}
+                        className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${
+                          isPopular
+                            ? 'bg-gradient-to-r from-orange-500 to-yellow-400 hover:from-orange-400 hover:to-yellow-300 text-black shadow-lg shadow-orange-500/25'
+                            : 'bg-white/5 hover:bg-white/10 text-orange-300 border border-orange-500/30 hover:border-orange-400'
+                        }`}
+                        style={{ fontFamily: 'Orbitron, sans-serif' }}
+                      >
+                        ORDER NOW <ArrowRight className="w-4 h-4 inline ml-1" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </>
       )}
