@@ -3,11 +3,12 @@ module.exports = {
     {
       name: 'backend',
       cwd: '/var/www/markstrades/backend',
-      script: '/var/www/markstrades/backend/venv/bin/gunicorn',
-      args: 'config.wsgi:application --bind 127.0.0.1:8000 --workers 3 --timeout 300',
+      script: 'venv/bin/gunicorn',
+      args: 'config.wsgi:application --bind 127.0.0.1:8000 --workers 3 --timeout 120',
       interpreter: 'none',
       env: {
         DJANGO_SETTINGS_MODULE: 'config.settings',
+        PATH: '/var/www/markstrades/backend/venv/bin:' + process.env.PATH,
       },
       watch: false,
       max_memory_restart: '500M',
@@ -15,12 +16,15 @@ module.exports = {
       out_file: '/var/www/markstrades/logs/backend-out.log',
       merge_logs: true,
       time: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
     },
     {
       name: 'frontend',
       cwd: '/var/www/markstrades/frontend',
-      script: 'node_modules/.bin/next',
-      args: 'start -p 3000',
+      script: 'npm',
+      args: 'start',
       interpreter: 'none',
       env: {
         NODE_ENV: 'production',
@@ -32,6 +36,9 @@ module.exports = {
       out_file: '/var/www/markstrades/logs/frontend-out.log',
       merge_logs: true,
       time: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
     },
   ],
 };
