@@ -927,10 +927,22 @@ export default function DashboardHome() {
       form.append('proof', proofFile);
       form.append('want_vps_discount', wantVpsDiscount ? 'true' : 'false');
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
       const res = await fetch(`${API_URL}/license-purchase-requests/create/`, {
         method: 'POST',
-        body: form
+        body: form,
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Server error:', res.status, errorText);
+        throw new Error(`Server error: ${res.status}`);
+      }
+      
       const data = await res.json();
       if (data.success) {
         setPurchaseSuccess(data.request);
@@ -977,9 +989,15 @@ export default function DashboardHome() {
       } else {
         setMessage({ type: 'error', text: data.message || 'Submission failed' });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Purchase request error:', e);
-      setMessage({ type: 'error', text: 'Connection error. Please try again.' });
+      if (e.name === 'AbortError') {
+        setMessage({ type: 'error', text: 'Request timeout. Please check your connection and try again.' });
+      } else if (e.message?.includes('Failed to fetch') || e.message?.includes('NetworkError')) {
+        setMessage({ type: 'error', text: 'Network error. Please check your internet connection.' });
+      } else {
+        setMessage({ type: 'error', text: 'Connection error. Please try again.' });
+      }
     } finally {
       setPurchasing(false);
     }
