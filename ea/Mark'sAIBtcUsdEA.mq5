@@ -1459,7 +1459,7 @@ void ManageNormalGrid(bool isBuy)
         {
             bool targetValidForPending = isBuy ? (targetPrice < currentPrice) : (targetPrice > currentPrice);
             double absDistToMarket = MathAbs(existingOrderPrices[closestOrderIdx] - currentPrice);
-            bool nearExecution = (absDistToMarket <= (gapPrice * 0.25));
+            bool nearExecution = (absDistToMarket <= (gapPrice * 0.5));
 
             // If order is already at correct level (within 50% of gap), keep it
             if(closestDistance < gapPrice * 0.5)
@@ -1477,6 +1477,23 @@ void ManageNormalGrid(bool isBuy)
                     continue;
                 }
 
+                // DIRECTION GUARD: Only modify if target moves order CLOSER to market price
+                // For SELL LIMIT: closer means lower price (toward market below)
+                // For BUY LIMIT: closer means higher price (toward market above)
+                double currentOrderDist = MathAbs(existingOrderPrices[closestOrderIdx] - currentPrice);
+                double newTargetDist = MathAbs(targetPrice - currentPrice);
+                
+                if(newTargetDist > currentOrderDist)
+                {
+                    // Target would move order AWAY from market - keep order where it is
+                    targetOccupied[i] = true;
+                    orderUsed[closestOrderIdx] = true;
+                    AddToLog(StringFormat("%s order #%I64u kept at %.2f (target %.2f would move away from market %.2f)", 
+                        isBuy ? "BUY" : "SELL", existingOrderTickets[closestOrderIdx], 
+                        existingOrderPrices[closestOrderIdx], targetPrice, currentPrice), "GRID");
+                    continue;
+                }
+
                 double tp = 0, sl = 0;
                 if(isBuy)
                 {
@@ -1491,7 +1508,7 @@ void ManageNormalGrid(bool isBuy)
                 
                 if(trade.OrderModify(existingOrderTickets[closestOrderIdx], targetPrice, sl, tp, ORDER_TIME_GTC, 0))
                 {
-                    AddToLog(StringFormat("%s order #%I64u modified: %.2f -> %.2f (%.1f pips)", 
+                    AddToLog(StringFormat("%s order #%I64u modified: %.2f -> %.2f (%.1f pips, closer to market)", 
                         isBuy ? "BUY" : "SELL", existingOrderTickets[closestOrderIdx], 
                         existingOrderPrices[closestOrderIdx], targetPrice, closestDistance/pip), "MODIFY");
                     targetOccupied[i] = true;
@@ -1506,7 +1523,7 @@ void ManageNormalGrid(bool isBuy)
         }
     }
     
-    // Delete any unused orders ONLY if they are on wrong side of price or out of range
+    // Delete any unused orders - but protect orders closer to market than targets (direction guard)
     for(int i = 0; i < existingOrderCount; i++)
     {
         if(!orderUsed[i])
@@ -1515,7 +1532,7 @@ void ManageNormalGrid(bool isBuy)
             bool validSide = isBuy ? (orderPrice < currentPrice) : (orderPrice > currentPrice);
             bool inRange = (orderPrice >= rangeLow && orderPrice <= rangeHigh);
             
-            // Only delete if order is on wrong side of price or out of range
+            // Always delete if wrong side or out of range
             if(!validSide || !inRange)
             {
                 trade.OrderDelete(existingOrderTickets[i]);
@@ -1524,13 +1541,45 @@ void ManageNormalGrid(bool isBuy)
             }
             else
             {
-                // Order is valid, mark target as occupied to prevent placing duplicate
+                // Order is on correct side and in range - check if aligned to a target
+                bool alignedToTarget = false;
                 for(int j = 0; j < maxOrders; j++)
                 {
-                    if(!targetOccupied[j] && MathAbs(orderPrice - targetLevels[j]) < minGap)
+                    if(MathAbs(orderPrice - targetLevels[j]) < minGap)
                     {
-                        targetOccupied[j] = true;
+                        alignedToTarget = true;
+                        if(!targetOccupied[j])
+                            targetOccupied[j] = true;
                         break;
+                    }
+                }
+                
+                if(!alignedToTarget)
+                {
+                    // Misaligned - only delete if further from market than nearest free target
+                    double orderDistToMarket = MathAbs(orderPrice - currentPrice);
+                    double nearestTargetDist = 999999;
+                    for(int j = 0; j < maxOrders; j++)
+                    {
+                        if(!targetOccupied[j])
+                        {
+                            double td = MathAbs(targetLevels[j] - currentPrice);
+                            if(td < nearestTargetDist)
+                                nearestTargetDist = td;
+                        }
+                    }
+                    
+                    if(orderDistToMarket <= nearestTargetDist)
+                    {
+                        // Order is closer to market - keep it (direction guard)
+                        AddToLog(StringFormat("%s order #%I64u kept at %.2f (closer to market than target)", 
+                            isBuy ? "BUY" : "SELL", existingOrderTickets[i], orderPrice), "GRID");
+                    }
+                    else
+                    {
+                        trade.OrderDelete(existingOrderTickets[i]);
+                        AddToLog(StringFormat("%s order #%I64u deleted - misaligned with grid", isBuy ? "BUY" : "SELL",
+                            existingOrderTickets[i]), "MODIFY");
                     }
                 }
             }

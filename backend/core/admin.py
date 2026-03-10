@@ -1298,10 +1298,10 @@ class EAProductAdmin(admin.ModelAdmin):
             
             ea_name = obj.name
             ea_version = obj.version
-            subject = f'� New MarksAI EA Version Released - {ea_name} v{ea_version}'
+            subject = f'New MarksAI EA Version Released - {ea_name} v{ea_version}'
             html = render_email_template(
                 subject=subject,
-                heading=f'� {ea_name} v{ea_version} Available!',
+                heading=f'{ea_name} v{ea_version} Available!',
                 message=f"""
                     <p style="color:#e5e7eb;font-size:15px;">A new version of <strong>{ea_name}</strong> is now available with powerful new features!</p>
                     
@@ -1311,10 +1311,10 @@ class EAProductAdmin(admin.ModelAdmin):
                         <p style="margin: 3px 0; color: #d1d5db; font-size: 13px;"><strong>New Version:</strong> v{ea_version}</p>
                     </div>
                     
-                    {f'<div style="background-color: rgba(139, 92, 246, 0.1); border-left: 3px solid #8b5cf6; padding: 14px; margin: 16px 0; border-radius: 4px;"><p style="margin: 0 0 8px 0; color: #8b5cf6; font-weight: 600; font-size: 13px;">✨ What\'s New:</p>{changelog_html}</div>' if changelog_html else ''}
+                    {f'<div style="background-color: rgba(139, 92, 246, 0.1); border-left: 3px solid #8b5cf6; padding: 14px; margin: 16px 0; border-radius: 4px;"><p style="margin: 0 0 8px 0; color: #8b5cf6; font-weight: 600; font-size: 13px;">&#10024; What\'s New:</p>{changelog_html}</div>' if changelog_html else ''}
                     
                     <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 14px; margin: 16px 0; border-radius: 4px;">
-                        <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600; font-size: 13px;">🎯 Key Features in This Update:</p>
+                        <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600; font-size: 13px;">&#127919; Key Features in This Update:</p>
                         <ul style="margin: 0; padding-left: 20px; color: #d1d5db; font-size: 13px; line-height: 1.8;">
                             <li><strong>Remote Trade Management:</strong> Fund Managers can now remotely close your positions</li>
                             <li><strong>Command Polling:</strong> EA polls for FM commands every 10 seconds</li>
@@ -1324,7 +1324,7 @@ class EAProductAdmin(admin.ModelAdmin):
                         </ul>
                     </div>
                     
-                    <p style="margin-top: 16px;"><strong style="color: #f59e0b;">⚠️ Important:</strong> Please download the new version and restart your EA to enable remote trade management features. Your Fund Manager will be able to help manage your positions for better risk control.</p>
+                    <p style="margin-top: 16px;"><strong style="color: #f59e0b;">&#9888; Important:</strong> Please download the new version and restart your EA to enable remote trade management features. Your Fund Manager will be able to help manage your positions for better risk control.</p>
                 """,
                 cta_text=f'DOWNLOAD {ea_name} v{ea_version}',
                 cta_url=download_url,
