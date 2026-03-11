@@ -2,174 +2,40 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bot, Play, ChevronDown, ChevronUp, Shield, Settings, TrendingUp, AlertTriangle, Download, CheckCircle, DollarSign, Target, Zap, ArrowRight, Store, BookOpen, LogIn } from 'lucide-react';
+import { Play, ChevronDown, ChevronUp, Shield, Settings, TrendingUp, AlertTriangle, Download, DollarSign, Target, Zap, ArrowRight, Store, BookOpen, LogIn, Loader2, X } from 'lucide-react';
 import ExnessBroker from '@/components/ExnessBroker';
 import SiteLogo from '@/components/SiteLogo';
 import Header from '@/components/Header';
 import { useSiteSettings } from '@/context/SiteSettingsContext';
 
-// Video tutorials data - Add your YouTube/video URLs here
-const videoTutorials = [
-  {
-    id: 'getting-started',
-    category: 'Getting Started',
-    icon: Download,
-    color: 'cyan',
-    videos: [
-      {
-        title: 'How to Download & Install EA on MT5',
-        description: 'Step-by-step guide to download the EA file and install it in MetaTrader 5',
-        duration: '5:30',
-        videoUrl: '', // Add your video URL here
-        thumbnail: '/thumbnails/install.jpg'
-      },
-      {
-        title: 'How to Get Your License Key',
-        description: 'Register, purchase a plan, and get your license key to activate the EA',
-        duration: '3:45',
-        videoUrl: '',
-        thumbnail: '/thumbnails/license.jpg'
-      },
-      {
-        title: 'First Time EA Setup',
-        description: 'Configure the EA for the first time with optimal settings',
-        duration: '8:20',
-        videoUrl: '',
-        thumbnail: '/thumbnails/setup.jpg'
-      }
-    ]
-  },
-  {
-    id: 'risk-management',
-    category: 'Risk Management',
-    icon: Shield,
-    color: 'yellow',
-    videos: [
-      {
-        title: 'Understanding Lot Sizes',
-        description: 'How to calculate proper lot sizes based on your account balance',
-        duration: '6:15',
-        videoUrl: '',
-        thumbnail: '/thumbnails/lots.jpg'
-      },
-      {
-        title: 'Setting Stop Loss & Take Profit',
-        description: 'Configure SL/TP levels to protect your capital',
-        duration: '7:00',
-        videoUrl: '',
-        thumbnail: '/thumbnails/sltp.jpg'
-      },
-      {
-        title: 'Maximum Drawdown Settings',
-        description: 'How to limit your maximum loss with drawdown controls',
-        duration: '5:45',
-        videoUrl: '',
-        thumbnail: '/thumbnails/drawdown.jpg'
-      },
-      {
-        title: 'Capital Allocation Strategy',
-        description: 'How much to invest based on your risk tolerance',
-        duration: '8:30',
-        videoUrl: '',
-        thumbnail: '/thumbnails/capital.jpg'
-      }
-    ]
-  },
-  {
-    id: 'ea-settings',
-    category: 'EA Settings & Configuration',
-    icon: Settings,
-    color: 'purple',
-    videos: [
-      {
-        title: 'Grid Settings Explained',
-        description: 'Understanding grid gap, max orders, and grid range',
-        duration: '10:15',
-        videoUrl: '',
-        thumbnail: '/thumbnails/grid.jpg'
-      },
-      {
-        title: 'Trailing Stop Configuration',
-        description: 'How to set up trailing stops for maximum profit',
-        duration: '6:30',
-        videoUrl: '',
-        thumbnail: '/thumbnails/trailing.jpg'
-      },
-      {
-        title: 'Recovery Mode Settings',
-        description: 'Configure breakeven recovery for losing positions',
-        duration: '9:00',
-        videoUrl: '',
-        thumbnail: '/thumbnails/recovery.jpg'
-      },
-      {
-        title: 'Best Settings for Different Account Sizes',
-        description: 'Recommended settings for $350, $1000, $5000+ accounts',
-        duration: '12:00',
-        videoUrl: '',
-        thumbnail: '/thumbnails/settings.jpg'
-      }
-    ]
-  },
-  {
-    id: 'trading-strategies',
-    category: 'Trading Strategies',
-    icon: TrendingUp,
-    color: 'green',
-    videos: [
-      {
-        title: 'Gold Trading Basics',
-        description: 'Understanding XAUUSD market behavior and best trading times',
-        duration: '8:45',
-        videoUrl: '',
-        thumbnail: '/thumbnails/gold.jpg'
-      },
-      {
-        title: 'Scalping vs Swing Trading',
-        description: 'When to use aggressive vs conservative settings',
-        duration: '7:30',
-        videoUrl: '',
-        thumbnail: '/thumbnails/scalping.jpg'
-      },
-      {
-        title: 'News Trading with EA',
-        description: 'How to handle high-impact news events',
-        duration: '6:00',
-        videoUrl: '',
-        thumbnail: '/thumbnails/news.jpg'
-      }
-    ]
-  },
-  {
-    id: 'troubleshooting',
-    category: 'Troubleshooting & FAQ',
-    icon: AlertTriangle,
-    color: 'orange',
-    videos: [
-      {
-        title: 'Common Installation Errors',
-        description: 'How to fix WebRequest, DLL, and license errors',
-        duration: '5:00',
-        videoUrl: '',
-        thumbnail: '/thumbnails/errors.jpg'
-      },
-      {
-        title: 'EA Not Opening Trades',
-        description: 'Troubleshoot when EA is not placing orders',
-        duration: '4:30',
-        videoUrl: '',
-        thumbnail: '/thumbnails/notrades.jpg'
-      },
-      {
-        title: 'License Activation Issues',
-        description: 'Fix license key not working or expired issues',
-        duration: '3:45',
-        videoUrl: '',
-        thumbnail: '/thumbnails/licensefix.jpg'
-      }
-    ]
-  }
-];
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === 'development'
+    ? 'http://localhost:8000/api'
+    : 'https://markstrades.com/api');
+
+interface VideoItem {
+  id: number;
+  title: string;
+  description: string;
+  youtube_url: string;
+  embed_url: string;
+  thumbnail: string;
+  duration: string;
+}
+
+interface CategoryItem {
+  id: string;
+  category: string;
+  icon: string;
+  color: string;
+  videos: VideoItem[];
+}
+
+// Icon map for dynamic icon rendering from backend
+const iconMap: { [key: string]: any } = {
+  Download, Shield, Settings, TrendingUp, AlertTriangle, BookOpen, Zap, Target, DollarSign, Play,
+};
 
 // Quick tips data
 const quickTips = [
@@ -180,8 +46,8 @@ const quickTips = [
   },
   {
     icon: Shield,
-    title: 'Never Risk More Than 2%',
-    description: 'Set your lot sizes so you never risk more than 2% of your account per trade.'
+    title: 'Never Risk More Than 40%',
+    description: 'Set your lot sizes so you never risk more than 40% of your account per trade.'
   },
   {
     icon: Target,
@@ -197,10 +63,12 @@ const quickTips = [
 
 export default function GuidelinePage() {
   const settings = useSiteSettings();
-  const [expandedCategory, setExpandedCategory] = useState<string | null>('getting-started');
-  const [selectedVideo, setSelectedVideo] = useState<any>(null);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState('');
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const supportEmail = settings.support_email || 'support@markstrades.com';
 
@@ -211,6 +79,21 @@ export default function GuidelinePage() {
       const user = JSON.parse(userData);
       setUserName(user.email || 'User');
     }
+
+    // Fetch guideline videos from API
+    fetch(`${API_URL}/guideline-videos/`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.categories) {
+          setCategories(data.categories);
+          // Auto-expand first category if it has videos
+          if (data.categories.length > 0 && data.categories[0].videos.length > 0) {
+            setExpandedCategory(data.categories[0].id);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const getColorClasses = (color: string) => {
@@ -219,7 +102,9 @@ export default function GuidelinePage() {
       yellow: { bg: 'bg-yellow-500/20', border: 'border-yellow-500/30', text: 'text-yellow-400' },
       purple: { bg: 'bg-purple-500/20', border: 'border-purple-500/30', text: 'text-purple-400' },
       green: { bg: 'bg-green-500/20', border: 'border-green-500/30', text: 'text-green-400' },
-      orange: { bg: 'bg-orange-500/20', border: 'border-orange-500/30', text: 'text-orange-400' }
+      orange: { bg: 'bg-orange-500/20', border: 'border-orange-500/30', text: 'text-orange-400' },
+      red: { bg: 'bg-red-500/20', border: 'border-red-500/30', text: 'text-red-400' },
+      blue: { bg: 'bg-blue-500/20', border: 'border-blue-500/30', text: 'text-blue-400' },
     };
     return colors[color] || colors.cyan;
   };
@@ -345,105 +230,129 @@ export default function GuidelinePage() {
           ))}
         </div>
 
-        {/* Video Tutorials */}
-        <div className="space-y-4">
-          {videoTutorials.map((category) => {
-            const colors = getColorClasses(category.color);
-            const isExpanded = expandedCategory === category.id;
-            
-            return (
-              <div key={category.id} className="bg-[#12121a] border border-cyan-500/20 rounded-xl sm:rounded-2xl overflow-hidden">
-                {/* Category Header */}
-                <button
-                  onClick={() => setExpandedCategory(isExpanded ? null : category.id)}
-                  className="w-full px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between hover:bg-white/5 transition"
-                >
-                  <div className="flex items-center gap-2 sm:gap-4">
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 ${colors.bg} ${colors.border} border rounded-xl flex items-center justify-center`}>
-                      <category.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${colors.text}`} />
-                    </div>
-                    <div className="text-left">
-                      <h2 className="text-base sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                        {category.category}
-                      </h2>
-                      <p className="text-gray-500 text-xs sm:text-sm">{category.videos.length} videos</p>
-                    </div>
-                  </div>
-                  {isExpanded ? (
-                    <ChevronUp className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
-                  )}
-                </button>
-
-                {/* Videos List */}
-                {isExpanded && (
-                  <div className="px-3 sm:px-6 pb-4 sm:pb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                    {category.videos.map((video, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-black/30 border border-gray-800 rounded-xl overflow-hidden hover:border-cyan-500/50 transition group cursor-pointer"
-                        onClick={() => setSelectedVideo(video)}
-                      >
-                        {/* Video Thumbnail */}
-                        <div className="relative aspect-video bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                          <div className="w-10 h-10 sm:w-14 sm:h-14 bg-cyan-500/80 rounded-full flex items-center justify-center group-hover:bg-cyan-400 transition">
-                            <Play className="w-4 h-4 sm:w-6 sm:h-6 text-black ml-0.5 sm:ml-1" />
-                          </div>
-                          <span className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 bg-black/70 text-white text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded">
-                            {video.duration}
-                          </span>
-                        </div>
-                        {/* Video Info */}
-                        <div className="p-3 sm:p-4">
-                          <h3 className="text-white font-semibold text-sm sm:text-base mb-0.5 sm:mb-1 group-hover:text-cyan-400 transition line-clamp-1">
-                            {video.title}
-                          </h3>
-                          <p className="text-gray-500 text-xs sm:text-sm line-clamp-2">{video.description}</p>
-                        </div>
+        {/* Video Tutorials - Dynamic from API */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+            <span className="ml-3 text-gray-400">Loading tutorials...</span>
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="text-center py-20 bg-[#12121a] border border-cyan-500/20 rounded-2xl">
+            <BookOpen className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400 text-lg">Video tutorials coming soon!</p>
+            <p className="text-gray-600 text-sm mt-2">Check back later for guides and tutorials.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {categories.map((category) => {
+              const colors = getColorClasses(category.color);
+              const isExpanded = expandedCategory === category.id;
+              const IconComponent = iconMap[category.icon] || Play;
+              
+              return (
+                <div key={category.id} className="bg-[#12121a] border border-cyan-500/20 rounded-xl sm:rounded-2xl overflow-hidden">
+                  {/* Category Header */}
+                  <button
+                    onClick={() => setExpandedCategory(isExpanded ? null : category.id)}
+                    className="w-full px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between hover:bg-white/5 transition"
+                  >
+                    <div className="flex items-center gap-2 sm:gap-4">
+                      <div className={`w-10 h-10 sm:w-12 sm:h-12 ${colors.bg} ${colors.border} border rounded-xl flex items-center justify-center`}>
+                        <IconComponent className={`w-5 h-5 sm:w-6 sm:h-6 ${colors.text}`} />
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                      <div className="text-left">
+                        <h2 className="text-base sm:text-xl font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {category.category}
+                        </h2>
+                        <p className="text-gray-500 text-xs sm:text-sm">{category.videos.length} video{category.videos.length !== 1 ? 's' : ''}</p>
+                      </div>
+                    </div>
+                    {isExpanded ? (
+                      <ChevronUp className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+                    )}
+                  </button>
+
+                  {/* Videos List */}
+                  {isExpanded && (
+                    <div className="px-3 sm:px-6 pb-4 sm:pb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                      {category.videos.map((video) => (
+                        <div
+                          key={video.id}
+                          className="bg-black/30 border border-gray-800 rounded-xl overflow-hidden hover:border-cyan-500/50 transition group cursor-pointer"
+                          onClick={() => setSelectedVideo(video)}
+                        >
+                          {/* Video Thumbnail */}
+                          <div className="relative aspect-video bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center overflow-hidden">
+                            {video.thumbnail ? (
+                              <img
+                                src={video.thumbnail}
+                                alt={video.title}
+                                className="absolute inset-0 w-full h-full object-cover"
+                              />
+                            ) : null}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                            <div className="relative w-10 h-10 sm:w-14 sm:h-14 bg-cyan-500/80 rounded-full flex items-center justify-center group-hover:bg-cyan-400 transition z-10">
+                              <Play className="w-4 h-4 sm:w-6 sm:h-6 text-black ml-0.5 sm:ml-1" />
+                            </div>
+                            {video.duration && (
+                              <span className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 bg-black/70 text-white text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded z-10">
+                                {video.duration}
+                              </span>
+                            )}
+                          </div>
+                          {/* Video Info */}
+                          <div className="p-3 sm:p-4">
+                            <h3 className="text-white font-semibold text-sm sm:text-base mb-0.5 sm:mb-1 group-hover:text-cyan-400 transition line-clamp-1">
+                              {video.title}
+                            </h3>
+                            <p className="text-gray-500 text-xs sm:text-sm line-clamp-2">{video.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Video Modal */}
         {selectedVideo && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setSelectedVideo(null)}>
+          <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-3 sm:p-4" onClick={() => setSelectedVideo(null)}>
             <div className="bg-[#12121a] border border-cyan-500/30 rounded-2xl max-w-4xl w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              {/* Video Player Placeholder */}
-              <div className="aspect-video bg-black flex items-center justify-center">
-                {selectedVideo.videoUrl ? (
+              {/* Close button */}
+              <div className="flex justify-end p-2">
+                <button onClick={() => setSelectedVideo(null)} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {/* Video Player */}
+              <div className="aspect-video bg-black">
+                {selectedVideo.embed_url ? (
                   <iframe
-                    src={selectedVideo.videoUrl}
+                    src={selectedVideo.embed_url + '?autoplay=1'}
                     className="w-full h-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   />
                 ) : (
-                  <div className="text-center">
-                    <Play className="w-16 h-16 text-cyan-400 mx-auto mb-4" />
-                    <p className="text-gray-400">Video coming soon</p>
-                    <p className="text-gray-600 text-sm mt-2">Add video URL to enable playback</p>
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center">
+                      <Play className="w-16 h-16 text-cyan-400 mx-auto mb-4" />
+                      <p className="text-gray-400">Video coming soon</p>
+                    </div>
                   </div>
                 )}
               </div>
               {/* Video Info */}
-              <div className="p-6">
-                <h3 className="text-2xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+              <div className="p-4 sm:p-6">
+                <h3 className="text-sm sm:text-2xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   {selectedVideo.title}
                 </h3>
-                <p className="text-gray-400">{selectedVideo.description}</p>
-                <button
-                  onClick={() => setSelectedVideo(null)}
-                  className="mt-4 px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg font-medium transition"
-                >
-                  Close
-                </button>
+                <p className="text-gray-400 text-sm sm:text-base">{selectedVideo.description}</p>
               </div>
             </div>
           </div>

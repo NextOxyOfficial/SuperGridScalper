@@ -1634,3 +1634,91 @@ class VPSDiscount(models.Model):
     class Meta:
         verbose_name = "VPS Discount"
         verbose_name_plural = "VPS Discounts"
+
+
+class GuidelineCategory(models.Model):
+    """Categories for guideline tutorial videos"""
+    ICON_CHOICES = [
+        ('Download', 'Download'),
+        ('Shield', 'Shield'),
+        ('Settings', 'Settings'),
+        ('TrendingUp', 'TrendingUp'),
+        ('AlertTriangle', 'AlertTriangle'),
+        ('BookOpen', 'BookOpen'),
+        ('Zap', 'Zap'),
+        ('Target', 'Target'),
+        ('DollarSign', 'DollarSign'),
+        ('Play', 'Play'),
+    ]
+    COLOR_CHOICES = [
+        ('cyan', 'Cyan'),
+        ('yellow', 'Yellow'),
+        ('purple', 'Purple'),
+        ('green', 'Green'),
+        ('orange', 'Orange'),
+        ('red', 'Red'),
+        ('blue', 'Blue'),
+    ]
+
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(unique=True, help_text="URL-friendly identifier (e.g. getting-started)")
+    icon = models.CharField(max_length=30, choices=ICON_CHOICES, default='Play')
+    color = models.CharField(max_length=20, choices=COLOR_CHOICES, default='cyan')
+    sort_order = models.IntegerField(default=0, help_text="Lower = shown first")
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['sort_order', 'name']
+        verbose_name = "Guideline Category"
+        verbose_name_plural = "Guideline Categories"
+
+
+class GuidelineVideo(models.Model):
+    """Individual guideline tutorial videos"""
+    category = models.ForeignKey(GuidelineCategory, on_delete=models.CASCADE, related_name='videos')
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    youtube_url = models.URLField(help_text="Full YouTube video URL (e.g. https://www.youtube.com/watch?v=abc123)")
+    duration = models.CharField(max_length=10, blank=True, help_text="e.g. 5:30")
+    sort_order = models.IntegerField(default=0, help_text="Lower = shown first within category")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def get_embed_url(self):
+        """Convert YouTube URL to embed URL"""
+        url = self.youtube_url or ''
+        video_id = ''
+        if 'youtu.be/' in url:
+            video_id = url.split('youtu.be/')[-1].split('?')[0]
+        elif 'watch?v=' in url:
+            video_id = url.split('watch?v=')[-1].split('&')[0]
+        elif 'embed/' in url:
+            video_id = url.split('embed/')[-1].split('?')[0]
+        if video_id:
+            return f'https://www.youtube.com/embed/{video_id}'
+        return ''
+
+    def get_thumbnail_url(self):
+        """Get YouTube thumbnail from video URL"""
+        url = self.youtube_url or ''
+        video_id = ''
+        if 'youtu.be/' in url:
+            video_id = url.split('youtu.be/')[-1].split('?')[0]
+        elif 'watch?v=' in url:
+            video_id = url.split('watch?v=')[-1].split('&')[0]
+        elif 'embed/' in url:
+            video_id = url.split('embed/')[-1].split('?')[0]
+        if video_id:
+            return f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg'
+        return ''
+
+    def __str__(self):
+        return f"{self.category.name} - {self.title}"
+
+    class Meta:
+        ordering = ['sort_order', 'created_at']
+        verbose_name = "Guideline Video"
+        verbose_name_plural = "Guideline Videos"

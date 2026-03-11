@@ -16,7 +16,8 @@ from .models import (
     FundManager, FMSubscription, FMAccountAssignment, FMCommand,
     FMChatRoom, FMChatMessage, FMReview, FMPayout, FMSchedule, EconomicEvent,
     TradingWaveAlert, Badge, UserBadge,
-    VPSPlan, VPSOrder, VPSServer, VPSDiscount
+    VPSPlan, VPSOrder, VPSServer, VPSDiscount,
+    GuidelineCategory, GuidelineVideo
 )
 
 
@@ -1970,3 +1971,59 @@ class VPSDiscountAdmin(admin.ModelAdmin):
             return format_html('<span style="color: green;">✓ Valid</span>')
         return format_html('<span style="color: red;">✗ Invalid</span>')
     is_valid_display.short_description = 'Status'
+
+
+# ==================== GUIDELINE VIDEOS ADMIN ====================
+
+class GuidelineVideoInline(admin.TabularInline):
+    model = GuidelineVideo
+    extra = 1
+    fields = ['title', 'youtube_url', 'duration', 'sort_order', 'is_active']
+    ordering = ['sort_order']
+
+
+@admin.register(GuidelineCategory)
+class GuidelineCategoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'slug', 'icon', 'color', 'video_count', 'sort_order', 'is_active']
+    list_editable = ['sort_order', 'is_active']
+    prepopulated_fields = {'slug': ('name',)}
+    ordering = ['sort_order']
+    inlines = [GuidelineVideoInline]
+
+    fieldsets = (
+        ('Category Info', {
+            'fields': ('name', 'slug', ('icon', 'color'), 'sort_order', 'is_active')
+        }),
+    )
+
+    def video_count(self, obj):
+        count = obj.videos.filter(is_active=True).count()
+        return format_html('<span style="font-weight:bold;">{}</span>', count)
+    video_count.short_description = 'Videos'
+
+
+@admin.register(GuidelineVideo)
+class GuidelineVideoAdmin(admin.ModelAdmin):
+    list_display = ['title', 'category', 'duration', 'youtube_link', 'sort_order', 'is_active']
+    list_filter = ['category', 'is_active']
+    list_editable = ['sort_order', 'is_active']
+    search_fields = ['title', 'description']
+    ordering = ['category__sort_order', 'sort_order']
+
+    fieldsets = (
+        ('Video Info', {
+            'fields': ('category', 'title', 'description')
+        }),
+        ('YouTube', {
+            'fields': ('youtube_url', 'duration')
+        }),
+        ('Display', {
+            'fields': ('sort_order', 'is_active')
+        }),
+    )
+
+    def youtube_link(self, obj):
+        if obj.youtube_url:
+            return format_html('<a href="{}" target="_blank" style="color:#06b6d4;">Open</a>', obj.youtube_url)
+        return '-'
+    youtube_link.short_description = 'YouTube'

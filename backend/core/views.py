@@ -11,7 +11,7 @@ from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.db.models import Count, F
-from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest, PayoutMethod, EmailOTP
+from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest, PayoutMethod, EmailOTP, GuidelineCategory, GuidelineVideo
 from decimal import Decimal
 import json
 
@@ -2626,6 +2626,13 @@ def close_position(request):
     except License.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Invalid license key'})
     
+    # Cancel stale pending close commands to prevent double-execution
+    TradeCommand.objects.filter(
+        license=license,
+        status='pending',
+        command_type__in=['CLOSE_POSITION', 'CLOSE_ALL_BUY', 'CLOSE_ALL_SELL', 'CLOSE_ALL', 'CLOSE_BULK'],
+    ).update(status='expired')
+    
     command = TradeCommand.objects.create(
         license=license,
         command_type='CLOSE_POSITION',
@@ -2658,6 +2665,13 @@ def close_bulk_positions(request):
         license = License.objects.get(license_key=license_key)
     except License.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Invalid license key'})
+    
+    # Cancel stale pending close commands to prevent double-execution
+    TradeCommand.objects.filter(
+        license=license,
+        status='pending',
+        command_type__in=['CLOSE_POSITION', 'CLOSE_ALL_BUY', 'CLOSE_ALL_SELL', 'CLOSE_ALL', 'CLOSE_BULK'],
+    ).update(status='expired')
     
     command = TradeCommand.objects.create(
         license=license,
@@ -2734,6 +2748,13 @@ def close_top_loss_positions(request):
     if not tickets:
         return JsonResponse({'success': False, 'message': 'No valid tickets found'})
     
+    # Cancel stale pending close commands to prevent double-execution
+    TradeCommand.objects.filter(
+        license=license,
+        status='pending',
+        command_type__in=['CLOSE_POSITION', 'CLOSE_ALL_BUY', 'CLOSE_ALL_SELL', 'CLOSE_ALL', 'CLOSE_BULK'],
+    ).update(status='expired')
+    
     command = TradeCommand.objects.create(
         license=license,
         command_type='CLOSE_BULK',
@@ -2789,6 +2810,13 @@ def close_all_positions(request):
         command_type = 'CLOSE_ALL_SELL'
     else:
         command_type = 'CLOSE_ALL'
+    
+    # Cancel stale pending close commands to prevent double-execution
+    TradeCommand.objects.filter(
+        license=license,
+        status='pending',
+        command_type__in=['CLOSE_POSITION', 'CLOSE_ALL_BUY', 'CLOSE_ALL_SELL', 'CLOSE_ALL', 'CLOSE_BULK'],
+    ).update(status='expired')
     
     command = TradeCommand.objects.create(
         license=license,
@@ -3086,3 +3114,34 @@ def toggle_license_status(request):
             'days_remaining': license_obj.days_remaining(),
         }
     })
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_guideline_videos(request):
+    """Get all active guideline categories with their videos for the guidelines page"""
+    categories = GuidelineCategory.objects.filter(is_active=True).prefetch_related('videos')
+
+    data = []
+    for cat in categories:
+        videos = cat.videos.filter(is_active=True)
+        data.append({
+            'id': cat.slug,
+            'category': cat.name,
+            'icon': cat.icon,
+            'color': cat.color,
+            'videos': [
+                {
+                    'id': v.id,
+                    'title': v.title,
+                    'description': v.description,
+                    'youtube_url': v.youtube_url,
+                    'embed_url': v.get_embed_url(),
+                    'thumbnail': v.get_thumbnail_url(),
+                    'duration': v.duration,
+                }
+                for v in videos
+            ]
+        })
+
+    return JsonResponse({'success': True, 'categories': data})

@@ -43,6 +43,12 @@ export default function FMDashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
+  const positionsModalRef = useRef<{ subscriber: string; mt5_account?: string } | null>(null);
+
+  // Keep ref in sync with modal state so silentRefresh can update positions
+  useEffect(() => {
+    positionsModalRef.current = positionsModal ? { subscriber: positionsModal.subscriber, mt5_account: positionsModal.mt5_account } : null;
+  }, [positionsModal]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -173,6 +179,22 @@ export default function FMDashboardPage() {
       if (data.success && isMountedRef.current) {
         setDashboard(data.dashboard);
         setLastUpdated(new Date());
+
+        // Auto-refresh positions modal if open
+        const modalCtx = positionsModalRef.current;
+        if (modalCtx && data.dashboard?.subscribers) {
+          const sub = data.dashboard.subscribers.find((s: any) => s.user_name === modalCtx.subscriber);
+          if (sub) {
+            let freshPositions: any[];
+            if (modalCtx.mt5_account) {
+              const acc = sub.accounts.find((a: any) => a.mt5_account === modalCtx.mt5_account);
+              freshPositions = acc ? (acc.open_positions || []).map((p: any) => ({ ...p, mt5_account: acc.mt5_account, assignment_id: acc.assignment_id })) : [];
+            } else {
+              freshPositions = sub.accounts.flatMap((a: any) => (a.open_positions || []).map((p: any) => ({ ...p, mt5_account: a.mt5_account, assignment_id: a.assignment_id })));
+            }
+            setPositionsModal(prev => prev ? { ...prev, positions: freshPositions } : null);
+          }
+        }
       }
     } catch {
       // Silent fail — don't interrupt user

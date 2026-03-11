@@ -2121,6 +2121,18 @@ def fm_trade_command(request):
     }
     tc_type = type_map[command_type]
 
+    # ── Conflict / duplicate guard ──────────────────────────────────
+    # Cancel any stale pending trade-close commands for the SAME license
+    # so the EA doesn't execute both the old bulk-close AND the new
+    # single-close in the same poll cycle.
+    close_types = ['CLOSE_POSITION', 'CLOSE_ALL_BUY', 'CLOSE_ALL_SELL', 'CLOSE_ALL', 'CLOSE_BULK']
+    stale_cmds = TradeCommand.objects.filter(
+        license=assignment.license,
+        status='pending',
+        command_type__in=close_types,
+    )
+    stale_count = stale_cmds.update(status='expired')
+
     # Build parameters
     params = {
         'fm_id': fm.id,

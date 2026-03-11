@@ -89,6 +89,9 @@ urlpatterns = [
     path('fund-managers/trade-command/', fm_views.fm_trade_command, name='fm_trade_command'),
     path('user-badges/', fm_views.get_user_badges, name='get_user_badges'),
     
+    # Guideline Videos
+    path('guideline-videos/', views.get_guideline_videos, name='get_guideline_videos'),
+    
     # VPS / Windows RDP Server
     path('vps/plans/', vps_views.get_vps_plans, name='get_vps_plans'),
     path('vps/order/', vps_views.create_vps_order, name='create_vps_order'),
