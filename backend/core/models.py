@@ -1722,3 +1722,82 @@ class GuidelineVideo(models.Model):
         ordering = ['sort_order', 'created_at']
         verbose_name = "Guideline Video"
         verbose_name_plural = "Guideline Videos"
+
+
+class GiftLicense(models.Model):
+    """Gift license vouchers that can be purchased and redeemed later"""
+    STATUS_CHOICES = [
+        ('purchased', 'Purchased'),
+        ('delivered', 'Delivered'),
+        ('redeemed', 'Redeemed'),
+        ('expired', 'Expired'),
+    ]
+
+    gift_code = models.CharField(max_length=32, unique=True, editable=False, help_text="Unique gift voucher code")
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='purchased')
+
+    # Buyer info
+    buyer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='gift_purchases')
+    buyer_email = models.EmailField(help_text="Email of the person who purchased the gift")
+    buyer_name = models.CharField(max_length=100, blank=True, default='')
+
+    # Recipient info
+    recipient_email = models.EmailField(help_text="Email where the gift code will be sent")
+    recipient_name = models.CharField(max_length=100, blank=True, default='')
+    gift_message = models.TextField(blank=True, default='', help_text="Optional personal message from buyer")
+
+    # Payment
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    payment_network = models.CharField(max_length=100, blank=True, default='')
+    txid = models.CharField(max_length=255, blank=True, default='', help_text="Transaction ID for payment verification")
+    payment_verified = models.BooleanField(default=False)
+
+    # Redemption
+    redeemed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='redeemed_gifts')
+    redeemed_at = models.DateTimeField(null=True, blank=True)
+    issued_license = models.ForeignKey('License', on_delete=models.SET_NULL, null=True, blank=True, related_name='gift_source')
+
+    # Timestamps
+    purchased_at = models.DateTimeField(auto_now_add=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.gift_code:
+            self.gift_code = self.generate_gift_code()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def generate_gift_code():
+        """Generate a unique gift code like GIFT-XXXX-XXXX-XXXX"""
+        code = secrets.token_hex(6).upper()
+        return f"GIFT-{code[:4]}-{code[4:8]}-{code[8:12]}"
+
+    def is_redeemable(self):
+        """Check if gift can still be redeemed"""
+        return self.status in ('purchased', 'delivered') and self.payment_verified
+
+    def redeem(self, user):
+        """Redeem this gift for a user — creates a license with expiry starting NOW"""
+        if not self.is_redeemable():
+            return None
+        license_obj = License.objects.create(
+            user=user,
+            plan=self.plan,
+            mt5_account=None,
+        )
+        self.redeemed_by = user
+        self.redeemed_at = timezone.now()
+        self.issued_license = license_obj
+        self.status = 'redeemed'
+        self.save()
+        return license_obj
+
+    def __str__(self):
+        return f"{self.gift_code} ({self.plan.name}) - {self.status}"
+
+    class Meta:
+        ordering = ['-purchased_at']
+        verbose_name = "Gift License"
+        verbose_name_plural = "Gift Licenses"

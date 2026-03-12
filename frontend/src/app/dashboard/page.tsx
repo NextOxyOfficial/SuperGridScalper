@@ -108,6 +108,12 @@ export default function DashboardHome() {
   const [requestingFreeExtension, setRequestingFreeExtension] = useState(false);
   const [freeExtensionResult, setFreeExtensionResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Redeem gift code state
+  const [showRedeemModal, setShowRedeemModal] = useState(false);
+  const [redeemCode, setRedeemCode] = useState('');
+  const [redeemLoading, setRedeemLoading] = useState(false);
+  const [redeemResult, setRedeemResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   // Trading Wave Alert state
   const [waveAlerts, setWaveAlerts] = useState<{ mode: string; display_name: string; minutes_before: number; tips: string; is_active: boolean; remaining_seconds: number }[]>([]);
   const waveCountdownRef = useRef<NodeJS.Timeout | null>(null);
@@ -716,6 +722,33 @@ export default function DashboardHome() {
 
   const handleSelectLicense = (lic: any) => {
     selectLicense(lic);
+  };
+
+  const handleRedeemGift = async () => {
+    const identifier = user?.email || (user as any)?.username;
+    if (!identifier || !redeemCode.trim()) return;
+    setRedeemLoading(true);
+    setRedeemResult(null);
+    try {
+      const res = await axios.post(`${API_URL}/gift/redeem/`, {
+        email: identifier,
+        gift_code: redeemCode.trim(),
+      });
+      if (res.data.success) {
+        setRedeemResult({ type: 'success', text: res.data.message });
+        refreshLicenses();
+        setTimeout(() => {
+          setShowRedeemModal(false);
+          setRedeemCode('');
+          setRedeemResult(null);
+        }, 3000);
+      } else {
+        setRedeemResult({ type: 'error', text: res.data.message || 'Failed to redeem' });
+      }
+    } catch (err: any) {
+      setRedeemResult({ type: 'error', text: err?.response?.data?.message || 'Failed to redeem gift code' });
+    }
+    setRedeemLoading(false);
   };
 
   const canGoToStep2 = !!selectedPlan;
@@ -3563,6 +3596,14 @@ export default function DashboardHome() {
               <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
               Live
             </span>
+            <button
+              onClick={() => { setShowRedeemModal(true); setRedeemCode(''); setRedeemResult(null); }}
+              className="flex items-center gap-1 text-[10px] sm:text-xs px-2 py-1 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/30 hover:bg-purple-500/20 transition-all"
+              title="Redeem a gift code"
+            >
+              <Gift className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <span className="hidden sm:inline">Redeem Gift</span>
+            </button>
           </div>
           {/* Right: search icon + collapsible input / count + refresh */}
           <div className="flex items-center gap-2">
@@ -4154,6 +4195,69 @@ export default function DashboardHome() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Redeem Gift Code Modal */}
+      {showRedeemModal && (
+        <>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={() => setShowRedeemModal(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-[#12121a] border border-purple-500/30 rounded-2xl w-full max-w-md p-6 shadow-2xl shadow-purple-500/10">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                  <Gift className="w-5 h-5 text-purple-400" />
+                  <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Orbitron, sans-serif' }}>Redeem Gift Code</h3>
+                </div>
+                <button onClick={() => setShowRedeemModal(false)} className="text-gray-500 hover:text-white transition"><X className="w-5 h-5" /></button>
+              </div>
+
+              <p className="text-gray-400 text-sm mb-4">Enter your gift voucher code to activate a new license. The expiry will start from now.</p>
+
+              <div className="mb-4">
+                <input
+                  type="text"
+                  value={redeemCode}
+                  onChange={(e) => { setRedeemCode(e.target.value.toUpperCase()); setRedeemResult(null); }}
+                  placeholder="GIFT-XXXX-XXXX-XXXX"
+                  className="w-full px-4 py-3 bg-[#0a0a0f] border border-purple-500/30 rounded-xl text-white text-center text-lg tracking-widest placeholder-gray-600 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-500/30"
+                  style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '16px' }}
+                  maxLength={20}
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === 'Enter' && redeemCode.trim()) handleRedeemGift(); }}
+                />
+              </div>
+
+              {redeemResult && (
+                <div className={`mb-4 rounded-lg px-3 py-2 text-sm flex items-center gap-2 ${redeemResult.type === 'success' ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`}>
+                  {redeemResult.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <X className="w-4 h-4 flex-shrink-0" />}
+                  {redeemResult.text}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowRedeemModal(false)}
+                  className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-sm font-bold transition-all border border-gray-700"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={handleRedeemGift}
+                  disabled={!redeemCode.trim() || redeemLoading}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-cyan-400 hover:from-purple-400 hover:to-cyan-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 disabled:cursor-not-allowed text-black rounded-xl text-sm font-bold transition-all shadow-lg shadow-purple-500/20 disabled:shadow-none flex items-center justify-center gap-2"
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  {redeemLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> REDEEMING...</> : 'REDEEM'}
+                </button>
+              </div>
+
+              <p className="text-gray-600 text-xs text-center mt-4">
+                Don&apos;t have a gift code? <a href="/gift" className="text-purple-400 hover:underline">Buy one here</a>
+              </p>
             </div>
           </div>
         </>

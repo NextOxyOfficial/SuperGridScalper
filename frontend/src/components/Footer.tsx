@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import SiteLogo from '@/components/SiteLogo';
 import { useSiteSettings } from '@/context/SiteSettingsContext';
+import { Facebook, Youtube } from 'lucide-react';
 
 export default function Footer() {
   const year = new Date().getFullYear();
@@ -31,6 +32,26 @@ export default function Footer() {
           <Link href="/privacy" className="text-gray-500 hover:text-cyan-400 transition">
             Privacy
           </Link>
+        </div>
+
+        <div className="mt-4 flex items-center justify-center gap-3">
+          <a
+            href="https://www.facebook.com/MarksTradesAI/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-gray-500 hover:text-cyan-400 transition text-xs"
+          >
+            <Facebook className="w-4 h-4" /> Facebook
+          </a>
+          <span className="text-gray-700">•</span>
+          <a
+            href="https://www.youtube.com/@MarksAI3.0"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-gray-500 hover:text-cyan-400 transition text-xs"
+          >
+            <Youtube className="w-4 h-4" /> YouTube
+          </a>
         </div>
 
         <div className="mt-5 text-center">

@@ -17,7 +17,7 @@ from .models import (
     FMChatRoom, FMChatMessage, FMReview, FMPayout, FMSchedule, EconomicEvent,
     TradingWaveAlert, Badge, UserBadge,
     VPSPlan, VPSOrder, VPSServer, VPSDiscount,
-    GuidelineCategory, GuidelineVideo
+    GuidelineCategory, GuidelineVideo, GiftLicense
 )
 
 
@@ -2027,3 +2027,126 @@ class GuidelineVideoAdmin(admin.ModelAdmin):
             return format_html('<a href="{}" target="_blank" style="color:#06b6d4;">Open</a>', obj.youtube_url)
         return '-'
     youtube_link.short_description = 'YouTube'
+
+
+@admin.register(GiftLicense)
+class GiftLicenseAdmin(admin.ModelAdmin):
+    list_display = ['gift_code', 'plan', 'status_display', 'buyer_email', 'recipient_email', 'amount_paid', 'payment_verified_display', 'purchased_at', 'redeemed_at']
+    list_filter = ['status', 'payment_verified', 'plan']
+    search_fields = ['gift_code', 'buyer_email', 'recipient_email', 'txid']
+    readonly_fields = ['gift_code', 'purchased_at', 'delivered_at', 'redeemed_at', 'updated_at', 'issued_license']
+    autocomplete_fields = ['buyer', 'redeemed_by', 'plan']
+    actions = ['verify_payment_and_deliver']
+
+    fieldsets = (
+        ('Gift Info', {'fields': ('gift_code', 'plan', 'status', 'gift_message')}),
+        ('Buyer', {'fields': ('buyer', 'buyer_email', 'buyer_name')}),
+        ('Recipient', {'fields': ('recipient_email', 'recipient_name')}),
+        ('Payment', {'fields': ('amount_paid', 'payment_network', 'txid', 'payment_verified')}),
+        ('Redemption', {'fields': ('redeemed_by', 'redeemed_at', 'issued_license')}),
+        ('Timestamps', {'fields': ('purchased_at', 'delivered_at', 'updated_at'), 'classes': ('collapse',)}),
+    )
+
+    def status_display(self, obj):
+        colors = {
+            'purchased': ('#fbbf24', '🛒'),
+            'delivered': ('#06b6d4', '📧'),
+            'redeemed': ('#10b981', '✅'),
+            'expired': ('#ef4444', '❌'),
+        }
+        color, icon = colors.get(obj.status, ('#6b7280', ''))
+        return format_html('<span style="color: {}; font-weight: bold;">{} {}</span>', color, icon, obj.status.upper())
+    status_display.short_description = 'Status'
+
+    def payment_verified_display(self, obj):
+        if obj.payment_verified:
+            return format_html('<span style="color: #10b981; font-weight: bold;">✅ Verified</span>')
+        return format_html('<span style="color: #fbbf24;">⏳ Pending</span>')
+    payment_verified_display.short_description = 'Payment'
+
+    def verify_payment_and_deliver(self, request, queryset):
+        """Admin action: verify payment and send gift code email to recipient"""
+        count = 0
+        for gift in queryset.filter(payment_verified=False):
+            gift.payment_verified = True
+            gift.status = 'delivered'
+            gift.delivered_at = timezone.now()
+            gift.save()
+            count += 1
+
+            # Send gift delivery email to recipient
+            try:
+                from core.utils import get_email_from_address, render_email_template, add_email_headers
+                from django.core.mail import EmailMultiAlternatives
+                base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+                subject = 'You Received a Gift License!'
+                personal_msg = ''
+                if gift.gift_message:
+                    personal_msg = f'<div style="background-color: rgba(168, 85, 247, 0.08); border-left: 3px solid #a855f7; padding: 14px; margin: 16px 0; border-radius: 4px; font-style: italic; color: #d1d5db;">"{gift.gift_message}"</div>'
+                html_message = render_email_template(
+                    subject=subject,
+                    heading='🎁 You Got a Gift!',
+                    message=f"""
+                        <p>Hi <strong>{gift.recipient_name or 'Trader'}</strong>,</p>
+                        <p><strong>{gift.buyer_name or gift.buyer_email}</strong> has gifted you a MarksTrades license!</p>
+                        {personal_msg}
+                        <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                            <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">Gift Details:</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {gift.plan.name} ({gift.plan.duration_days} days)</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Gift Code:</strong> <code style="background-color: rgba(6, 182, 212, 0.15); padding: 4px 10px; border-radius: 4px; color: #06b6d4; font-size: 16px; letter-spacing: 2px;">{gift.gift_code}</code></p>
+                        </div>
+                        <p><strong>How to redeem:</strong></p>
+                        <ol style="color: #d1d5db; line-height: 1.8;">
+                            <li>Create an account or log in at MarksTrades</li>
+                            <li>Go to your Dashboard</li>
+                            <li>Click <strong>"Redeem Gift Code"</strong></li>
+                            <li>Enter the gift code above</li>
+                        </ol>
+                        <p style="color: #94a3b8; font-size: 13px;">The license expiry starts only when you redeem the code, so take your time!</p>
+                    """,
+                    cta_text='REDEEM NOW',
+                    cta_url=f'{base}/dashboard',
+                    footer_note='This gift was purchased by someone who wants you to succeed in trading!',
+                    preheader=f'{gift.buyer_name or "Someone"} gifted you a {gift.plan.name} trading license!',
+                    unsubscribe_url='',
+                )
+                text_msg = f"Hi {gift.recipient_name or 'Trader'},\n\n{gift.buyer_name or gift.buyer_email} has gifted you a MarksTrades license!\n\nGift Code: {gift.gift_code}\nPlan: {gift.plan.name} ({gift.plan.duration_days} days)\n\nRedeem at: {base}/dashboard"
+                msg = EmailMultiAlternatives(subject, text_msg, get_email_from_address(), [gift.recipient_email])
+                msg.attach_alternative(html_message, 'text/html')
+                msg.send(fail_silently=True)
+            except Exception as e:
+                print(f'[GIFT ADMIN] Failed to send delivery email: {e}')
+
+            # Notify buyer that gift has been delivered
+            try:
+                from core.utils import get_email_from_address, render_email_template, add_email_headers
+                from django.core.mail import EmailMultiAlternatives
+                subject2 = 'Your Gift License Has Been Delivered!'
+                html2 = render_email_template(
+                    subject=subject2,
+                    heading='📬 Gift Delivered!',
+                    message=f"""
+                        <p>Hi <strong>{gift.buyer_name or 'Trader'}</strong>,</p>
+                        <p>Your gift license has been verified and delivered to <strong>{gift.recipient_email}</strong>!</p>
+                        <div style="background-color: rgba(6, 182, 212, 0.1); border-left: 3px solid #06b6d4; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Gift Code:</strong> {gift.gift_code}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {gift.plan.name}</p>
+                            <p style="margin: 4px 0; color: #d1d5db;"><strong>Status:</strong> <span style="color: #10b981;">Delivered</span></p>
+                        </div>
+                        <p>You will be notified when the recipient redeems the code.</p>
+                    """,
+                    cta_text='VIEW DASHBOARD',
+                    cta_url=f'{base}/dashboard',
+                    footer_note='Thank you for gifting MarksTrades!',
+                    preheader=f'Your gift to {gift.recipient_email} has been delivered!',
+                    unsubscribe_url='',
+                )
+                text2 = f"Hi {gift.buyer_name or 'Trader'},\n\nYour gift license has been delivered to {gift.recipient_email}!\nGift Code: {gift.gift_code}"
+                msg2 = EmailMultiAlternatives(subject2, text2, get_email_from_address(), [gift.buyer_email])
+                msg2.attach_alternative(html2, 'text/html')
+                msg2.send(fail_silently=True)
+            except Exception as e:
+                print(f'[GIFT ADMIN] Failed to send delivery notification to buyer: {e}')
+
+        self.message_user(request, f'{count} gift(s) verified and delivered.')
+    verify_payment_and_deliver.short_description = '✅ Verify Payment & Deliver Gift Code'

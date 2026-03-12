@@ -31,6 +31,25 @@ interface LicenseResult {
   days_remaining: number
 }
 
+interface GuidelineVideoItem {
+  id: number
+  title: string
+  description: string
+  youtube_url: string
+  embed_url: string
+  thumbnail: string
+  duration: string
+}
+
+interface GuidelineCategoryItem {
+  id: number
+  name: string
+  slug: string
+  icon: string
+  color: string
+  videos: GuidelineVideoItem[]
+}
+
 const STEP_DURATION = 4000;
 
 function StepsSlideshow({ router, plans }: { router: any; plans: Plan[] }) {
@@ -483,6 +502,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [selectedPlanTab, setSelectedPlanTab] = useState(0)
   const [eaProducts, setEaProducts] = useState<any[]>([])
+
+  const [guidelineCategories, setGuidelineCategories] = useState<GuidelineCategoryItem[]>([])
+  const [guidelineLoading, setGuidelineLoading] = useState(false)
+  const [selectedGuidelineVideo, setSelectedGuidelineVideo] = useState<GuidelineVideoItem | null>(null)
   
   // Typing effect states
   const [typedText, setTypedText] = useState('')
@@ -589,6 +612,24 @@ export default function Home() {
       }
     }
     fetchEaProducts()
+  }, [])
+
+  useEffect(() => {
+    const fetchGuidelines = async () => {
+      setGuidelineLoading(true)
+      try {
+        const res = await axios.get(`${API_URL}/guideline-videos/`)
+        if (res.data?.success) {
+          setGuidelineCategories(res.data.categories || [])
+        } else {
+          setGuidelineCategories([])
+        }
+      } catch {
+        setGuidelineCategories([])
+      }
+      setGuidelineLoading(false)
+    }
+    fetchGuidelines()
   }, [])
 
   // Typing effect
@@ -1871,6 +1912,57 @@ export default function Home() {
                 <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" /> WATCH NOW
               </button>
             </div>
+
+            <div className="relative mt-4 sm:mt-6">
+              {guidelineLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
+                  <span className="ml-3 text-gray-400 text-sm">Loading videos...</span>
+                </div>
+              ) : (
+                (() => {
+                  const videos: GuidelineVideoItem[] = (guidelineCategories || [])
+                    .flatMap((c) => c.videos || [])
+                    .filter((v) => !!v?.embed_url)
+                    .slice(0, 6)
+                  if (!videos.length) return null
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+                      {videos.map((video) => (
+                        <button
+                          key={video.id}
+                          type="button"
+                          onClick={() => setSelectedGuidelineVideo(video)}
+                          className="text-left bg-black/30 border border-gray-800 rounded-xl overflow-hidden hover:border-cyan-500/50 transition group"
+                        >
+                          <div className="relative aspect-video bg-gradient-to-br from-gray-800 to-gray-900 overflow-hidden">
+                            {video.thumbnail ? (
+                              <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <BookOpen className="w-6 h-6 text-gray-600" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/40 group-hover:bg-black/25 transition" />
+                            <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded">
+                              {video.duration || 'Video'}
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center">
+                                <span className="text-cyan-300 text-xs">▶</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="p-2">
+                            <p className="text-white text-[10px] sm:text-xs font-semibold line-clamp-2">{video.title}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()
+              )}
+            </div>
           </div>
         </div>
 
@@ -1947,6 +2039,36 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {selectedGuidelineVideo && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-3 sm:p-4" onClick={() => setSelectedGuidelineVideo(null)}>
+          <div className="bg-[#12121a] border border-cyan-500/30 rounded-2xl max-w-4xl w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end p-2">
+              <button onClick={() => setSelectedGuidelineVideo(null)} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="aspect-video bg-black">
+              {selectedGuidelineVideo.embed_url ? (
+                <iframe
+                  src={selectedGuidelineVideo.embed_url + '?autoplay=1'}
+                  className="w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-500">Video unavailable</div>
+              )}
+            </div>
+            <div className="p-4 sm:p-6">
+              <h3 className="text-sm sm:text-2xl font-bold text-white mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                {selectedGuidelineVideo.title}
+              </h3>
+              <p className="text-gray-400 text-sm sm:text-base">{selectedGuidelineVideo.description}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

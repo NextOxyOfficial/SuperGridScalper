@@ -92,6 +92,12 @@ urlpatterns = [
     # Guideline Videos
     path('guideline-videos/', views.get_guideline_videos, name='get_guideline_videos'),
     
+    # Gift License System
+    path('gift/plans/', views.get_gift_plans, name='get_gift_plans'),
+    path('gift/purchase/', views.purchase_gift, name='purchase_gift'),
+    path('gift/redeem/', views.redeem_gift, name='redeem_gift'),
+    path('gift/my-gifts/', views.my_gifts, name='my_gifts'),
+    
     # VPS / Windows RDP Server
     path('vps/plans/', vps_views.get_vps_plans, name='get_vps_plans'),
     path('vps/order/', vps_views.create_vps_order, name='create_vps_order'),

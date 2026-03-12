@@ -11,7 +11,7 @@ from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.db.models import Count, F
-from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest, PayoutMethod, EmailOTP, GuidelineCategory, GuidelineVideo
+from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest, PayoutMethod, EmailOTP, GuidelineCategory, GuidelineVideo, GiftLicense
 from decimal import Decimal
 import json
 
@@ -3145,3 +3145,308 @@ def get_guideline_videos(request):
         })
 
     return JsonResponse({'success': True, 'categories': data})
+
+
+# ============================================================
+# Gift License System
+# ============================================================
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def purchase_gift(request):
+    """Purchase a gift license voucher — creates GiftLicense record and sends emails"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    buyer_email = data.get('buyer_email', '').strip()
+    buyer_name = data.get('buyer_name', '').strip()
+    recipient_email = data.get('recipient_email', '').strip()
+    recipient_name = data.get('recipient_name', '').strip()
+    gift_message = data.get('gift_message', '').strip()
+    plan_id = data.get('plan_id')
+    txid = data.get('txid', '').strip()
+    payment_network = data.get('payment_network', '').strip()
+
+    if not buyer_email or not recipient_email or not plan_id:
+        return JsonResponse({'success': False, 'message': 'buyer_email, recipient_email, and plan_id are required'}, status=400)
+
+    try:
+        plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+    except SubscriptionPlan.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid plan selected'}, status=404)
+
+    # Find buyer user if exists
+    buyer_user = None
+    try:
+        buyer_user = User.objects.filter(email__iexact=buyer_email).first() or User.objects.filter(username__iexact=buyer_email).first()
+    except Exception:
+        pass
+
+    gift = GiftLicense.objects.create(
+        plan=plan,
+        buyer=buyer_user,
+        buyer_email=buyer_email,
+        buyer_name=buyer_name or (buyer_user.first_name if buyer_user else ''),
+        recipient_email=recipient_email,
+        recipient_name=recipient_name,
+        gift_message=gift_message,
+        amount_paid=plan.price,
+        payment_network=payment_network,
+        txid=txid,
+        payment_verified=False,
+    )
+
+    # Send purchase confirmation email to buyer
+    try:
+        from core.utils import get_email_from_address, render_email_template, add_email_headers, get_unsubscribe_url
+        from django.core.mail import EmailMultiAlternatives
+        base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+        subject = 'Gift License Purchase Received'
+        html_message = render_email_template(
+            subject=subject,
+            heading='🎁 Gift Purchase Received!',
+            message=f"""
+                <p>Hi <strong>{buyer_name or 'Trader'}</strong>,</p>
+                <p>Your gift license purchase has been received and is being verified.</p>
+                <div style="background-color: rgba(168, 85, 247, 0.1); border-left: 3px solid #a855f7; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                    <p style="margin: 0 0 8px 0; color: #a855f7; font-weight: 600;">Gift Details:</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {plan.name} ({plan.duration_days} days)</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Amount:</strong> ${plan.price}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Gift To:</strong> {recipient_email}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Status:</strong> <span style="color: #fbbf24;">Pending Verification</span></p>
+                </div>
+                <p>Once your payment is verified, the gift code will be sent to <strong>{recipient_email}</strong>.</p>
+                <p>The recipient can redeem the code anytime from their dashboard. The license expiry will start from the moment of redemption.</p>
+            """,
+            cta_text='VIEW DASHBOARD',
+            cta_url=f'{base}/dashboard',
+            footer_note='Thank you for gifting MarksTrades!',
+            preheader=f'Your gift license for {recipient_email} is being processed.',
+            unsubscribe_url=get_unsubscribe_url(buyer_user) if buyer_user else '',
+        )
+        text_msg = f"Hi {buyer_name or 'Trader'},\n\nYour gift license purchase has been received.\nPlan: {plan.name}\nGift To: {recipient_email}\nStatus: Pending Verification\n\nOnce verified, the gift code will be sent to the recipient."
+        msg = EmailMultiAlternatives(subject, text_msg, get_email_from_address(), [buyer_email])
+        msg.attach_alternative(html_message, "text/html")
+        if buyer_user:
+            msg = add_email_headers(msg, 'transactional', user=buyer_user)
+        msg.send(fail_silently=True)
+    except Exception as e:
+        print(f'[GIFT] Failed to send purchase confirmation: {e}')
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Gift license purchase received! Payment verification in progress.',
+        'gift': {
+            'gift_code': gift.gift_code,
+            'plan': plan.name,
+            'duration_days': plan.duration_days,
+            'amount': str(plan.price),
+            'recipient_email': recipient_email,
+            'status': gift.status,
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def redeem_gift(request):
+    """Redeem a gift code — creates a license for the user with expiry starting now"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    email = data.get('email', '').strip()
+    gift_code = data.get('gift_code', '').strip().upper()
+
+    if not email or not gift_code:
+        return JsonResponse({'success': False, 'message': 'email and gift_code are required'}, status=400)
+
+    # Find user
+    user = User.objects.filter(email__iexact=email).first() or User.objects.filter(username__iexact=email).first()
+    if not user:
+        return JsonResponse({'success': False, 'message': 'User not found. Please register first.'}, status=404)
+
+    # Find gift
+    try:
+        gift = GiftLicense.objects.get(gift_code=gift_code)
+    except GiftLicense.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid gift code'}, status=404)
+
+    if gift.status == 'redeemed':
+        return JsonResponse({'success': False, 'message': 'This gift code has already been redeemed'}, status=400)
+
+    if not gift.payment_verified:
+        return JsonResponse({'success': False, 'message': 'This gift code payment has not been verified yet'}, status=400)
+
+    if not gift.is_redeemable():
+        return JsonResponse({'success': False, 'message': 'This gift code is no longer valid'}, status=400)
+
+    # Redeem
+    license_obj = gift.redeem(user)
+    if not license_obj:
+        return JsonResponse({'success': False, 'message': 'Failed to redeem gift code'}, status=500)
+
+    # Send email to redeemer
+    try:
+        from core.utils import get_email_from_address, render_email_template, add_email_headers, get_unsubscribe_url
+        from django.core.mail import EmailMultiAlternatives
+        base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+        subject = 'Gift License Activated!'
+        html_message = render_email_template(
+            subject=subject,
+            heading='🎉 Gift License Activated!',
+            message=f"""
+                <p>Hi <strong>{user.first_name or 'Trader'}</strong>,</p>
+                <p>You have successfully redeemed a gift license!</p>
+                <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                    <p style="margin: 0 0 8px 0; color: #10b981; font-weight: 600;">License Details:</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {gift.plan.name}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>License Key:</strong> <code style="background-color: rgba(6, 182, 212, 0.15); padding: 2px 6px; border-radius: 4px; color: #06b6d4;">{license_obj.license_key}</code></p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Expires:</strong> {license_obj.expires_at.strftime('%B %d, %Y')}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Days:</strong> {license_obj.days_remaining()} days</p>
+                </div>
+                <p>Your license is now active. You can start trading with the AI Expert Advisor.</p>
+            """,
+            cta_text='OPEN DASHBOARD',
+            cta_url=f'{base}/dashboard',
+            footer_note='Enjoy your gifted MarksTrades license!',
+            preheader=f'Your {gift.plan.name} gift license has been activated!',
+            unsubscribe_url=get_unsubscribe_url(user),
+        )
+        text_msg = f"Hi {user.first_name or 'Trader'},\n\nYou have redeemed a gift license!\nPlan: {gift.plan.name}\nLicense Key: {license_obj.license_key}\nExpires: {license_obj.expires_at.strftime('%B %d, %Y')}"
+        msg = EmailMultiAlternatives(subject, text_msg, get_email_from_address(), [user.email])
+        msg.attach_alternative(html_message, "text/html")
+        msg = add_email_headers(msg, 'transactional', user=user)
+        msg.send(fail_silently=True)
+    except Exception as e:
+        print(f'[GIFT] Failed to send redeem email to redeemer: {e}')
+
+    # Notify buyer that their gift has been redeemed
+    try:
+        from core.utils import get_email_from_address, render_email_template, add_email_headers, get_unsubscribe_url
+        from django.core.mail import EmailMultiAlternatives
+        base = (getattr(django_settings, 'FRONTEND_URL', '') or 'https://markstrades.com').rstrip('/')
+        subject = 'Your Gift Has Been Redeemed!'
+        html_message = render_email_template(
+            subject=subject,
+            heading='🎁 Gift Redeemed!',
+            message=f"""
+                <p>Hi <strong>{gift.buyer_name or 'Trader'}</strong>,</p>
+                <p>Great news! Your gift license has been redeemed.</p>
+                <div style="background-color: rgba(168, 85, 247, 0.1); border-left: 3px solid #a855f7; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                    <p style="margin: 0 0 8px 0; color: #a855f7; font-weight: 600;">Redemption Details:</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Gift Code:</strong> {gift.gift_code}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Plan:</strong> {gift.plan.name}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Redeemed By:</strong> {user.email}</p>
+                    <p style="margin: 4px 0; color: #d1d5db;"><strong>Redeemed At:</strong> {gift.redeemed_at.strftime('%B %d, %Y %H:%M UTC')}</p>
+                </div>
+                <p>Thank you for sharing MarksTrades!</p>
+            """,
+            cta_text='VIEW DASHBOARD',
+            cta_url=f'{base}/dashboard',
+            footer_note='Thank you for gifting MarksTrades!',
+            preheader=f'Your gift to {user.email} has been redeemed!',
+            unsubscribe_url=get_unsubscribe_url(gift.buyer) if gift.buyer else '',
+        )
+        text_msg = f"Hi {gift.buyer_name or 'Trader'},\n\nYour gift ({gift.gift_code}) has been redeemed by {user.email}!"
+        msg = EmailMultiAlternatives(subject, text_msg, get_email_from_address(), [gift.buyer_email])
+        msg.attach_alternative(html_message, "text/html")
+        if gift.buyer:
+            msg = add_email_headers(msg, 'transactional', user=gift.buyer)
+        msg.send(fail_silently=True)
+    except Exception as e:
+        print(f'[GIFT] Failed to send redeem notification to buyer: {e}')
+
+    return JsonResponse({
+        'success': True,
+        'message': f'Gift redeemed! {gift.plan.name} license activated ({license_obj.days_remaining()} days).',
+        'license': {
+            'license_key': license_obj.license_key,
+            'plan': license_obj.plan.name,
+            'status': license_obj.status,
+            'expires_at': license_obj.expires_at.isoformat(),
+            'days_remaining': license_obj.days_remaining(),
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def my_gifts(request):
+    """Get all gift purchases and received gifts for a user"""
+    email = request.GET.get('email', '').strip()
+    if not email:
+        return JsonResponse({'success': False, 'message': 'email is required'}, status=400)
+
+    # Find user
+    user = User.objects.filter(email__iexact=email).first() or User.objects.filter(username__iexact=email).first()
+
+    purchased = []
+    received = []
+
+    # Gifts I purchased
+    qs_purchased = GiftLicense.objects.filter(buyer_email__iexact=email).select_related('plan', 'redeemed_by')
+    if user:
+        qs_purchased = qs_purchased | GiftLicense.objects.filter(buyer=user).select_related('plan', 'redeemed_by')
+    qs_purchased = qs_purchased.distinct().order_by('-purchased_at')
+
+    for g in qs_purchased:
+        purchased.append({
+            'gift_code': g.gift_code,
+            'plan': g.plan.name,
+            'duration_days': g.plan.duration_days,
+            'amount': str(g.amount_paid),
+            'recipient_email': g.recipient_email,
+            'recipient_name': g.recipient_name,
+            'status': g.status,
+            'payment_verified': g.payment_verified,
+            'purchased_at': g.purchased_at.isoformat(),
+            'redeemed_by': g.redeemed_by.email if g.redeemed_by else None,
+            'redeemed_at': g.redeemed_at.isoformat() if g.redeemed_at else None,
+        })
+
+    # Gifts I can redeem (sent to my email)
+    qs_received = GiftLicense.objects.filter(recipient_email__iexact=email).select_related('plan')
+    if user:
+        qs_received = qs_received | GiftLicense.objects.filter(redeemed_by=user).select_related('plan')
+    qs_received = qs_received.distinct().order_by('-purchased_at')
+
+    for g in qs_received:
+        received.append({
+            'gift_code': g.gift_code if g.payment_verified else '****-****-****',
+            'plan': g.plan.name,
+            'duration_days': g.plan.duration_days,
+            'from_name': g.buyer_name,
+            'from_email': g.buyer_email,
+            'gift_message': g.gift_message,
+            'status': g.status,
+            'payment_verified': g.payment_verified,
+            'is_redeemable': g.is_redeemable(),
+            'purchased_at': g.purchased_at.isoformat(),
+            'redeemed_at': g.redeemed_at.isoformat() if g.redeemed_at else None,
+        })
+
+    return JsonResponse({
+        'success': True,
+        'purchased': purchased,
+        'received': received,
+    })
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_gift_plans(request):
+    """Get available plans for gift purchase"""
+    plans = SubscriptionPlan.objects.filter(is_active=True).order_by('price')
+    data = [{
+        'id': p.id,
+        'name': p.name,
+        'description': p.description,
+        'price': str(p.price),
+        'duration_days': p.duration_days,
+        'max_accounts': p.max_accounts,
+    } for p in plans]
+    return JsonResponse({'success': True, 'plans': data})
