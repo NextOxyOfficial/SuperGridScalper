@@ -1758,6 +1758,11 @@ void ManageNormalGrid(bool isBuy)
     // Cleanup: delete unused orders that are NOT on a valid fixed grid point,
     // or have wrong side/range/lot. Orders sitting on a valid grid point on the
     // correct side are kept even if not in targetLevels (price moved toward them).
+    double furthestTargetDistance = -1.0;
+    if(maxTargets > 0)
+    {
+        furthestTargetDistance = MathAbs(targetLevels[maxTargets - 1] - currentPrice);
+    }
     for(int i = 0; i < existingOrderCount; i++)
     {
         if(orderUsed[i]) continue;
@@ -1767,12 +1772,15 @@ void ManageNormalGrid(bool isBuy)
         bool validSide = isBuy ? (orderPrice <= currentPrice + (_Point * 0.5)) : (orderPrice >= currentPrice - (_Point * 0.5));
         bool inRange = (orderPrice >= rangeLow && orderPrice <= rangeHigh);
         bool lotAligned = MathAbs(orderLot - expectedNormalLot) <= expectedLotStep * 0.5;
+        double orderDistance = MathAbs(orderPrice - currentPrice);
         
         // Check if order sits on ANY fixed grid point (not just current targets)
         bool onGridPoint = false;
         double remainder = MathMod(MathAbs(orderPrice - rangeLow), gapPrice);
         if(remainder < minGap * 0.5 || MathAbs(remainder - gapPrice) < minGap * 0.5)
             onGridPoint = true;
+        
+        bool insideCurrentTargetBand = (maxTargets > 0 && orderDistance <= furthestTargetDistance + (_Point * 0.5));
         
         // Also check it's not too close to a position
         bool tooCloseToPos = false;
@@ -1792,13 +1800,19 @@ void ManageNormalGrid(bool isBuy)
             AddToLog(StringFormat("%s order #%I64u deleted - %s (price=%.2f)", isBuy ? "BUY" : "SELL",
                 existingOrderTickets[i], reason, orderPrice), "MODIFY");
         }
-        else if(onGridPoint)
+        else if(onGridPoint && insideCurrentTargetBand)
         {
-            // Order is on a valid grid point, correct side, correct lot — keep it.
-            // Price is approaching; let the broker trigger it naturally.
+            // Order is on-grid and still within the current target band — keep it.
+            // This protects near-price orders while still allowing far stale orders to migrate closer.
             orderUsed[i] = true;
             AddToLog(StringFormat("%s order #%I64u kept at %.2f (on-grid, awaiting trigger)", 
                 isBuy ? "BUY" : "SELL", existingOrderTickets[i], orderPrice), "GRID");
+        }
+        else if(onGridPoint)
+        {
+            trade.OrderDelete(existingOrderTickets[i]);
+            AddToLog(StringFormat("%s order #%I64u deleted - stale far grid order (price=%.2f)", isBuy ? "BUY" : "SELL",
+                existingOrderTickets[i], orderPrice), "MODIFY");
         }
         else
         {
