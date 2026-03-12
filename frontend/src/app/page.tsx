@@ -1924,41 +1924,76 @@ export default function Home() {
                   const videos: GuidelineVideoItem[] = (guidelineCategories || [])
                     .flatMap((c) => c.videos || [])
                     .filter((v) => !!v?.embed_url)
-                    .slice(0, 6)
                   if (!videos.length) return null
                   return (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
-                      {videos.map((video) => (
-                        <button
-                          key={video.id}
-                          type="button"
-                          onClick={() => setSelectedGuidelineVideo(video)}
-                          className="text-left bg-black/30 border border-gray-800 rounded-xl overflow-hidden hover:border-cyan-500/50 transition group"
-                        >
-                          <div className="relative aspect-video bg-gradient-to-br from-gray-800 to-gray-900 overflow-hidden">
-                            {video.thumbnail ? (
-                              <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <BookOpen className="w-6 h-6 text-gray-600" />
+                    <>
+                      <div className="sm:hidden flex items-stretch gap-3 overflow-x-auto scrollbar-hide pb-1">
+                        {videos.map((video) => (
+                          <button
+                            key={video.id}
+                            type="button"
+                            onClick={() => setSelectedGuidelineVideo(video)}
+                            className="flex-shrink-0 text-left bg-black/30 border border-gray-800 rounded-xl overflow-hidden hover:border-cyan-500/50 transition group"
+                            style={{ width: 'calc(50% - 6px)' }}
+                          >
+                            <div className="relative aspect-video bg-gradient-to-br from-gray-800 to-gray-900 overflow-hidden">
+                              {video.thumbnail ? (
+                                <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <BookOpen className="w-6 h-6 text-gray-600" />
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black/40 group-hover:bg-black/25 transition" />
+                              <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded">
+                                {video.duration || 'Video'}
                               </div>
-                            )}
-                            <div className="absolute inset-0 bg-black/40 group-hover:bg-black/25 transition" />
-                            <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded">
-                              {video.duration || 'Video'}
-                            </div>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center">
-                                <span className="text-cyan-300 text-xs">▶</span>
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center">
+                                  <span className="text-cyan-300 text-xs">▶</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="p-2">
-                            <p className="text-white text-[10px] sm:text-xs font-semibold line-clamp-2">{video.title}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
+                            <div className="p-2">
+                              <p className="text-white text-[10px] font-semibold line-clamp-2">{video.title}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="hidden sm:flex flex-wrap justify-center gap-3">
+                        {videos.map((video) => (
+                          <button
+                            key={video.id}
+                            type="button"
+                            onClick={() => setSelectedGuidelineVideo(video)}
+                            className="text-left bg-black/30 border border-gray-800 rounded-xl overflow-hidden hover:border-cyan-500/50 transition group w-[calc(50%-0.75rem)] md:w-[calc(33.333%-0.75rem)] lg:w-[calc(20%-0.75rem)]"
+                          >
+                            <div className="relative aspect-video bg-gradient-to-br from-gray-800 to-gray-900 overflow-hidden">
+                              {video.thumbnail ? (
+                                <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <BookOpen className="w-6 h-6 text-gray-600" />
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black/40 group-hover:bg-black/25 transition" />
+                              <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded">
+                                {video.duration || 'Video'}
+                              </div>
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center">
+                                  <span className="text-cyan-300 text-xs">▶</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="p-2">
+                              <p className="text-white text-[10px] sm:text-xs font-semibold line-clamp-2">{video.title}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </>
                   )
                 })()
               )}
@@ -1996,6 +2031,53 @@ export default function Home() {
               </div>
               <h3 className="text-xs sm:text-xl font-bold text-white mb-1 sm:mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>Profit</h3>
               <p className="text-gray-400 text-[10px] sm:text-base">Trade 24/5</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Gift License Section */}
+        <div className="mb-12 sm:mb-24">
+          <div className="bg-[#12121a] border border-purple-500/20 rounded-xl sm:rounded-2xl p-5 sm:p-7">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6">
+              {/* Gift Hamper Illustration */}
+              <div className="flex-shrink-0 relative self-center sm:self-auto">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 relative">
+                  <div className="absolute inset-0 bg-gradient-to-br from-purple-600/30 via-purple-500/20 to-cyan-500/30 border-2 border-purple-500/40 rounded-lg transform rotate-3 shadow-xl">
+                    <div className="absolute inset-1 bg-gradient-to-br from-purple-500/20 to-cyan-500/10 rounded border border-purple-500/20"></div>
+                  </div>
+                  <div className="absolute -top-2 left-0 right-0 h-4 bg-gradient-to-br from-purple-500/40 to-cyan-500/30 border-2 border-purple-500/40 rounded-t-lg transform -rotate-2 shadow-lg">
+                    <div className="absolute inset-0.5 bg-gradient-to-br from-purple-400/30 to-cyan-400/20 rounded-t border-t border-purple-500/20"></div>
+                  </div>
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2 h-full bg-gradient-to-b from-yellow-400 to-yellow-500 rounded-t shadow-md"></div>
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-6 bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-full shadow-lg flex items-center justify-center">
+                    <Sparkles className="w-3 h-3 text-yellow-900" />
+                  </div>
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                    <Gift className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 min-w-0 text-center sm:text-left">
+                <h3 className="text-base sm:text-xl font-bold text-white mb-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>Gift a License to your friend!</h3>
+                <p className="text-gray-400 text-xs sm:text-sm mb-3 leading-relaxed">
+                  Buy a voucher for someone or yourself. Expiry starts only when redeemed — perfect as a gift!
+                </p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex flex-wrap justify-center sm:justify-start items-center gap-3 sm:gap-4 text-[10px] sm:text-xs text-gray-500 sm:pr-4">
+                    <span className="flex items-center gap-1"><Sparkles className="w-3 h-3 text-purple-400/60" /> Instant delivery</span>
+                    <span className="flex items-center gap-1"><Shield className="w-3 h-3 text-cyan-400/60" /> Redeem anytime</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-green-400/60" /> Expiry from activation</span>
+                  </div>
+                  <Link
+                    href="/gift"
+                    className="inline-flex items-center justify-center gap-2 w-full sm:w-auto sm:ml-auto bg-gradient-to-r from-purple-500 to-cyan-400 hover:from-purple-400 hover:to-cyan-300 text-black px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all hover:scale-105"
+                    style={{ fontFamily: 'Orbitron, sans-serif' }}
+                  >
+                    <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> BUY GIFT
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         </div>

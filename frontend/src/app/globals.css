@@ -54,6 +54,15 @@ body {
   background: transparent;
 }
 
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Support widget tooltip fade-in */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateX(8px); }
