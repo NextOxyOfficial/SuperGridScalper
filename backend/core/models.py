@@ -86,7 +86,8 @@ class License(models.Model):
         if not self.is_valid():
             return 0
         delta = self.expires_at - timezone.now()
-        return max(0, delta.days)
+        import math
+        return max(0, math.ceil(delta.total_seconds() / 86400))
 
     def __str__(self):
         return f"{self.user.username} - {self.license_key[:8]}... ({self.status})"
