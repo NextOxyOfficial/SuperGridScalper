@@ -455,6 +455,10 @@ void OnTick()
     // and recovery count <= threshold, allowing fresh normal mode restart
     RecoveryCleanupWorker();
     
+    // Skip Enforcement Worker — safety net: delete any pending orders that violate
+    // skip/EMA/block rules (catches race conditions, EA restart, mode transitions)
+    SkipEnforcementWorker();
+    
     // Manage grids based on mode (with Trend Skip + Smart Filter protection)
     // Priority: Master Block > Trend Skip > Trend Filter > Normal/Recovery Grid
     
@@ -486,13 +490,15 @@ void OnTick()
     }
     else if(skipBuyGrid)
     {
-        // Pip-based skip (SELL profiting) → BUY normal grid PAUSE
-        // Pending orders stay alive — will trigger on trend reversal
+        // Pip-based or equity skip → BUY normal grid PAUSE
+        // Delete pending BUY orders so broker can't fill them during skip
+        DeleteAllPendingOrdersForSide(true);
     }
     else if(IsTrendFiltered(true) && !skipSellGrid)
     {
         // EMA bearish → BUY pause, BUT only if SELL side is NOT equity-skipped
         // If SELL is equity-skipped (losing), BUY MUST trade to earn — bypass EMA filter
+        DeleteAllPendingOrdersForSide(true);
     }
     else
     {
@@ -522,12 +528,15 @@ void OnTick()
     }
     else if(skipSellGrid)
     {
-        // Pip-based skip (BUY profiting) → SELL normal grid PAUSE
+        // Pip-based or equity skip → SELL normal grid PAUSE
+        // Delete pending SELL orders so broker can't fill them during skip
+        DeleteAllPendingOrdersForSide(false);
     }
     else if(IsTrendFiltered(false) && !skipBuyGrid)
     {
         // EMA bullish → SELL pause, BUT only if BUY side is NOT equity-skipped
         // If BUY is equity-skipped (losing), SELL MUST trade to earn — bypass EMA filter
+        DeleteAllPendingOrdersForSide(false);
     }
     else
     {
@@ -788,6 +797,97 @@ void UpdateTrendBias()
         g_TrendBias = 1;   // Bullish — EMA rising
     else if(slopeValue <= -EMA_SlopeMinPips)
         g_TrendBias = -1;  // Bearish — EMA falling
+}
+
+//+------------------------------------------------------------------+
+//| Validate SL/TP for PENDING ORDERS (checks against order price)   |
+//| For pending orders, broker checks SL/TP relative to order price   |
+//| BUY: TP > orderPrice, SL < orderPrice                            |
+//| SELL: TP < orderPrice, SL > orderPrice                           |
+//+------------------------------------------------------------------+
+void ValidateStops(bool isBuy, double orderPrice, double &sl, double &tp)
+{
+    int stopsLevel = (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+    if(stopsLevel <= 0) stopsLevel = 10; // Fallback minimum
+    double minDist = stopsLevel * _Point;
+    
+    // Validate TP direction and distance (relative to order price)
+    if(tp != 0)
+    {
+        if(isBuy)
+        {
+            if(tp <= orderPrice) tp = 0;
+            else if(tp - orderPrice < minDist) tp = NormalizeDouble(orderPrice + minDist, _Digits);
+        }
+        else
+        {
+            if(tp >= orderPrice) tp = 0;
+            else if(orderPrice - tp < minDist) tp = NormalizeDouble(orderPrice - minDist, _Digits);
+        }
+    }
+    
+    // Validate SL direction and distance (relative to order price)
+    if(sl != 0)
+    {
+        if(isBuy)
+        {
+            if(sl >= orderPrice) sl = 0;
+            else if(orderPrice - sl < minDist) sl = NormalizeDouble(orderPrice - minDist, _Digits);
+        }
+        else
+        {
+            if(sl <= orderPrice) sl = 0;
+            else if(sl - orderPrice < minDist) sl = NormalizeDouble(orderPrice + minDist, _Digits);
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Validate SL/TP for POSITION MODIFICATIONS (against market price)  |
+//| For open positions, broker checks SL/TP distance from CURRENT     |
+//| market price (Bid for BUY, Ask for SELL), NOT from open price.    |
+//| Trailing SL on profitable positions moves between open and market  |
+//| price — this is valid and must NOT be rejected.                    |
+//| BUY: SL < Bid, TP > Bid (distance from Bid >= STOPS_LEVEL)       |
+//| SELL: SL > Ask, TP < Ask (distance from Ask >= STOPS_LEVEL)       |
+//+------------------------------------------------------------------+
+void ValidateStopsForPosition(bool isBuy, double &sl, double &tp)
+{
+    int stopsLevel = (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+    if(stopsLevel <= 0) stopsLevel = 10;
+    double minDist = stopsLevel * _Point;
+    
+    double marketPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    
+    // Validate TP (must be on profitable side of market price)
+    if(tp != 0)
+    {
+        if(isBuy)
+        {
+            if(tp <= marketPrice) tp = 0; // TP below current Bid = already triggered or invalid
+            else if(tp - marketPrice < minDist) tp = NormalizeDouble(marketPrice + minDist, _Digits);
+        }
+        else
+        {
+            if(tp >= marketPrice) tp = 0; // TP above current Ask = already triggered or invalid
+            else if(marketPrice - tp < minDist) tp = NormalizeDouble(marketPrice - minDist, _Digits);
+        }
+    }
+    
+    // Validate SL (must be on loss side of market price)
+    if(sl != 0)
+    {
+        if(isBuy)
+        {
+            if(sl >= marketPrice) sl = 0; // SL above Bid = would trigger immediately
+            else if(marketPrice - sl < minDist) sl = NormalizeDouble(marketPrice - minDist, _Digits);
+        }
+        else
+        {
+            if(sl <= marketPrice) sl = 0; // SL below Ask = would trigger immediately
+            else if(sl - marketPrice < minDist) sl = NormalizeDouble(marketPrice + minDist, _Digits);
+        }
+    }
 }
 
 // Check if a new NORMAL grid order should be blocked by trend filter
@@ -1840,6 +1940,121 @@ void RecoveryCleanupForSide(bool isBuy)
 }
 
 //+------------------------------------------------------------------+
+//| IsSideBlocked — single source of truth for skip/filter rules     |
+//| Returns true if this side should have NO pending orders           |
+//| Must mirror the exact same logic as OnTick grid branches          |
+//| outReason is set to the reason for blocking (for logging)         |
+//+------------------------------------------------------------------+
+bool IsSideBlocked(bool isBuy, string &outReason)
+{
+    outReason = "";
+    bool inRecovery = isBuy ? buyInRecovery : sellInRecovery;
+    
+    // Recovery mode bypasses skip/EMA — only blocked by hard master block
+    if(inRecovery)
+    {
+        if(g_NewEntriesBlocked && g_BlockCancelPending)
+        {
+            outReason = "Recovery hard block (" + g_BlockReason + ")";
+            return true;
+        }
+        return false; // Recovery soft block keeps pendings, and recovery bypasses skip/EMA
+    }
+    
+    // Normal mode checks (in priority order, matching OnTick branches)
+    
+    // 1. Master block with cancel pending (hard block)
+    if(g_NewEntriesBlocked && g_BlockCancelPending)
+    {
+        outReason = "Hard block (" + g_BlockReason + ")";
+        return true;
+    }
+    
+    // 2. Master block without cancel (soft block) — pendings stay alive
+    if(g_NewEntriesBlocked)
+        return false; // Soft block = pendings stay
+    
+    // 3. Trend skip (pip-based or equity-based)
+    if(isBuy && skipBuyGrid)
+    {
+        outReason = "BUY skip active (trend/equity)";
+        return true;
+    }
+    if(!isBuy && skipSellGrid)
+    {
+        outReason = "SELL skip active (trend/equity)";
+        return true;
+    }
+    
+    // 4. EMA trend filter (with equity-skip bypass)
+    if(isBuy && IsTrendFiltered(true) && !skipSellGrid)
+    {
+        outReason = "EMA bearish — BUY filtered";
+        return true;
+    }
+    if(!isBuy && IsTrendFiltered(false) && !skipBuyGrid)
+    {
+        outReason = "EMA bullish — SELL filtered";
+        return true;
+    }
+    
+    return false; // Side is clear to trade
+}
+
+//+------------------------------------------------------------------+
+//| Skip Enforcement Worker — safety net for pending order cleanup    |
+//| Runs every tick AFTER all state flags are set.                    |
+//| Deletes any pending orders that violate current skip/EMA/block    |
+//| rules. Acts as a catch-all in case the main grid branches miss    |
+//| a deletion (e.g. race conditions, EA restart, mode transitions).  |
+//+------------------------------------------------------------------+
+void SkipEnforcementWorker()
+{
+    string buyReason = "", sellReason = "";
+    bool buyBlocked = IsSideBlocked(true, buyReason);
+    bool sellBlocked = IsSideBlocked(false, sellReason);
+    
+    // Nothing to enforce if both sides are clear
+    if(!buyBlocked && !sellBlocked) return;
+    
+    int deletedBuy = 0, deletedSell = 0;
+    
+    for(int i = OrdersTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        
+        // BUY side blocked — delete all BUY pending orders
+        if(buyBlocked && (type == ORDER_TYPE_BUY_LIMIT || type == ORDER_TYPE_BUY_STOP))
+        {
+            if(trade.OrderDelete(ticket))
+                deletedBuy++;
+        }
+        // SELL side blocked — delete all SELL pending orders
+        else if(sellBlocked && (type == ORDER_TYPE_SELL_LIMIT || type == ORDER_TYPE_SELL_STOP))
+        {
+            if(trade.OrderDelete(ticket))
+                deletedSell++;
+        }
+    }
+    
+    // Log enforcement actions (throttled to avoid spam)
+    static datetime lastEnforceLog = 0;
+    if((deletedBuy > 0 || deletedSell > 0) && TimeCurrent() - lastEnforceLog > 5)
+    {
+        lastEnforceLog = TimeCurrent();
+        if(deletedBuy > 0)
+            AddToLog(StringFormat("ENFORCE: Deleted %d BUY pending(s) — %s", deletedBuy, buyReason), "ENFORCE");
+        if(deletedSell > 0)
+            AddToLog(StringFormat("ENFORCE: Deleted %d SELL pending(s) — %s", deletedSell, sellReason), "ENFORCE");
+    }
+}
+
+//+------------------------------------------------------------------+
 //| Self-Healing Grid Worker - Detects and fixes grid issues         |
 //| after reconnect, EA restart, or any disruption                   |
 //+------------------------------------------------------------------+
@@ -1909,6 +2124,10 @@ void GridHealthCheckNormal(bool isBuy, double currentBid, double currentAsk)
 {
     bool inRecovery = isBuy ? buyInRecovery : sellInRecovery;
     if(inRecovery) return;  // Skip if in recovery mode
+    
+    // Don't report missing orders if this side is intentionally blocked
+    string blockReason = "";
+    if(IsSideBlocked(isBuy, blockReason)) return;
     
     int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
     double rangeHigh = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
@@ -1981,6 +2200,10 @@ void GridHealthCheckRecovery(bool isBuy, double currentBid, double currentAsk)
     bool inRecovery = isBuy ? buyInRecovery : sellInRecovery;
     if(!inRecovery) return;  // Skip if not in recovery mode
     if(!EnableRecovery) return;
+    
+    // Don't report missing recovery orders if hard-blocked
+    string blockReason = "";
+    if(IsSideBlocked(isBuy, blockReason)) return;
     
     // Count recovery pending orders
     int recoveryOrderCount = 0;
@@ -2083,10 +2306,12 @@ void FixMissingRecoveryTP(bool isBuy)
         if(currentTP == 0 || MathAbs(currentTP - breakevenTP) > 1.0 * pip)
         {
             double currentSL = PositionGetDouble(POSITION_SL);
-            if(trade.PositionModify(ticket, currentSL, breakevenTP))
+            double valSL = currentSL, valTP = breakevenTP;
+            ValidateStopsForPosition(isBuy, valSL, valTP);
+            if(valTP > 0 && trade.PositionModify(ticket, valSL, valTP))
             {
                 AddToLog(StringFormat("%s SelfHeal: Fixed TP on position #%I64u | Old TP=%.2f | New TP=%.2f", 
-                    isBuy ? "BUY" : "SELL", ticket, currentTP, breakevenTP), "HEAL");
+                    isBuy ? "BUY" : "SELL", ticket, currentTP, valTP), "HEAL");
             }
         }
     }
@@ -2472,6 +2697,7 @@ void ManageNormalGrid(bool isBuy)
         {
             tp = (BuyTakeProfitPips > 0) ? NormalizeDouble(targetPrice + (BuyTakeProfitPips * pip), _Digits) : 0;
             sl = (BuyStopLossPips > 0) ? NormalizeDouble(targetPrice - (BuyStopLossPips * pip), _Digits) : 0;
+            ValidateStops(true, targetPrice, sl, tp);
             if(trade.BuyLimit(lotToUse, targetPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
                 AddToLog(StringFormat("BUY LIMIT @ %.2f | Lot: %.2f", targetPrice, lotToUse), "OPEN_BUY");
@@ -2482,6 +2708,7 @@ void ManageNormalGrid(bool isBuy)
         {
             tp = (SellTakeProfitPips > 0) ? NormalizeDouble(targetPrice - (SellTakeProfitPips * pip), _Digits) : 0;
             sl = (SellStopLossPips > 0) ? NormalizeDouble(targetPrice + (SellStopLossPips * pip), _Digits) : 0;
+            ValidateStops(false, targetPrice, sl, tp);
             if(trade.SellLimit(lotToUse, targetPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
                 AddToLog(StringFormat("SELL LIMIT @ %.2f | Lot: %.2f", targetPrice, lotToUse), "OPEN_SELL");
@@ -2716,6 +2943,8 @@ void ManageRecoveryGrid(bool isBuy)
                         relocSL = NormalizeDouble(newPrice - (BuyStopLossPips * pip), _Digits);
                     else if(!isBuy && SellStopLossPips > 0)
                         relocSL = NormalizeDouble(newPrice + (SellStopLossPips * pip), _Digits);
+                    
+                    ValidateStops(isBuy, newPrice, relocSL, newTP);
                     
                     if(trade.OrderModify(ticket, newPrice, relocSL, newTP, ORDER_TIME_GTC, 0))
                     {
@@ -2988,6 +3217,9 @@ void ManageRecoveryGrid(bool isBuy)
         else if(!isBuy && SellStopLossPips > 0)
             recoverySL = NormalizeDouble(recoveryPrice + (SellStopLossPips * pip), _Digits);
         
+        // Validate SL/TP before placement
+        ValidateStops(isBuy, recoveryPrice, recoverySL, breakevenTP);
+        
         // Place recovery order
         AddToLog(StringFormat("Attempting to place %s recovery order | Price: %.2f | Lot: %.2f | TP: %.2f | SL: %.2f", 
             isBuy ? "BUY" : "SELL", recoveryPrice, recoveryLot, breakevenTP, recoverySL), "RECOVERY");
@@ -3250,7 +3482,9 @@ void CheckAndCloseRecoveryBreakeven(bool isBuy)
                 for(int b = 0; b < bundleSize; b++)
                 {
                     if(!PositionSelectByTicket(bundleTickets[b])) continue;
-                    trade.PositionModify(bundleTickets[b], commonSL, commonTP);
+                    double posSL = commonSL, posTP = commonTP;
+                    ValidateStopsForPosition(isBuy, posSL, posTP);
+                    trade.PositionModify(bundleTickets[b], posSL, posTP);
                 }
                 
                 AddToLog(StringFormat("%s BUNDLE #%d ARMED! %d pos (1 loss + %d profit) | TopLoss@%.2f | Net=%.2f >= Target=%.2f | Avg=%.2f | TP=%.2f | SL=%.2f", 
@@ -3366,8 +3600,13 @@ void ApplyRecoveryBreakevenTrailingForSide(bool isBuy)
                 (isBuy && newSL > currentSL + (0.5 * pip)) ||
                 (!isBuy && newSL < currentSL - (0.5 * pip));
             
-            if(needsUpdate && trade.PositionModify(ticket, newSL, currentTP))
-                updateCount++;
+            if(needsUpdate)
+            {
+                double valSL = newSL, valTP = currentTP;
+                ValidateStopsForPosition(isBuy, valSL, valTP);
+                if(valSL > 0 && trade.PositionModify(ticket, valSL, valTP))
+                    updateCount++;
+            }
         }
         
         if(updateCount > 0)
@@ -3482,9 +3721,15 @@ void ApplyTrailing()
             
             if(safetySL > 0)
             {
-                trade.PositionModify(ticket, safetySL, currentTP);
-                AddToLog(StringFormat("Safety SL set: %s #%I64u | Open: %.2f | SL: %.2f", 
-                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", ticket, openPrice, safetySL), "TRAILING");
+                bool isBuyPos = (type == POSITION_TYPE_BUY);
+                double valTP = currentTP;
+                ValidateStopsForPosition(isBuyPos, safetySL, valTP);
+                if(safetySL > 0)
+                {
+                    trade.PositionModify(ticket, safetySL, valTP);
+                    AddToLog(StringFormat("Safety SL set: %s #%I64u | Open: %.2f | SL: %.2f", 
+                        isBuyPos ? "BUY" : "SELL", ticket, openPrice, safetySL), "TRAILING");
+                }
             }
         }
         
@@ -3514,9 +3759,15 @@ void ApplyTrailing()
             
             if(needsUpdate)
             {
-                trade.PositionModify(ticket, newSL, currentTP);
-                AddToLog(StringFormat("Trailing SL: %s | Profit: %.1f pips", 
-                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", profitPips), "TRAILING");
+                bool isBuyPos = (type == POSITION_TYPE_BUY);
+                double valTP = currentTP;
+                ValidateStopsForPosition(isBuyPos, newSL, valTP);
+                if(newSL > 0)
+                {
+                    trade.PositionModify(ticket, newSL, valTP);
+                    AddToLog(StringFormat("Trailing SL: %s | Profit: %.1f pips", 
+                        isBuyPos ? "BUY" : "SELL", profitPips), "TRAILING");
+                }
             }
         }
     }
