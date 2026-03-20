@@ -17,7 +17,7 @@ input bool      UseCachedLicenseInTester = true;
 #define CachedLicenseMaxAgeHours  24   // Hidden — cache expiry for tester only (live checks every 30s)
 
 //--- Max Drawdown Protection (fixed dollar amount)
-input double    MaxDrawdownAmount = 0;  // কত $ loss হলে সব close (0 = disabled). e.g. 500 = $500 loss হলে all positions close
+input double    MaxDrawdownAmount = 0;  // Max loss in $ to close all (0 = disabled). e.g. 500 = close all when $500 loss
 
 //--- Per Order Stop Loss (0 = disabled)
 input double    BuyStopLossPips  = 120.0;   // Buy SL in pips (0 = no SL)
@@ -54,95 +54,95 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 // | 10 pip | +5.5 pip    | 2 + (7 × 0.5) |
 // | 20 pip | +10.5 pip   | 2 + (17 × 0.5) |
 
-#define BuyTrailingStartPips    3.0   // কত pip profit হলে trailing শুরু হবে (Trailing activation threshold)
-#define BuyInitialSLPips        2.5   // প্রথমে SL কত pip profit এ set হবে (Initial SL when trailing starts)
-#define BuyTrailingRatio        0.5   // প্রতি 1 pip trail এ SL কত pip move করবে (0.5 = 50% of price movement)
+#define BuyTrailingStartPips    3.0   // Pips in profit before trailing starts
+#define BuyInitialSLPips        2.5   // Initial SL lock-in pips when trailing activates
+#define BuyTrailingRatio        0.5   // SL moves this ratio per 1 pip of price movement (0.5 = 50%)
 
-#define SellTrailingStartPips   3.0   // SELL এর জন্য trailing শুরু threshold
-#define SellInitialSLPips       2.5   // SELL এর জন্য initial SL
-#define SellTrailingRatio       0.5   // SELL এর জন্য trailing ratio
+#define SellTrailingStartPips   3.0   // SELL trailing activation threshold
+#define SellInitialSLPips       2.5   // SELL initial SL lock-in pips
+#define SellTrailingRatio       0.5   // SELL trailing ratio
 
 // ===== RECOVERY MODE SETTINGS =====
-// Recovery mode এ average price থেকে calculate হয়, individual position থেকে না
+// Recovery mode calculates from average price, not individual positions
 // Recovery mode activates when positions >= MaxOrders
 
 #define EnableRecovery          true   // Recovery mode enable/disable
-#define RecoveryTakeProfitPips  25.0  // Recovery mode এ TP (average price থেকে) - NOT USED for breakeven
-#define RecoveryBreakevenPips   3.0  // Breakeven close এ profit pips (long-distance + profitable positions)
-#define RecoveryTrailingStartPips 2.5  // Recovery mode এ trailing শুরু threshold
-#define RecoveryInitialSLPips   2.50    // Recovery mode এ initial SL
-#define RecoveryTrailingRatio   0.5    // Recovery mode এ trailing ratio
-#define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
-#define MaxRecoveryLotSize      0.35    // Recovery lot cap (base 0.30 + max 5 increments = 0.35). বেশি হলে over-exposure হবে
+#define RecoveryTakeProfitPips  25.0  // Recovery TP from average price - NOT USED for breakeven
+#define RecoveryBreakevenPips   3.0  // Profit pips for breakeven close (long-distance + profitable positions)
+#define RecoveryTrailingStartPips 2.5  // Recovery trailing activation threshold
+#define RecoveryInitialSLPips   2.50    // Recovery initial SL lock-in pips
+#define RecoveryTrailingRatio   0.5    // Recovery trailing ratio
+#define RecoveryLotIncrement    0.01   // Lot size increment per recovery order (fixed)
+#define MaxRecoveryLotSize      0.35    // Recovery lot cap (base 0.30 + max 5 increments = 0.35)
 #define MaxRecoveryOrders       30
-#define RecoveryCleanupThreshold 3  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
+#define RecoveryCleanupThreshold 3  // When only recovery positions remain and count <= this, close all and restart normal mode
 
 // ===== TREND SKIP MODE SETTINGS =====
-// যখন এক পাশে (BUY বা SELL) position profit এ trailing করছে,
-// তখন opposite পাশে নতুন grid order place করা SKIP হবে।
-// এতে strong trend এ opposite দিকে position জমা হবে না, equity safe থাকবে।
-// Trailing SL hit করে profitable পাশ close হলে normal grid আবার resume হবে।
+// When one side (BUY or SELL) has positions trailing in profit,
+// new grid orders on the opposite side are SKIPPED.
+// Prevents accumulating positions against strong trends, protecting equity.
+// Normal grid resumes when the trailing profitable side closes.
 
 #define EnableTrendSkip         true    // Trend skip mode enable/disable
-#define SkipActivationPips      1.0     // কত pip profit হলে opposite side skip হবে (1 pip = খুব তাড়াতাড়ি skip)
+#define SkipActivationPips      1.0     // Pips in profit to skip opposite side (1 pip = very early skip)
 
 // ===== EQUITY-BASED SKIP SETTINGS =====
-// Floating loss যদি equity এর নির্দিষ্ট % cross করে, opposite grid auto-pause হবে।
-// এটা Trend Skip এর সাথে OR condition — যেকোনো একটা true হলেই skip activate হবে।
-// উদাহরণ: Balance=$1000, EquitySkipPercent=5.0 → floating loss $50 হলে skip।
+// If floating loss exceeds a certain % of balance, that losing side's grid auto-pauses.
+// Works as OR condition with Trend Skip — either one triggers the pause.
+// Example: Balance=$1000, EquitySkipPercent=5.0 → $50 floating loss triggers skip.
 
 #define EnableEquitySkip        true    // Equity-based skip enable/disable
-#define EquitySkipPercent       5.0     // কত % equity loss হলে losing side এর opposite skip হবে
+#define EquitySkipPercent       5.0     // % of balance loss to trigger skip on the losing side
 
 // ===== SPREAD FILTER =====
-// Spread বেশি থাকলে নতুন order place হবে না (existing position management চলবে)
-// XAUUSD তে normal spread 20-30 points, news time 50-100+ হতে পারে
-#define EnableSpreadFilter      true    // Extreme spread এ নতুন order বন্ধ
-#define MaxSpreadPoints         400     // XAUUSD: normal 20-50, news 100+. 150 = শুধু extreme spike block
+// High spread pauses new orders (existing position management continues)
+// XAUUSD normal spread: 20-30 pts, news time: 50-100+
+#define EnableSpreadFilter      true    // Block new orders during extreme spread
+#define MaxSpreadPoints         400     // XAUUSD: normal 20-50, news 100+. 400 = only extreme spike block
 
 // ===== SESSION FILTER =====
-// নির্দিষ্ট session এ trade করবে। Broker server time ব্যবহার হয়।
-// তোমার broker এর server time check করে adjust করো।
-// সাধারণত GMT+2/+3 হয়। London open = 09 (GMT+2), NY close = 23 (GMT+2)
-#define EnableSessionFilter     false   // true করলে session check হবে। প্রথমে false রাখো
+// Trade only during specific session hours. Uses broker server time.
+// Check your broker's server time and adjust accordingly.
+// Typically GMT+2/+3. London open = 09 (GMT+2), NY close = 23 (GMT+2)
+#define EnableSessionFilter     false   // Enable session time filter (keep false initially)
 #define SessionStartHour        9       // Broker server hour — session start (adjust for your broker)
 #define SessionEndHour          23      // Broker server hour — session end (adjust for your broker)
 
 // ===== ATR-BASED DYNAMIC GRID =====
-// Static gap এর বদলে ATR ব্যবহার করে dynamic gap calculate করবে
-// High volatility = wider gap (কম trade, safer), Low volatility = tighter gap
+// Uses ATR instead of static gap for dynamic grid spacing
+// High volatility = wider gap (fewer trades, safer), Low volatility = tighter gap
 #define EnableATRGrid           true    // M15 ATR-based dynamic gap — high volatility = wider gap = safer entries
 #define ATRPeriod               14      // ATR calculation period
 #define ATRTimeframe            PERIOD_M15  // ATR timeframe
 #define ATRGridMultiplier       0.5     // Grid gap = ATR × multiplier (0.5 = half ATR)
-#define MinGridGapPips          2.0     // Minimum gap (ATR very low হলেও এর নিচে যাবে না)
-#define MaxGridGapPips          8.0     // Maximum gap (ATR very high হলেও এর বেশি হবে না)
+#define MinGridGapPips          2.0     // Minimum gap (floor even if ATR is very low)
+#define MaxGridGapPips          8.0     // Maximum gap (cap even if ATR is very high)
 
 // ===== TREND DIRECTION FILTER (EMA) =====
-// EMA slope দিয়ে trend direction detect করে counter-trend entry কমাবে
-// Trend Skip এর সাথে conflict নয়, বরং complement করে — Skip reactive, EMA proactive
-#define EnableTrendFilter       true    // M15 EMA trend follow ON — counter-trend normal grid block, WITH-trend grid চলবে
+// EMA slope detects trend direction to reduce counter-trend entries
+// Complements Trend Skip — Skip is reactive, EMA is proactive
+#define EnableTrendFilter       true    // M15 EMA trend follow ON — blocks counter-trend normal grid, allows with-trend
 #define EMA_Period              50      // EMA period (50 = medium-term trend)
 #define EMA_Timeframe           PERIOD_M15  // EMA calculation timeframe
-#define EMA_SlopeMinPips        1.5     // Minimum slope (last 5 bars) to consider trending (1.5 = আরো sensitive)
+#define EMA_SlopeMinPips        1.5     // Minimum slope (last 5 bars) to consider trending (1.5 = more sensitive)
 
 // ===== RECOVERY SAFETY CAPS =====
-// Recovery mode এ total exposure সীমিত রাখবে
-#define MaxTotalLotsPerSide     3.0     // এক পাশে সর্বোচ্চ total lots (normal + recovery মিলে)
-#define MaxFloatingLossPerSide  30.0    // এক পাশে সর্বোচ্চ floating loss = balance এর এত % (30% = $7500 balance এ $2250 cap). 0 = disabled
-#define MinFreeMarginForRecovery 200.0  // Recovery order place করতে minimum free margin ($) লাগবে
-#define RecoveryCooldownSeconds  30     // Recovery order fill হওয়ার পর পরবর্তী order এর আগে wait (seconds)
+// Limits total exposure in recovery mode
+#define MaxTotalLotsPerSide     3.0     // Max total lots per side (normal + recovery combined)
+#define MaxFloatingLossPerSide  30.0    // Max floating loss per side as % of balance (30% = $2250 on $7500). 0 = disabled
+#define MinFreeMarginForRecovery 200.0  // Minimum free margin ($) required to place recovery order
+#define RecoveryCooldownSeconds  30     // Wait seconds after recovery fill before next recovery order
 
 // ===== DAILY LIMITS =====
-// দিনে নির্দিষ্ট profit/loss হলে নতুন entry বন্ধ
-#define EnableDailyLimits       false   // true করলে daily profit/loss limit চালু হবে
-#define DailyProfitTarget       0.0     // দিনে এত $ profit হলে নতুন entry বন্ধ (0 = disabled)
-#define DailyMaxLoss            0.0     // দিনে এত $ loss হলে নতুন entry বন্ধ (0 = disabled)
+// Pause new entries after daily profit/loss target is reached
+#define EnableDailyLimits       false   // Enable daily profit/loss limits
+#define DailyProfitTarget       0.0     // Daily profit target in $ to pause entries (0 = disabled)
+#define DailyMaxLoss            0.0     // Daily max loss in $ to pause entries (0 = disabled)
 
 // ===== NEWS PAUSE (Manual) =====
-// Manually toggle করে news time এ EA pause করা যাবে
-// Future এ auto news API integration করা যাবে
-input bool      PauseForNews    = false;  // true করলে সব নতুন order বন্ধ (existing manage চলবে)
+// Toggle manually to pause EA during news events
+// Future: auto news API integration planned
+input bool      PauseForNews    = false;  // true = pause all new orders (existing positions still managed)
 
 #define LotSize         0.30
 #define MagicNumber     999888
@@ -178,7 +178,7 @@ bool skipSellGrid = false;   // true = don't place new SELL grid/recovery orders
 // Smart Filter state
 bool g_NewEntriesBlocked = false;  // Master block flag (spread/session/daily/news)
 string g_BlockReason = "";         // Why entries are blocked
-bool g_BlockCancelPending = false; // true হলে blocked অবস্থায় pending orders delete হবে (hard block only)
+bool g_BlockCancelPending = false; // true = pending orders are deleted when blocked (hard block only)
 int g_ATRHandle = INVALID_HANDLE;  // ATR indicator handle
 int g_EMAHandle = INVALID_HANDLE;  // EMA indicator handle
 datetime g_LastBuyRecoveryFill = 0;  // Last BUY recovery order fill time (for cooldown)
@@ -463,12 +463,12 @@ void OnTick()
     {
         // Recovery bypasses: Trend Skip, Equity Skip, EMA Trend Filter
         // Recovery PAUSES: Spread spike, Session, News, Daily limit
-        // Recovery Safety Caps (lots/loss/margin/cooldown) নিজেই protection দেয়
+        // Recovery Safety Caps (lots/loss/margin/cooldown) provide their own protection
         if(g_NewEntriesBlocked)
         {
             if(g_BlockCancelPending)
                 DeleteAllPendingOrdersForSide(true);
-            // else: spread/session = soft pause, recovery pending থাকবে but new placement বন্ধ
+            // else: spread/session = soft pause, recovery pendings stay but no new placement
         }
         else
         {
@@ -478,16 +478,16 @@ void OnTick()
     }
     else if(g_NewEntriesBlocked)
     {
-        // Soft block (spread/session) = pause new placement only, pendings থাকবে
-        // Hard block (news/daily) = pending orders ডিলিট
+        // Soft block (spread/session) = pause new placement only, pendings stay
+        // Hard block (news/daily) = delete pending orders
         if(g_BlockCancelPending)
             DeleteAllPendingOrdersForSide(true);
-        // else: শুধু ManageNormalGrid skip হবে, existing pendings alive থাকবে
+        // else: only ManageNormalGrid is skipped, existing pendings stay alive
     }
     else if(skipBuyGrid)
     {
         // Pip-based skip (SELL profiting) → BUY normal grid PAUSE
-        // Pending orders alive থাকবে — trend reverse হলে trigger হবে
+        // Pending orders stay alive — will trigger on trend reversal
     }
     else if(IsTrendFiltered(true) && !skipSellGrid)
     {
@@ -3039,8 +3039,8 @@ void ManageRecoveryGrid(bool isBuy)
 
 //+------------------------------------------------------------------+
 //| Ensure Recovery Mode TP - Worker Function                         |
-//| Recovery Mode এ long-distance + profitable basket breakeven hit    |
-//| করলে close না করে trailing-এ arm করা হয় (specific tickets only)। |
+//| In Recovery Mode, when long-distance + profitable basket hits       |
+//| breakeven, arms trailing instead of closing (specific tickets only). |
 //+------------------------------------------------------------------+
 void EnsureRecoveryModeTP()
 {
@@ -3380,19 +3380,19 @@ void ApplyRecoveryBreakevenTrailingForSide(bool isBuy)
 
 //+------------------------------------------------------------------+
 //| Apply Trailing Stop                                               |
-//| ট্রেইলিং স্টপ লজিক:                                                  |
-//| 1. Normal Mode: প্রতিটি position এর open price থেকে calculate      |
-//| 2. Recovery Mode: সব positions এর average price থেকে calculate    |
+//| Trailing Stop Logic:                                                |
+//| 1. Normal Mode: calculated from each position's open price          |
+//| 2. Recovery Mode: calculated from average price of all positions    |
 //|                                                                    |
 //| Formula: newSL = basePrice + InitialSL + (priceMovement × Ratio)  |
-//| যেখানে priceMovement = currentProfit - TrailingStart              |
+//| where priceMovement = currentProfit - TrailingStart                 |
 //+------------------------------------------------------------------+
 void ApplyTrailing()
 {
     CleanupBundles();
 
-    // Recovery mode এ average price calculate করি
-    // কারণ recovery mode এ সব positions একসাথে close হবে
+    // Calculate average price for recovery mode
+    // Because in recovery mode all positions close together
     double buyAvgPrice = 0, sellAvgPrice = 0;
     double buyTotalLots = 0, sellTotalLots = 0;
     
@@ -3449,12 +3449,12 @@ void ApplyTrailing()
         double currentSL = PositionGetDouble(POSITION_SL);
         double currentTP = PositionGetDouble(POSITION_TP);
         
-        // ===== Mode এবং Settings নির্ধারণ =====
-        // Recovery mode হলে average price ব্যবহার হবে, না হলে individual open price
+        // ===== Mode and Settings Selection =====
+        // Recovery mode uses average price, otherwise individual open price
         bool inRecovery = (type == POSITION_TYPE_BUY && buyInRecovery) || (type == POSITION_TYPE_SELL && sellInRecovery);
         double basePrice = inRecovery ? (type == POSITION_TYPE_BUY ? buyAvgPrice : sellAvgPrice) : openPrice;
         
-        // Mode অনুযায়ী settings select করি
+        // Select settings based on mode
         double trailingStart = inRecovery ? RecoveryTrailingStartPips : 
             (type == POSITION_TYPE_BUY ? BuyTrailingStartPips : SellTrailingStartPips);
         double initialSL = inRecovery ? RecoveryInitialSLPips :
@@ -3463,8 +3463,8 @@ void ApplyTrailing()
             (type == POSITION_TYPE_BUY ? BuyTrailingRatio : SellTrailingRatio);
         
         // ===== Profit Calculate =====
-        // BUY: currentPrice - basePrice (price বাড়লে profit)
-        // SELL: basePrice - currentPrice (price কমলে profit)
+        // BUY: currentPrice - basePrice (profit when price rises)
+        // SELL: basePrice - currentPrice (profit when price falls)
         double profitPips = type == POSITION_TYPE_BUY ?
             (currentPrice - basePrice) / pip :
             (basePrice - currentPrice) / pip;
@@ -3489,25 +3489,25 @@ void ApplyTrailing()
         }
         
         // ===== Trailing Apply =====
-        // শুধুমাত্র profit >= trailingStart হলে trailing শুরু হবে
+        // Trailing only starts when profit >= trailingStart
         if(profitPips >= trailingStart)
         {
-            // priceMovement = threshold এর পরে কত pip move করেছে
+            // priceMovement = how many pips moved beyond threshold
             double priceMovement = profitPips - trailingStart;
             
-            // slMovement = priceMovement এর ratio অংশ SL move করবে
-            // যেমন: ratio=0.5 মানে price 2 pip move করলে SL 1 pip move করবে
+            // slMovement = ratio portion of priceMovement applied to SL
+            // e.g. ratio=0.5 means if price moves 2 pips, SL moves 1 pip
             double slMovement = priceMovement * trailingRatio;
             
             // ===== New SL Calculate =====
-            // BUY: basePrice + initialSL + slMovement (উপরে move)
-            // SELL: basePrice - initialSL - slMovement (নিচে move)
+            // BUY: basePrice + initialSL + slMovement (moves up)
+            // SELL: basePrice - initialSL - slMovement (moves down)
             double newSL = type == POSITION_TYPE_BUY ?
                 NormalizeDouble(basePrice + (initialSL * pip) + (slMovement * pip), _Digits) :
                 NormalizeDouble(basePrice - (initialSL * pip) - (slMovement * pip), _Digits);
             
             // ===== SL Update Check =====
-            // শুধুমাত্র SL improve হলে update করবে (0.5 pip minimum change)
+            // Only update if SL improves (0.5 pip minimum change)
             bool needsUpdate = (currentSL == 0) || 
                 (type == POSITION_TYPE_BUY && newSL > currentSL + (0.5 * pip)) ||
                 (type == POSITION_TYPE_SELL && newSL < currentSL - (0.5 * pip));
