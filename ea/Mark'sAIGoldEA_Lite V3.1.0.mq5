@@ -14,10 +14,10 @@ input string    LicenseKey      = "";
 input bool      TesterMode      = false;
 input string    TesterAccountOverride = "";
 input bool      UseCachedLicenseInTester = true;
-input int       CachedLicenseMaxAgeHours = 24;
+#define CachedLicenseMaxAgeHours  24   // Hidden — cache expiry for tester only (live checks every 30s)
 
-//--- Max Drawdown Protection
-input double    MaxDrawdownAmount = 0.0;  // Max loss in $ (0 = disabled). e.g. 200 means close all if loss >= $200
+//--- Max Drawdown Protection (fixed dollar amount)
+input double    MaxDrawdownAmount = 0;  // কত $ loss হলে সব close (0 = disabled). e.g. 500 = $500 loss হলে all positions close
 
 //--- Per Order Stop Loss (0 = disabled)
 input double    BuyStopLossPips  = 120.0;   // Buy SL in pips (0 = no SL)
@@ -26,18 +26,18 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       2001.0
 #define BuyRangeEnd         8801.0
-#define BuyGapPips          5.0
-#define MaxBuyOrders        6
+#define BuyGapPips          3.0
+#define MaxBuyOrders        3
 #define BuyTakeProfitPips   25
 
 #define SellRangeStart      8802.0
 #define SellRangeEnd        2002.0
-#define SellGapPips         6.0
-#define MaxSellOrders       6
+#define SellGapPips         3.0
+#define MaxSellOrders       3
 #define SellTakeProfitPips  25
 
-#define BuyRecoveryGapPips   6
-#define SellRecoveryGapPips  6
+#define BuyRecoveryGapPips   3
+#define SellRecoveryGapPips  3
 
 // ===== TRAILING STOP SETTINGS (Normal Mode) =====
 // Formula: newSL = openPrice + InitialSL + ((profit - TrailingStart) × TrailingRatio)
@@ -54,12 +54,12 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 // | 10 pip | +5.5 pip    | 2 + (7 × 0.5) |
 // | 20 pip | +10.5 pip   | 2 + (17 × 0.5) |
 
-#define BuyTrailingStartPips    5.0   // কত pip profit হলে trailing শুরু হবে (Trailing activation threshold)
-#define BuyInitialSLPips        4.0   // প্রথমে SL কত pip profit এ set হবে (Initial SL when trailing starts)
+#define BuyTrailingStartPips    3.0   // কত pip profit হলে trailing শুরু হবে (Trailing activation threshold)
+#define BuyInitialSLPips        2.5   // প্রথমে SL কত pip profit এ set হবে (Initial SL when trailing starts)
 #define BuyTrailingRatio        0.5   // প্রতি 1 pip trail এ SL কত pip move করবে (0.5 = 50% of price movement)
 
-#define SellTrailingStartPips   5.0   // SELL এর জন্য trailing শুরু threshold
-#define SellInitialSLPips       4.0   // SELL এর জন্য initial SL
+#define SellTrailingStartPips   3.0   // SELL এর জন্য trailing শুরু threshold
+#define SellInitialSLPips       2.5   // SELL এর জন্য initial SL
 #define SellTrailingRatio       0.5   // SELL এর জন্য trailing ratio
 
 // ===== RECOVERY MODE SETTINGS =====
@@ -68,16 +68,83 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 
 #define EnableRecovery          true   // Recovery mode enable/disable
 #define RecoveryTakeProfitPips  25.0  // Recovery mode এ TP (average price থেকে) - NOT USED for breakeven
-#define RecoveryBreakevenPips   3.5  // Breakeven close এ profit pips (long-distance + profitable positions)
-#define RecoveryTrailingStartPips 3.5  // Recovery mode এ trailing শুরু threshold
-#define RecoveryInitialSLPips   2.75    // Recovery mode এ initial SL
+#define RecoveryBreakevenPips   3.0  // Breakeven close এ profit pips (long-distance + profitable positions)
+#define RecoveryTrailingStartPips 2.5  // Recovery mode এ trailing শুরু threshold
+#define RecoveryInitialSLPips   2.50    // Recovery mode এ initial SL
 #define RecoveryTrailingRatio   0.5    // Recovery mode এ trailing ratio
 #define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
-#define MaxRecoveryLotSize      0.25    // Recovery mode এ সর্বোচ্চ lot size (এর বেশি হবে না)
-#define MaxRecoveryOrders       200
-#define RecoveryCleanupThreshold 4  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
+#define MaxRecoveryLotSize      0.35    // Recovery lot cap (base 0.30 + max 5 increments = 0.35). বেশি হলে over-exposure হবে
+#define MaxRecoveryOrders       30
+#define RecoveryCleanupThreshold 3  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
 
-#define LotSize         0.10
+// ===== TREND SKIP MODE SETTINGS =====
+// যখন এক পাশে (BUY বা SELL) position profit এ trailing করছে,
+// তখন opposite পাশে নতুন grid order place করা SKIP হবে।
+// এতে strong trend এ opposite দিকে position জমা হবে না, equity safe থাকবে।
+// Trailing SL hit করে profitable পাশ close হলে normal grid আবার resume হবে।
+
+#define EnableTrendSkip         true    // Trend skip mode enable/disable
+#define SkipActivationPips      1.0     // কত pip profit হলে opposite side skip হবে (1 pip = খুব তাড়াতাড়ি skip)
+
+// ===== EQUITY-BASED SKIP SETTINGS =====
+// Floating loss যদি equity এর নির্দিষ্ট % cross করে, opposite grid auto-pause হবে।
+// এটা Trend Skip এর সাথে OR condition — যেকোনো একটা true হলেই skip activate হবে।
+// উদাহরণ: Balance=$1000, EquitySkipPercent=5.0 → floating loss $50 হলে skip।
+
+#define EnableEquitySkip        true    // Equity-based skip enable/disable
+#define EquitySkipPercent       5.0     // কত % equity loss হলে losing side এর opposite skip হবে
+
+// ===== SPREAD FILTER =====
+// Spread বেশি থাকলে নতুন order place হবে না (existing position management চলবে)
+// XAUUSD তে normal spread 20-30 points, news time 50-100+ হতে পারে
+#define EnableSpreadFilter      true    // Extreme spread এ নতুন order বন্ধ
+#define MaxSpreadPoints         400     // XAUUSD: normal 20-50, news 100+. 150 = শুধু extreme spike block
+
+// ===== SESSION FILTER =====
+// নির্দিষ্ট session এ trade করবে। Broker server time ব্যবহার হয়।
+// তোমার broker এর server time check করে adjust করো।
+// সাধারণত GMT+2/+3 হয়। London open = 09 (GMT+2), NY close = 23 (GMT+2)
+#define EnableSessionFilter     false   // true করলে session check হবে। প্রথমে false রাখো
+#define SessionStartHour        9       // Broker server hour — session start (adjust for your broker)
+#define SessionEndHour          23      // Broker server hour — session end (adjust for your broker)
+
+// ===== ATR-BASED DYNAMIC GRID =====
+// Static gap এর বদলে ATR ব্যবহার করে dynamic gap calculate করবে
+// High volatility = wider gap (কম trade, safer), Low volatility = tighter gap
+#define EnableATRGrid           true    // M15 ATR-based dynamic gap — high volatility = wider gap = safer entries
+#define ATRPeriod               14      // ATR calculation period
+#define ATRTimeframe            PERIOD_M15  // ATR timeframe
+#define ATRGridMultiplier       0.5     // Grid gap = ATR × multiplier (0.5 = half ATR)
+#define MinGridGapPips          2.0     // Minimum gap (ATR very low হলেও এর নিচে যাবে না)
+#define MaxGridGapPips          8.0     // Maximum gap (ATR very high হলেও এর বেশি হবে না)
+
+// ===== TREND DIRECTION FILTER (EMA) =====
+// EMA slope দিয়ে trend direction detect করে counter-trend entry কমাবে
+// Trend Skip এর সাথে conflict নয়, বরং complement করে — Skip reactive, EMA proactive
+#define EnableTrendFilter       true    // M15 EMA trend follow ON — counter-trend normal grid block, WITH-trend grid চলবে
+#define EMA_Period              50      // EMA period (50 = medium-term trend)
+#define EMA_Timeframe           PERIOD_M15  // EMA calculation timeframe
+#define EMA_SlopeMinPips        1.5     // Minimum slope (last 5 bars) to consider trending (1.5 = আরো sensitive)
+
+// ===== RECOVERY SAFETY CAPS =====
+// Recovery mode এ total exposure সীমিত রাখবে
+#define MaxTotalLotsPerSide     3.0     // এক পাশে সর্বোচ্চ total lots (normal + recovery মিলে)
+#define MaxFloatingLossPerSide  30.0    // এক পাশে সর্বোচ্চ floating loss = balance এর এত % (30% = $7500 balance এ $2250 cap). 0 = disabled
+#define MinFreeMarginForRecovery 200.0  // Recovery order place করতে minimum free margin ($) লাগবে
+#define RecoveryCooldownSeconds  30     // Recovery order fill হওয়ার পর পরবর্তী order এর আগে wait (seconds)
+
+// ===== DAILY LIMITS =====
+// দিনে নির্দিষ্ট profit/loss হলে নতুন entry বন্ধ
+#define EnableDailyLimits       false   // true করলে daily profit/loss limit চালু হবে
+#define DailyProfitTarget       0.0     // দিনে এত $ profit হলে নতুন entry বন্ধ (0 = disabled)
+#define DailyMaxLoss            0.0     // দিনে এত $ loss হলে নতুন entry বন্ধ (0 = disabled)
+
+// ===== NEWS PAUSE (Manual) =====
+// Manually toggle করে news time এ EA pause করা যাবে
+// Future এ auto news API integration করা যাবে
+input bool      PauseForNews    = false;  // true করলে সব নতুন order বন্ধ (existing manage চলবে)
+
+#define LotSize         0.30
 #define MagicNumber     999888
 #define OrderComment    "CleanGrid"
 #define ManageAllTrades false
@@ -103,6 +170,20 @@ BundleEntry buyBundles[];
 BundleEntry sellBundles[];
 int nextBuyBundleId = 1;
 int nextSellBundleId = 1;
+
+// Trend Skip Mode state
+bool skipBuyGrid = false;    // true = don't place new BUY grid/recovery orders
+bool skipSellGrid = false;   // true = don't place new SELL grid/recovery orders
+
+// Smart Filter state
+bool g_NewEntriesBlocked = false;  // Master block flag (spread/session/daily/news)
+string g_BlockReason = "";         // Why entries are blocked
+bool g_BlockCancelPending = false; // true হলে blocked অবস্থায় pending orders delete হবে (hard block only)
+int g_ATRHandle = INVALID_HANDLE;  // ATR indicator handle
+int g_EMAHandle = INVALID_HANDLE;  // EMA indicator handle
+datetime g_LastBuyRecoveryFill = 0;  // Last BUY recovery order fill time (for cooldown)
+datetime g_LastSellRecoveryFill = 0; // Last SELL recovery order fill time (for cooldown)
+int g_TrendBias = 0;              // -1=bearish, 0=neutral, +1=bullish (from EMA)
 
 // Trading Log
 struct LogEntry
@@ -132,6 +213,22 @@ int OnInit()
 {
     pip = 1.0; // For XAUUSD
     trade.SetExpertMagicNumber(MagicNumber);
+    
+    // Initialize ATR indicator
+    if(EnableATRGrid)
+    {
+        g_ATRHandle = iATR(_Symbol, ATRTimeframe, ATRPeriod);
+        if(g_ATRHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create ATR indicator handle");
+    }
+    
+    // Initialize EMA indicator
+    if(EnableTrendFilter)
+    {
+        g_EMAHandle = iMA(_Symbol, EMA_Timeframe, EMA_Period, 0, MODE_EMA, PRICE_CLOSE);
+        if(g_EMAHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create EMA indicator handle");
+    }
     
     // FORCE license to invalid until verified
     g_LicenseValid = false;
@@ -178,6 +275,10 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+    // Release indicator handles
+    if(g_ATRHandle != INVALID_HANDLE) IndicatorRelease(g_ATRHandle);
+    if(g_EMAHandle != INVALID_HANDLE) IndicatorRelease(g_EMAHandle);
+    
     // Delete all chart objects
     ObjectDelete(0, "EA_ModeStatus");
     ObjectDelete(0, "EA_SellHeader");
@@ -202,6 +303,10 @@ void OnDeinit(const int reason)
     ObjectDelete(0, "EA_LicenseDays");
     ObjectDelete(0, "EA_LicenseStatus");
     ObjectDelete(0, "EA_LicenseWarning");
+    ObjectDelete(0, "EA_SkipStatus");
+    ObjectDelete(0, "EA_SkipStatus2");
+    ObjectDelete(0, "EA_FilterStatus");
+    ObjectDelete(0, "EA_TrendInfo");
     
     // Only delete pending orders when EA is actually removed
     if(reason == REASON_REMOVE || reason == REASON_CHARTCLOSE || reason == REASON_PROGRAM)
@@ -273,20 +378,34 @@ void OnTick()
     // Max Drawdown Protection — close all if loss exceeds limit
     if(CheckMaxDrawdown()) return;
     
+    // Smart Filters — update entry block status (spread, session, daily limits, news)
+    UpdateEntryBlockStatus();
+    
+    // Update trend bias from EMA (runs every tick, lightweight)
+    UpdateTrendBias();
+    
     // Count current positions
     CountPositions();
+    
+    // Trend Skip Detection — check if one side is profiting and should skip opposite
+    DetectTrendSkip();
     
     // Debug: Log current state every 30 seconds
     static datetime lastDebugLog = 0;
     if(TimeCurrent() - lastDebugLog > 30)
     {
         double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-        AddToLog(StringFormat("DEBUG | Price: %.2f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d", 
+        string trendStr = (g_TrendBias == 1) ? "UP" : (g_TrendBias == -1) ? "DOWN" : "FLAT";
+        AddToLog(StringFormat("DEBUG | Price: %.2f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d | SkipBuy: %s | SkipSell: %s | Trend: %s | Block: %s", 
             currentBid,
             buyInRecovery ? "RECOVERY" : "NORMAL",
             sellInRecovery ? "RECOVERY" : "NORMAL",
             currentBuyPositions,
-            currentSellPositions), "DEBUG");
+            currentSellPositions,
+            skipBuyGrid ? "YES" : "NO",
+            skipSellGrid ? "YES" : "NO",
+            trendStr,
+            g_NewEntriesBlocked ? g_BlockReason : "NO"), "DEBUG");
         lastDebugLog = TimeCurrent();
     }
     
@@ -336,27 +455,83 @@ void OnTick()
     // and recovery count <= threshold, allowing fresh normal mode restart
     RecoveryCleanupWorker();
     
-    // Manage grids based on mode
-    if(!buyInRecovery)
+    // Manage grids based on mode (with Trend Skip + Smart Filter protection)
+    // Priority: Master Block > Trend Skip > Trend Filter > Normal/Recovery Grid
+    
+    // === BUY SIDE ===
+    if(buyInRecovery)
     {
-        ManageNormalGrid(true);  // BUY Normal Mode
+        // Recovery bypasses: Trend Skip, Equity Skip, EMA Trend Filter
+        // Recovery PAUSES: Spread spike, Session, News, Daily limit
+        // Recovery Safety Caps (lots/loss/margin/cooldown) নিজেই protection দেয়
+        if(g_NewEntriesBlocked)
+        {
+            if(g_BlockCancelPending)
+                DeleteAllPendingOrdersForSide(true);
+            // else: spread/session = soft pause, recovery pending থাকবে but new placement বন্ধ
+        }
+        else
+        {
+            DeleteNormalPendingOrders(true);
+            ManageRecoveryGrid(true); // BUY Recovery
+        }
+    }
+    else if(g_NewEntriesBlocked)
+    {
+        // Soft block (spread/session) = pause new placement only, pendings থাকবে
+        // Hard block (news/daily) = pending orders ডিলিট
+        if(g_BlockCancelPending)
+            DeleteAllPendingOrdersForSide(true);
+        // else: শুধু ManageNormalGrid skip হবে, existing pendings alive থাকবে
+    }
+    else if(skipBuyGrid)
+    {
+        // Pip-based skip (SELL profiting) → BUY normal grid PAUSE
+        // Pending orders alive থাকবে — trend reverse হলে trigger হবে
+    }
+    else if(IsTrendFiltered(true) && !skipSellGrid)
+    {
+        // EMA bearish → BUY pause, BUT only if SELL side is NOT equity-skipped
+        // If SELL is equity-skipped (losing), BUY MUST trade to earn — bypass EMA filter
     }
     else
     {
-        // BUY Recovery Mode - delete normal pending orders first
-        DeleteNormalPendingOrders(true);
-        ManageRecoveryGrid(true); // BUY Recovery
+        ManageNormalGrid(true);  // BUY Normal Mode — trend WITH us, neutral, or opposite side equity-skipped
     }
-        
-    if(!sellInRecovery)
+    
+    // === SELL SIDE ===
+    if(sellInRecovery)
     {
-        ManageNormalGrid(false); // SELL Normal Mode
+        // Recovery bypasses: Trend Skip, Equity Skip, EMA Trend Filter
+        // Recovery PAUSES: Spread spike, Session, News, Daily limit
+        if(g_NewEntriesBlocked)
+        {
+            if(g_BlockCancelPending)
+                DeleteAllPendingOrdersForSide(false);
+        }
+        else
+        {
+            DeleteNormalPendingOrders(false);
+            ManageRecoveryGrid(false); // SELL Recovery
+        }
+    }
+    else if(g_NewEntriesBlocked)
+    {
+        if(g_BlockCancelPending)
+            DeleteAllPendingOrdersForSide(false);
+    }
+    else if(skipSellGrid)
+    {
+        // Pip-based skip (BUY profiting) → SELL normal grid PAUSE
+    }
+    else if(IsTrendFiltered(false) && !skipBuyGrid)
+    {
+        // EMA bullish → SELL pause, BUT only if BUY side is NOT equity-skipped
+        // If BUY is equity-skipped (losing), SELL MUST trade to earn — bypass EMA filter
     }
     else
     {
-        // SELL Recovery Mode - delete normal pending orders first
-        DeleteNormalPendingOrders(false);
-        ManageRecoveryGrid(false); // SELL Recovery
+        ManageNormalGrid(false); // SELL Normal Mode — trend WITH us, neutral, or opposite side equity-skipped
     }
     
     // CRITICAL: Recovery Mode TP Worker - runs every tick to ensure TP is at breakeven
@@ -548,6 +723,368 @@ bool IsRecoveryBreakevenTrailTicket(bool isBuy, ulong ticket)
 bool IsTesterMode()
 {
     return (TesterMode && (MQLInfoInteger(MQL_TESTER) != 0));
+}
+
+//+------------------------------------------------------------------+
+//| SMART FILTER SYSTEM — All entry quality checks                    |
+//+------------------------------------------------------------------+
+
+// Check if spread is acceptable for new orders
+bool IsSpreadOK()
+{
+    if(!EnableSpreadFilter) return true;
+    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    double spreadPoints = (ask - bid) / _Point;
+    return (spreadPoints <= MaxSpreadPoints);
+}
+
+// Check if current time is within allowed trading session (broker server time)
+bool IsSessionOK()
+{
+    if(!EnableSessionFilter) return true;
+    MqlDateTime dt;
+    TimeTradeServer(dt);
+    int hour = dt.hour;
+    
+    if(SessionStartHour < SessionEndHour)
+        return (hour >= SessionStartHour && hour < SessionEndHour);
+    else // Wraps midnight (e.g. 22 to 06)
+        return (hour >= SessionStartHour || hour < SessionEndHour);
+}
+
+// Get ATR-based dynamic grid gap (in pips). Falls back to static gap if ATR unavailable.
+double GetATRGridGap(bool isBuy)
+{
+    double staticGap = isBuy ? BuyGapPips : SellGapPips;
+    if(!EnableATRGrid || g_ATRHandle == INVALID_HANDLE) return staticGap;
+    
+    double atrBuffer[];
+    if(CopyBuffer(g_ATRHandle, 0, 0, 1, atrBuffer) <= 0) return staticGap;
+    
+    double atrValue = atrBuffer[0]; // ATR in price (e.g. 3.5 for XAUUSD = 3.5 pips)
+    double atrGap = (atrValue / pip) * ATRGridMultiplier;
+    
+    // Clamp to min/max
+    atrGap = MathMax(MinGridGapPips, MathMin(MaxGridGapPips, atrGap));
+    
+    return NormalizeDouble(atrGap, 1);
+}
+
+// Get trend bias from EMA slope: -1=bearish, 0=neutral, +1=bullish
+void UpdateTrendBias()
+{
+    g_TrendBias = 0;
+    if(!EnableTrendFilter || g_EMAHandle == INVALID_HANDLE) return;
+    
+    double emaBuffer[];
+    ArraySetAsSeries(emaBuffer, true); // [0]=newest bar, [5]=5 bars ago
+    if(CopyBuffer(g_EMAHandle, 0, 0, 6, emaBuffer) < 6) return;
+    
+    // Slope = (current EMA - EMA 5 bars ago) in pips
+    double slopeValue = (emaBuffer[0] - emaBuffer[5]) / pip;
+    
+    if(slopeValue >= EMA_SlopeMinPips)
+        g_TrendBias = 1;   // Bullish — EMA rising
+    else if(slopeValue <= -EMA_SlopeMinPips)
+        g_TrendBias = -1;  // Bearish — EMA falling
+}
+
+// Check if a new NORMAL grid order should be blocked by trend filter
+// Returns true if this side SHOULD be blocked
+bool IsTrendFiltered(bool isBuy)
+{
+    if(!EnableTrendFilter) return false;
+    
+    // In strong uptrend: block new SELL entries (counter-trend)
+    // In strong downtrend: block new BUY entries (counter-trend)
+    if(isBuy && g_TrendBias == -1) return true;   // Bearish → don't open new BUY
+    if(!isBuy && g_TrendBias == 1) return true;    // Bullish → don't open new SELL
+    
+    return false;
+}
+
+// Check if recovery is safe to place a new order for this side
+bool IsRecoverySafe(bool isBuy, string &outReason)
+{
+    outReason = "";
+    
+    // Check 1: Total lots per side cap
+    double totalLots = 0;
+    double floatingLoss = 0;
+    
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+        
+        totalLots += PositionGetDouble(POSITION_VOLUME);
+        double profit = PositionGetDouble(POSITION_PROFIT);
+        if(profit < 0) floatingLoss += MathAbs(profit);
+    }
+    
+    if(MaxTotalLotsPerSide > 0 && totalLots >= MaxTotalLotsPerSide)
+    {
+        outReason = StringFormat("Lot cap (%.2f/%.2f)", totalLots, MaxTotalLotsPerSide);
+        return false;
+    }
+    
+    // Check 2: Max floating loss per side (% of balance)
+    if(MaxFloatingLossPerSide > 0)
+    {
+        double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+        double lossCap = balance * MaxFloatingLossPerSide / 100.0;
+        if(floatingLoss >= lossCap)
+        {
+            outReason = StringFormat("Loss cap ($%.0f / %.0f%% of $%.0f = $%.0f)", floatingLoss, MaxFloatingLossPerSide, balance, lossCap);
+            return false;
+        }
+    }
+    
+    // Check 3: Minimum free margin
+    if(MinFreeMarginForRecovery > 0)
+    {
+        double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+        if(freeMargin < MinFreeMarginForRecovery)
+        {
+            outReason = StringFormat("Low margin ($%.0f < $%.0f)", freeMargin, MinFreeMarginForRecovery);
+            return false;
+        }
+    }
+    
+    // Check 4: Recovery cooldown
+    if(RecoveryCooldownSeconds > 0)
+    {
+        datetime lastFill = isBuy ? g_LastBuyRecoveryFill : g_LastSellRecoveryFill;
+        if(lastFill > 0 && (TimeCurrent() - lastFill) < RecoveryCooldownSeconds)
+        {
+            outReason = StringFormat("Cooldown (%ds)", RecoveryCooldownSeconds);
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// Calculate today's closed P/L for daily limit check
+double GetTodayClosedPnL()
+{
+    double todayPnL = 0;
+    MqlDateTime dt;
+    TimeCurrent(dt);
+    datetime dayStart = StringToTime(StringFormat("%04d.%02d.%02d 00:00:00", dt.year, dt.mon, dt.day));
+    
+    if(!HistorySelect(dayStart, TimeCurrent())) return 0;
+    
+    int totalDeals = HistoryDealsTotal();
+    for(int i = 0; i < totalDeals; i++)
+    {
+        ulong dealTicket = HistoryDealGetTicket(i);
+        if(dealTicket <= 0) continue;
+        if(HistoryDealGetString(dealTicket, DEAL_SYMBOL) != _Symbol) continue;
+        if(HistoryDealGetInteger(dealTicket, DEAL_MAGIC) != MagicNumber) continue;
+        
+        ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+        if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT)
+            todayPnL += HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
+    }
+    return todayPnL;
+}
+
+// Check if daily limits are hit
+bool IsDailyLimitHit()
+{
+    if(!EnableDailyLimits) return false;
+    if(DailyProfitTarget <= 0 && DailyMaxLoss <= 0) return false;
+    
+    double todayPnL = GetTodayClosedPnL();
+    
+    if(DailyProfitTarget > 0 && todayPnL >= DailyProfitTarget) return true;
+    if(DailyMaxLoss > 0 && todayPnL <= -DailyMaxLoss) return true;
+    
+    return false;
+}
+
+// Master check: should new entries be blocked?
+// This checks spread, session, daily limits, news pause
+// Does NOT check trend skip (that's separate logic)
+void UpdateEntryBlockStatus()
+{
+    g_NewEntriesBlocked = false;
+    g_BlockReason = "";
+    g_BlockCancelPending = false;
+    
+    if(PauseForNews)
+    {
+        g_NewEntriesBlocked = true;
+        g_BlockReason = "NEWS PAUSE (manual)";
+        g_BlockCancelPending = true;
+        return;
+    }
+    
+    if(!IsSpreadOK())
+    {
+        g_NewEntriesBlocked = true;
+        double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+        double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+        double sp = (ask - bid) / _Point;
+        g_BlockReason = StringFormat("SPREAD %.0f > %d pts", sp, MaxSpreadPoints);
+        g_BlockCancelPending = false;
+        return;
+    }
+    
+    if(!IsSessionOK())
+    {
+        g_NewEntriesBlocked = true;
+        MqlDateTime dt;
+        TimeTradeServer(dt);
+        g_BlockReason = StringFormat("OUT OF SESSION (now=%02d, allowed=%d-%d)", dt.hour, SessionStartHour, SessionEndHour);
+        g_BlockCancelPending = false;
+        return;
+    }
+    
+    if(IsDailyLimitHit())
+    {
+        g_NewEntriesBlocked = true;
+        double pnl = GetTodayClosedPnL();
+        g_BlockReason = StringFormat("DAILY LIMIT (PnL=$%.2f)", pnl);
+        g_BlockCancelPending = true;
+        return;
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Trend Skip Detection (Enhanced: Early + Equity-Based)             |
+//| 3 layers of protection:                                           |
+//| Layer 1: Pip-based — any position profit ≥ SkipActivationPips     |
+//| Layer 2: Equity-based — floating loss ≥ EquitySkipPercent% of bal |
+//|          → skip the LOSING side (don't add more losing orders)    |
+//| Layer 3: Both sides profit = ranging market = NO skip             |
+//+------------------------------------------------------------------+
+void DetectTrendSkip()
+{
+    skipBuyGrid = false;
+    skipSellGrid = false;
+    
+    if(!EnableTrendSkip && !EnableEquitySkip) return;
+    
+    double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    double threshold = SkipActivationPips * pip;
+    
+    // ===== LAYER 1: Pip-Based Trend Detection =====
+    bool buyHasProfit = false;
+    bool sellHasProfit = false;
+    double buyFloatingPnL = 0.0;   // Total floating PnL for BUY side (for equity skip)
+    double sellFloatingPnL = 0.0;  // Total floating PnL for SELL side (for equity skip)
+    
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+        double profit = PositionGetDouble(POSITION_PROFIT);
+        
+        if(type == POSITION_TYPE_BUY)
+        {
+            buyFloatingPnL += profit;
+            // Pip-based check
+            if(EnableTrendSkip && (currentBid - openPrice) >= threshold)
+                buyHasProfit = true;
+        }
+        else if(type == POSITION_TYPE_SELL)
+        {
+            sellFloatingPnL += profit;
+            // Pip-based check
+            if(EnableTrendSkip && (openPrice - currentAsk) >= threshold)
+                sellHasProfit = true;
+        }
+    }
+    
+    // Both sides profit = ranging = no pip-based skip
+    if(buyHasProfit && sellHasProfit)
+    {
+        buyHasProfit = false;
+        sellHasProfit = false;
+    }
+    
+    // Apply pip-based skip
+    if(buyHasProfit && !sellHasProfit)
+        skipSellGrid = true;  // Market UP → skip new SELL orders
+    else if(sellHasProfit && !buyHasProfit)
+        skipBuyGrid = true;   // Market DOWN → skip new BUY orders
+    
+    // ===== LAYER 2: Equity-Based Skip =====
+    // If one side has heavy floating loss, skip adding MORE orders to that losing side
+    if(EnableEquitySkip)
+    {
+        double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+        double lossThreshold = balance * EquitySkipPercent / 100.0;  // e.g. 5% of $1000 = $50
+        
+        // BUY side losing badly → skip BUY grid (don't add more losing BUYs)
+        // AND let SELL side (which is profiting from the down move) continue
+        if(buyFloatingPnL < 0.0 && MathAbs(buyFloatingPnL) >= lossThreshold)
+        {
+            if(!skipBuyGrid)  // Don't overwrite if pip-based already set it
+            {
+                skipBuyGrid = true;
+                // Also ensure we don't skip SELL (it's the profitable side)
+            }
+        }
+        
+        // SELL side losing badly → skip SELL grid
+        if(sellFloatingPnL < 0.0 && MathAbs(sellFloatingPnL) >= lossThreshold)
+        {
+            if(!skipSellGrid)
+            {
+                skipSellGrid = true;
+            }
+        }
+        
+        // Safety: if BOTH sides are losing heavily, skip BOTH (protect equity)
+        // This is different from pip-based where both-profit = no-skip
+        // Both-loss means market is volatile in both directions = pause everything
+    }
+    
+    // Log mode changes (throttled)
+    static bool prevSkipBuy = false;
+    static bool prevSkipSell = false;
+    
+    if(skipBuyGrid && !prevSkipBuy)
+    {
+        string reason = "";
+        if(buyFloatingPnL < 0.0)
+            reason = StringFormat("EQUITY SKIP: BUY loss=%.2f", buyFloatingPnL);
+        else
+            reason = "TREND SKIP: Market DOWN";
+        AddToLog(reason + " → BUY grid PAUSED", "SKIP");
+    }
+    else if(!skipBuyGrid && prevSkipBuy)
+        AddToLog("SKIP OFF: BUY grid RESUMED", "SKIP");
+    
+    if(skipSellGrid && !prevSkipSell)
+    {
+        string reason = "";
+        if(sellFloatingPnL < 0.0)
+            reason = StringFormat("EQUITY SKIP: SELL loss=%.2f", sellFloatingPnL);
+        else
+            reason = "TREND SKIP: Market UP";
+        AddToLog(reason + " → SELL grid PAUSED", "SKIP");
+    }
+    else if(!skipSellGrid && prevSkipSell)
+        AddToLog("SKIP OFF: SELL grid RESUMED", "SKIP");
+    
+    prevSkipBuy = skipBuyGrid;
+    prevSkipSell = skipSellGrid;
 }
 
 datetime LicenseCacheNow()
@@ -886,6 +1423,27 @@ void DeleteNormalPendingOrders(bool isBuy)
 }
 
 //+------------------------------------------------------------------+
+//| Delete ALL Pending Orders for a Side (Normal + Recovery)           |
+//| Used by Trend Skip Mode to clear the skipped side completely       |
+//+------------------------------------------------------------------+
+void DeleteAllPendingOrdersForSide(bool isBuy)
+{
+    for(int i = OrdersTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if(isBuy && (type == ORDER_TYPE_BUY_LIMIT || type == ORDER_TYPE_BUY_STOP))
+            trade.OrderDelete(ticket);
+        else if(!isBuy && (type == ORDER_TYPE_SELL_LIMIT || type == ORDER_TYPE_SELL_STOP))
+            trade.OrderDelete(ticket);
+    }
+}
+
+//+------------------------------------------------------------------+
 //| Cleanup Invalid/Out-of-Range Orders                               |
 //+------------------------------------------------------------------+
 void CleanupInvalidOrders()
@@ -1196,8 +1754,37 @@ void RecoveryCleanupForSide(bool isBuy)
     // Condition: NO normal positions left AND only recovery positions remain at or below threshold
     if(normalCount == 0 && recoveryCount > 0 && recoveryCount <= RecoveryCleanupThreshold)
     {
-        AddToLog(StringFormat("%s Recovery Cleanup: Normal=%d, Recovery=%d (threshold=%d) - CLOSING ALL to restart normal mode", 
-            isBuy ? "BUY" : "SELL", normalCount, recoveryCount, RecoveryCleanupThreshold), "CLEANUP");
+        // Profit-aware cleanup: calculate basket P/L before closing
+        double basketProfit = 0;
+        for(int j = 0; j < PositionsTotal(); j++)
+        {
+            ulong t = PositionGetTicket(j);
+            if(t <= 0) continue;
+            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+            ENUM_POSITION_TYPE pt = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if((isBuy && pt != POSITION_TYPE_BUY) || (!isBuy && pt != POSITION_TYPE_SELL)) continue;
+            string c = PositionGetString(POSITION_COMMENT);
+            if(StringFind(c, "Recovery") >= 0)
+                basketProfit += PositionGetDouble(POSITION_PROFIT);
+        }
+        
+        // Only close if basket is near breakeven or profitable (loss <= $5 acceptable)
+        // This prevents forced negative cleanup — let trailing/TP handle it instead
+        if(basketProfit < -5.0)
+        {
+            static datetime lastSkipLog = 0;
+            if(TimeCurrent() - lastSkipLog > 30)
+            {
+                AddToLog(StringFormat("%s Recovery Cleanup SKIPPED: Basket P/L=$%.2f (waiting for near-breakeven)", 
+                    isBuy ? "BUY" : "SELL", basketProfit), "CLEANUP");
+                lastSkipLog = TimeCurrent();
+            }
+            return; // Don't close at a loss — wait for price to improve
+        }
+        
+        AddToLog(StringFormat("%s Recovery Cleanup: Normal=%d, Recovery=%d (threshold=%d) BasketPnL=$%.2f - CLOSING to restart normal mode", 
+            isBuy ? "BUY" : "SELL", normalCount, recoveryCount, RecoveryCleanupThreshold, basketProfit), "CLEANUP");
         
         // First: Delete all recovery pending orders for this side
         for(int i = OrdersTotal() - 1; i >= 0; i--)
@@ -1523,7 +2110,7 @@ void ManageNormalGrid(bool isBuy)
     // Range settings
     double rangeHigh = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
     double rangeLow = isBuy ? MathMin(BuyRangeStart, BuyRangeEnd) : MathMin(SellRangeStart, SellRangeEnd);
-    double gapPips = isBuy ? BuyGapPips : SellGapPips;
+    double gapPips = GetATRGridGap(isBuy); // ATR-based dynamic gap (falls back to static if disabled)
     int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
     double gapPrice = gapPips * pip;
     double minGap = gapPrice * 0.8; // Minimum 80% of gap required between positions/orders
@@ -1984,7 +2571,8 @@ void ManageRecoveryGrid(bool isBuy)
     
     // Calculate expected recovery price based on CLOSEST position
     // Then find first empty slot (skip prices where positions already exist)
-    double gapPips = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
+    // Use ATR-based gap for recovery too (wider gap in volatile markets)
+    double gapPips = GetATRGridGap(isBuy);
     double expectedRecoveryPrice = isBuy ?
         NormalizeDouble(closestPriceForCheck - (gapPips * pip), _Digits) :
         NormalizeDouble(closestPriceForCheck + (gapPips * pip), _Digits);
@@ -2067,7 +2655,7 @@ void ManageRecoveryGrid(bool isBuy)
     
     // Count recovery PENDING orders AND relocate if too far from expected price
     int recoveryPendingCount = 0;
-    double gapPipsForRelocate = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
+    double gapPipsForRelocate = GetATRGridGap(isBuy); // ATR-aware relocation threshold
     double relocateThreshold = gapPipsForRelocate * pip * 0.6; // Keep pending tightly snapped to grid
     
     for(int i = OrdersTotal() - 1; i >= 0; i--)
@@ -2183,10 +2771,12 @@ void ManageRecoveryGrid(bool isBuy)
     }
     
     // Place recovery order if needed (only 1 pending at a time, max total positions = MaxRecoveryOrders)
-    if(totalPositionsThisSide < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery)
+    // Added: IsRecoverySafe() checks lots cap, floating loss cap, margin, cooldown
+    string safetyReason = "";
+    if(totalPositionsThisSide < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery && IsRecoverySafe(isBuy, safetyReason))
     {
         double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-        double gapPips = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
+        double gapPips = GetATRGridGap(isBuy); // ATR-based dynamic gap for recovery placement too
         
         // ===== NEW LOGIC =====
         // 1. Find TOP DISTANCE LOSS position (highest BUY price / lowest SELL price - most loss)
@@ -2406,6 +2996,7 @@ void ManageRecoveryGrid(bool isBuy)
         {
             if(trade.BuyLimit(recoveryLot, recoveryPrice, _Symbol, recoverySL, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_BUY"))
             {
+                g_LastBuyRecoveryFill = TimeCurrent(); // Cooldown timer
                 AddToLog(StringFormat("✅ Recovery BUY placed @ %.2f | Lot: %.2f | TP: %.2f | SL: %.2f", recoveryPrice, recoveryLot, breakevenTP, recoverySL), "RECOVERY");
             }
             else
@@ -2418,6 +3009,7 @@ void ManageRecoveryGrid(bool isBuy)
         {
             if(trade.SellLimit(recoveryLot, recoveryPrice, _Symbol, recoverySL, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_SELL"))
             {
+                g_LastSellRecoveryFill = TimeCurrent(); // Cooldown timer
                 AddToLog(StringFormat("✅ Recovery SELL placed @ %.2f | Lot: %.2f | TP: %.2f | SL: %.2f", recoveryPrice, recoveryLot, breakevenTP, recoverySL), "RECOVERY");
             }
             else
@@ -2431,11 +3023,13 @@ void ManageRecoveryGrid(bool isBuy)
     {
         string reason = "";
         if(totalPositionsThisSide >= MaxRecoveryOrders)
-            reason = StringFormat("Max positions reached (%d/%d)", totalPositionsThisSide, MaxRecoveryOrders);
+            reason = StringFormat("Max positions (%d/%d)", totalPositionsThisSide, MaxRecoveryOrders);
         else if(recoveryPendingCount > 0)
-            reason = StringFormat("Recovery order already pending (%d)", recoveryPendingCount);
+            reason = StringFormat("Pending exists (%d)", recoveryPendingCount);
         else if(!EnableRecovery)
             reason = "Recovery disabled";
+        else if(safetyReason != "")
+            reason = safetyReason;
         else
             reason = "Unknown";
             
@@ -3048,6 +3642,10 @@ void UpdateInfoPanel()
     ObjectDelete(0, "EA_PriceHeader");
     ObjectDelete(0, "EA_PriceInfo");
     ObjectDelete(0, "EA_TotalProfit");
+    ObjectDelete(0, "EA_SkipStatus");
+    ObjectDelete(0, "EA_SkipStatus2");
+    ObjectDelete(0, "EA_FilterStatus");
+    ObjectDelete(0, "EA_TrendInfo");
     // Delete old simplified version objects
     ObjectDelete(0, "EA_Title");
     ObjectDelete(0, "EA_Mode");
@@ -3127,6 +3725,85 @@ void UpdateInfoPanel()
     ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_FONTSIZE, 10);
     ObjectSetString(0, "EA_ModeStatus", OBJPROP_FONT, "Arial Bold");
     yPos += 22;
+    
+    // ===== SKIP STATUS (Trend + Equity) =====
+    ObjectDelete(0, "EA_SkipStatus");
+    ObjectDelete(0, "EA_SkipStatus2");
+    if(skipBuyGrid || skipSellGrid)
+    {
+        string skipText = "";
+        if(skipBuyGrid && skipSellGrid)
+            skipText = ">>> BOTH GRIDS PAUSED (Heavy loss both sides) <<<";
+        else if(skipBuyGrid)
+            skipText = ">>> BUY GRID PAUSED <<<";
+        else
+            skipText = ">>> SELL GRID PAUSED <<<";
+        
+        ObjectCreate(0, "EA_SkipStatus", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_SkipStatus", OBJPROP_TEXT, skipText);
+        ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_COLOR, (skipBuyGrid && skipSellGrid) ? clrOrangeRed : clrYellow);
+        ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_FONTSIZE, 10);
+        ObjectSetString(0, "EA_SkipStatus", OBJPROP_FONT, "Arial Bold");
+        yPos += 22;
+        
+        // Show equity info if equity skip is active
+        if(EnableEquitySkip)
+        {
+            double bal = AccountInfoDouble(ACCOUNT_BALANCE);
+            double eq = AccountInfoDouble(ACCOUNT_EQUITY);
+            double dd = bal - eq;
+            double ddPct = (bal > 0) ? (dd / bal * 100.0) : 0.0;
+            string eqText = StringFormat("Equity: %.2f | DD: %.2f (%.1f%%) | Skip@%.1f%%", eq, dd, ddPct, EquitySkipPercent);
+            
+            ObjectCreate(0, "EA_SkipStatus2", OBJ_LABEL, 0, 0, 0);
+            ObjectSetInteger(0, "EA_SkipStatus2", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+            ObjectSetInteger(0, "EA_SkipStatus2", OBJPROP_XDISTANCE, 10);
+            ObjectSetInteger(0, "EA_SkipStatus2", OBJPROP_YDISTANCE, yPos);
+            ObjectSetString(0, "EA_SkipStatus2", OBJPROP_TEXT, eqText);
+            ObjectSetInteger(0, "EA_SkipStatus2", OBJPROP_COLOR, clrOrange);
+            ObjectSetInteger(0, "EA_SkipStatus2", OBJPROP_FONTSIZE, 9);
+            ObjectSetString(0, "EA_SkipStatus2", OBJPROP_FONT, "Arial");
+            yPos += 18;
+        }
+    }
+    
+    // ===== SMART FILTER STATUS =====
+    ObjectDelete(0, "EA_FilterStatus");
+    ObjectDelete(0, "EA_TrendInfo");
+    if(g_NewEntriesBlocked || g_TrendBias != 0)
+    {
+        if(g_NewEntriesBlocked)
+        {
+            ObjectCreate(0, "EA_FilterStatus", OBJ_LABEL, 0, 0, 0);
+            ObjectSetInteger(0, "EA_FilterStatus", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+            ObjectSetInteger(0, "EA_FilterStatus", OBJPROP_XDISTANCE, 10);
+            ObjectSetInteger(0, "EA_FilterStatus", OBJPROP_YDISTANCE, yPos);
+            ObjectSetString(0, "EA_FilterStatus", OBJPROP_TEXT, "ENTRIES BLOCKED: " + g_BlockReason);
+            ObjectSetInteger(0, "EA_FilterStatus", OBJPROP_COLOR, clrOrangeRed);
+            ObjectSetInteger(0, "EA_FilterStatus", OBJPROP_FONTSIZE, 9);
+            ObjectSetString(0, "EA_FilterStatus", OBJPROP_FONT, "Arial Bold");
+            yPos += 18;
+        }
+        
+        // Show trend + ATR info
+        string trendStr = (g_TrendBias == 1) ? "BULLISH" : (g_TrendBias == -1) ? "BEARISH" : "NEUTRAL";
+        double atrGap = GetATRGridGap(true);
+        string infoText = StringFormat("Trend: %s | ATR Gap: %.1f pip | Spread: %.0f pts", 
+            trendStr, atrGap, (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / _Point);
+        
+        ObjectCreate(0, "EA_TrendInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_TrendInfo", OBJPROP_TEXT, infoText);
+        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_COLOR, (g_TrendBias == 1) ? clrLime : (g_TrendBias == -1) ? clrOrangeRed : clrGray);
+        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_FONTSIZE, 9);
+        ObjectSetString(0, "EA_TrendInfo", OBJPROP_FONT, "Arial");
+        yPos += 18;
+    }
     
     // ===== SELL SECTION (LEFT SIDE) =====
     int sellYPos = yPos;
@@ -3425,11 +4102,35 @@ void SendTradeDataToServer()
     }
     pendingJson += "]";
     
-    // Determine trading mode
+    // Determine trading mode with full status
     string tradingMode = "Normal Mode Running";
     if(buyInRecovery && sellInRecovery) tradingMode = "Buy & Sell Recovery Mode Activated!";
     else if(buyInRecovery) tradingMode = "Buy Recovery Mode Activated!";
     else if(sellInRecovery) tradingMode = "Sell Recovery Mode Activated!";
+    
+    // Build smart filter status for website
+    string trendStr = (g_TrendBias == 1) ? "BULLISH" : (g_TrendBias == -1) ? "BEARISH" : "NEUTRAL";
+    string filterStatus = "";
+    if(g_NewEntriesBlocked)
+        filterStatus = "BLOCKED: " + g_BlockReason;
+    else if(skipBuyGrid && skipSellGrid)
+        filterStatus = "BOTH GRIDS PAUSED (Equity/Trend Skip)";
+    else if(skipBuyGrid)
+        filterStatus = "BUY GRID PAUSED (Trend/Equity Skip)";
+    else if(skipSellGrid)
+        filterStatus = "SELL GRID PAUSED (Trend/Equity Skip)";
+    else if(IsTrendFiltered(true) && IsTrendFiltered(false))
+        filterStatus = "BOTH SIDES TREND FILTERED";
+    else if(IsTrendFiltered(true))
+        filterStatus = "BUY FILTERED (EMA Bearish)";
+    else if(IsTrendFiltered(false))
+        filterStatus = "SELL FILTERED (EMA Bullish)";
+    else
+        filterStatus = "ALL CLEAR";
+    
+    double atrGapBuy = GetATRGridGap(true);
+    double atrGapSell = GetATRGridGap(false);
+    double currentSpread = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / _Point;
     
     // Build closed positions array (last 24 hours)
     string closedJson = "[";
@@ -3518,7 +4219,17 @@ void SendTradeDataToServer()
     jsonRequest += "\"current_price\":" + DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_BID), digits) + ",";
     jsonRequest += "\"open_positions\":" + positionsJson + ",";
     jsonRequest += "\"pending_orders\":" + pendingJson + ",";
-    jsonRequest += "\"closed_positions\":" + closedJson;
+    jsonRequest += "\"closed_positions\":" + closedJson + ",";
+    // Smart filter & trend data for website dashboard
+    jsonRequest += "\"trend_direction\":\"" + trendStr + "\",";
+    jsonRequest += "\"filter_status\":\"" + filterStatus + "\",";
+    jsonRequest += "\"atr_gap_buy\":" + DoubleToString(atrGapBuy, 1) + ",";
+    jsonRequest += "\"atr_gap_sell\":" + DoubleToString(atrGapSell, 1) + ",";
+    jsonRequest += "\"spread\":" + DoubleToString(currentSpread, 0) + ",";
+    jsonRequest += "\"skip_buy\":" + (skipBuyGrid ? "true" : "false") + ",";
+    jsonRequest += "\"skip_sell\":" + (skipSellGrid ? "true" : "false") + ",";
+    jsonRequest += "\"buy_mode\":\"" + (buyInRecovery ? "RECOVERY" : "NORMAL") + "\",";
+    jsonRequest += "\"sell_mode\":\"" + (sellInRecovery ? "RECOVERY" : "NORMAL") + "\"";
     jsonRequest += "}";
     
     // Prepare request
@@ -3554,7 +4265,7 @@ bool CheckMaxDrawdown()
     if(TimeCurrent() - lastDrawdownLog > 5)
     {
         lastDrawdownLog = TimeCurrent();
-        AddToLog(StringFormat("MAX DRAWDOWN HIT: Loss=%.2f / Limit=%.2f | Balance=%.2f Equity=%.2f — Closing all positions",
+        AddToLog(StringFormat("MAX DRAWDOWN HIT: Loss=$%.2f / Limit=$%.2f | Balance=$%.2f | Equity=%.2f — Closing all",
             drawdown, MaxDrawdownAmount, balance, equity), "DRAWDOWN");
     }
 

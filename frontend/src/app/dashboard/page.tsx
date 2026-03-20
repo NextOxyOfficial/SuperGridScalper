@@ -67,6 +67,7 @@ export default function DashboardHome() {
   // Positions tab state
   const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
   const closedPositionsRef = useRef<HTMLDivElement>(null);
+  const [chartOpen, setChartOpen] = useState(true);
 
   // Extend license modal state
   const [showExtendModal, setShowExtendModal] = useState(false);
@@ -1813,6 +1814,121 @@ export default function DashboardHome() {
                 ${tradeData?.total_sell_profit?.toFixed(0) || '0'}
               </p>
             </div>
+          </div>
+
+          {/* EA Smart Filter Details Panel */}
+          {eaConnected && tradeData?.ea_details && Object.keys(tradeData.ea_details).length > 0 && (() => {
+            const d = tradeData.ea_details;
+            const ddPct = parseFloat(d.drawdown_percent || 0);
+            const ddLimit = parseFloat(d.drawdown_limit || 0);
+            const ddAmount = parseFloat(d.drawdown_amount || 0);
+            const spread = parseFloat(d.spread || 0);
+            const ddRatio = ddLimit > 0 ? (ddPct / ddLimit) * 100 : 0;
+            const spreadDanger = spread > 150;
+            return (
+              <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl overflow-hidden">
+                <div className="px-3 py-2 border-b border-cyan-500/10 flex items-center justify-between">
+                  <span className="text-cyan-400 text-xs font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA SMART FILTERS</span>
+                  <span className="text-gray-600 text-[10px]">Live from MT5</span>
+                </div>
+                <div className="p-2 sm:p-3 space-y-2">
+                  {/* Row 1: Trend + Spread + Filter Status */}
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                    <div className="bg-[#0a0a0f] rounded-lg p-2 border border-gray-800">
+                      <p className="text-gray-500 text-[10px] mb-1">Trend</p>
+                      <p className={`text-xs font-bold ${d.trend_direction === 'UP' ? 'text-green-400' : d.trend_direction === 'DOWN' ? 'text-red-400' : 'text-gray-400'}`}>
+                        {d.trend_direction === 'UP' ? '↑ BULLISH' : d.trend_direction === 'DOWN' ? '↓ BEARISH' : '→ FLAT'}
+                      </p>
+                    </div>
+                    <div className={`bg-[#0a0a0f] rounded-lg p-2 border ${spreadDanger ? 'border-red-500/40' : 'border-gray-800'}`}>
+                      <p className="text-gray-500 text-[10px] mb-1">Spread</p>
+                      <p className={`text-xs font-bold ${spreadDanger ? 'text-red-400' : spread > 80 ? 'text-yellow-400' : 'text-green-400'}`}>
+                        {spread.toFixed(0)} pts
+                      </p>
+                    </div>
+                    <div className={`bg-[#0a0a0f] rounded-lg p-2 border ${d.filter_status && d.filter_status !== 'OK' ? 'border-yellow-500/40' : 'border-gray-800'}`}>
+                      <p className="text-gray-500 text-[10px] mb-1">Filter</p>
+                      <p className={`text-xs font-bold truncate ${d.filter_status && d.filter_status !== 'OK' ? 'text-yellow-400' : 'text-green-400'}`}>
+                        {d.filter_status || 'OK'}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Row 2: Buy/Sell Mode + Skip + ATR Gap */}
+                  <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                    <div className="bg-[#0a0a0f] rounded-lg p-2 border border-gray-800">
+                      <p className="text-gray-500 text-[10px] mb-1">BUY Mode</p>
+                      <p className={`text-[10px] sm:text-xs font-bold ${d.buy_mode === 'RECOVERY' ? 'text-orange-400' : 'text-green-400'}`}>
+                        {d.buy_mode || 'NORMAL'}
+                      </p>
+                    </div>
+                    <div className="bg-[#0a0a0f] rounded-lg p-2 border border-gray-800">
+                      <p className="text-gray-500 text-[10px] mb-1">SELL Mode</p>
+                      <p className={`text-[10px] sm:text-xs font-bold ${d.sell_mode === 'RECOVERY' ? 'text-orange-400' : 'text-green-400'}`}>
+                        {d.sell_mode || 'NORMAL'}
+                      </p>
+                    </div>
+                    <div className={`bg-[#0a0a0f] rounded-lg p-2 border ${d.skip_buy || d.skip_sell ? 'border-yellow-500/40' : 'border-gray-800'}`}>
+                      <p className="text-gray-500 text-[10px] mb-1">Skip</p>
+                      <p className={`text-[10px] sm:text-xs font-bold ${d.skip_buy && d.skip_sell ? 'text-red-400' : d.skip_buy || d.skip_sell ? 'text-yellow-400' : 'text-green-400'}`}>
+                        {d.skip_buy && d.skip_sell ? 'BOTH' : d.skip_buy ? 'BUY' : d.skip_sell ? 'SELL' : 'NONE'}
+                      </p>
+                    </div>
+                    <div className="bg-[#0a0a0f] rounded-lg p-2 border border-gray-800">
+                      <p className="text-gray-500 text-[10px] mb-1">ATR Gap</p>
+                      <p className="text-[10px] sm:text-xs font-bold text-cyan-400">
+                        B:{parseFloat(d.atr_gap_buy || 0).toFixed(1)} S:{parseFloat(d.atr_gap_sell || 0).toFixed(1)}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Row 3: Drawdown Bar + Lot Info */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 sm:gap-2">
+                    <div className="sm:col-span-2 bg-[#0a0a0f] rounded-lg p-2 border border-gray-800">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-gray-500 text-[10px]">Drawdown</p>
+                        <p className={`text-[10px] font-bold ${ddPct > ddLimit * 0.7 ? 'text-red-400' : ddPct > ddLimit * 0.4 ? 'text-yellow-400' : 'text-green-400'}`}>
+                          ${ddAmount.toFixed(0)} ({ddPct.toFixed(1)}% / {ddLimit.toFixed(0)}%)
+                        </p>
+                      </div>
+                      <div className="w-full bg-gray-800 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all ${ddRatio > 70 ? 'bg-red-500' : ddRatio > 40 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                          style={{ width: `${Math.min(100, ddRatio)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div className="bg-[#0a0a0f] rounded-lg p-2 border border-gray-800">
+                      <p className="text-gray-500 text-[10px] mb-1">Lot / Max Rec.</p>
+                      <p className="text-xs font-bold text-cyan-400">
+                        {parseFloat(d.lot_size || 0).toFixed(2)} / {parseFloat(d.max_recovery_lot || 0).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Live Gold Chart (TradingView Widget) — Always visible, Collapsible */}
+          <div className="bg-[#12121a] border border-yellow-500/20 rounded-xl overflow-hidden">
+            <button 
+              onClick={() => setChartOpen(!chartOpen)}
+              className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/5 transition"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400 text-xs font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>📈 LIVE GOLD CHART</span>
+                <span className="text-gray-500 text-[10px]">XAUUSD • M15</span>
+              </div>
+              <span className="text-gray-500 text-xs">{chartOpen ? '▲ Collapse' : '▼ Expand'}</span>
+            </button>
+            {chartOpen && (
+              <div className="border-t border-yellow-500/10" style={{ height: '420px' }}>
+                <iframe
+                  src="https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=OANDA%3AXAUUSD&interval=15&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=0a0a0f&studies=&theme=dark&style=1&timezone=exchange&withdateranges=0&showpopupbutton=0&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%5D&showFloatingTooltip=1&locale=en&utm_source=markstrades.com"
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  allowFullScreen
+                />
+              </div>
+            )}
           </div>
 
           {/* Positions Tabs (Open & Closed) */}

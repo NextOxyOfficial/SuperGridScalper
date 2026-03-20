@@ -310,6 +310,9 @@ class TradeData(models.Model):
     # Trading Mode
     trading_mode = models.CharField(max_length=50, default='Normal')
     
+    # EA Smart Filter Details (trend, ATR, spread, skip, drawdown, etc.)
+    ea_details = models.JSONField(default=dict, blank=True)
+    
     # Timestamps
     last_update = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)

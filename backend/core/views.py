@@ -1594,6 +1594,17 @@ def update_trade_data(request):
     trade_data.total_pending_orders = data.get('total_pending_orders', 0)
     trade_data.trading_mode = data.get('trading_mode', 'Normal')
     
+    # Update EA smart filter details (all extra fields from EA)
+    ea_details = {}
+    for key in ['trend_direction', 'filter_status', 'atr_gap_buy', 'atr_gap_sell', 
+                'spread', 'skip_buy', 'skip_sell', 'buy_mode', 'sell_mode',
+                'drawdown_amount', 'drawdown_percent', 'drawdown_limit',
+                'equity_skip_percent', 'max_recovery_lot', 'lot_size']:
+        if key in data:
+            ea_details[key] = data[key]
+    if ea_details:
+        trade_data.ea_details = ea_details
+    
     # Update closed positions (keep last 1000, remove older)
     new_closed = data.get('closed_positions', [])
     if new_closed:
@@ -1637,6 +1648,7 @@ def update_trade_data(request):
                 'pending_orders': trade_data.pending_orders,
                 'total_pending_orders': trade_data.total_pending_orders,
                 'trading_mode': trade_data.trading_mode,
+                'ea_details': trade_data.ea_details or {},
                 'last_update': trade_data.last_update.isoformat(),
             }
             # Broadcast to single-license consumer
@@ -1717,6 +1729,7 @@ def get_trade_data(request):
                 'open_positions': trade_data.open_positions,
                 'pending_orders': getattr(trade_data, 'pending_orders', []),
                 'closed_positions': getattr(trade_data, 'closed_positions', []),
+                'ea_details': getattr(trade_data, 'ea_details', {}),
                 'last_update': trade_data.last_update.isoformat(),
             }
         })
