@@ -174,6 +174,8 @@ int nextSellBundleId = 1;
 // Trend Skip Mode state
 bool skipBuyGrid = false;    // true = don't place new BUY grid/recovery orders
 bool skipSellGrid = false;   // true = don't place new SELL grid/recovery orders
+bool buyEquitySkipped = false;  // true = BUY side skipped due to heavy floating loss (equity skip)
+bool sellEquitySkipped = false; // true = SELL side skipped due to heavy floating loss (equity skip)
 
 // Smart Filter state
 bool g_NewEntriesBlocked = false;  // Master block flag (spread/session/daily/news)
@@ -414,13 +416,21 @@ void OnTick()
     static bool prevSellInRecovery = false;
     
     // Determine mode
-    buyInRecovery = (currentBuyPositions >= MaxBuyOrders);
-    sellInRecovery = (currentSellPositions >= MaxSellOrders);
+    // Primary trigger: positions >= MaxOrders (normal grid full)
+    // Secondary trigger: equity-skipped + has positions (deadlock breaker)
+    //   Without this, equity skip blocks new normal orders but positions < MaxOrders
+    //   means recovery never activates = stuck with losing positions forever.
+    //   Recovery bypasses equity skip, so it can place averaging orders to breakeven.
+    buyInRecovery = (currentBuyPositions >= MaxBuyOrders) || 
+                    (buyEquitySkipped && currentBuyPositions > 0 && EnableRecovery);
+    sellInRecovery = (currentSellPositions >= MaxSellOrders) || 
+                     (sellEquitySkipped && currentSellPositions > 0 && EnableRecovery);
     
     // Log mode changes
     if(buyInRecovery && !prevBuyInRecovery)
     {
-        AddToLog("BUY RECOVERY MODE ACTIVATED", "MODE");
+        string trigger = (currentBuyPositions >= MaxBuyOrders) ? "Grid Full" : "Equity Skip Deadlock";
+        AddToLog(StringFormat("BUY RECOVERY MODE ACTIVATED (%s | Pos: %d)", trigger, currentBuyPositions), "MODE");
     }
     else if(!buyInRecovery && prevBuyInRecovery)
     {
@@ -432,7 +442,8 @@ void OnTick()
     
     if(sellInRecovery && !prevSellInRecovery)
     {
-        AddToLog("SELL RECOVERY MODE ACTIVATED", "MODE");
+        string trigger = (currentSellPositions >= MaxSellOrders) ? "Grid Full" : "Equity Skip Deadlock";
+        AddToLog(StringFormat("SELL RECOVERY MODE ACTIVATED (%s | Pos: %d)", trigger, currentSellPositions), "MODE");
     }
     else if(!sellInRecovery && prevSellInRecovery)
     {
@@ -465,7 +476,8 @@ void OnTick()
     // === BUY SIDE ===
     if(buyInRecovery)
     {
-        // Recovery bypasses: Trend Skip, Equity Skip, EMA Trend Filter
+        // Recovery bypasses: Equity Skip, Pip-based Trend Skip
+        // Recovery WAITS for: Favorable trend (EMA bullish or neutral)
         // Recovery PAUSES: Spread spike, Session, News, Daily limit
         // Recovery Safety Caps (lots/loss/margin/cooldown) provide their own protection
         if(g_NewEntriesBlocked)
@@ -477,7 +489,10 @@ void OnTick()
         else
         {
             DeleteNormalPendingOrders(true);
-            ManageRecoveryGrid(true); // BUY Recovery
+            // Only place NEW recovery orders when trend is favorable (bullish/neutral)
+            // Counter-trend (bearish) = wait, but keep existing recovery pendings alive
+            if(g_TrendBias >= 0) // Bullish or Neutral → safe to average BUY
+                ManageRecoveryGrid(true); // BUY Recovery
         }
     }
     else if(g_NewEntriesBlocked)
@@ -508,7 +523,8 @@ void OnTick()
     // === SELL SIDE ===
     if(sellInRecovery)
     {
-        // Recovery bypasses: Trend Skip, Equity Skip, EMA Trend Filter
+        // Recovery bypasses: Equity Skip, Pip-based Trend Skip
+        // Recovery WAITS for: Favorable trend (EMA bearish or neutral)
         // Recovery PAUSES: Spread spike, Session, News, Daily limit
         if(g_NewEntriesBlocked)
         {
@@ -518,7 +534,10 @@ void OnTick()
         else
         {
             DeleteNormalPendingOrders(false);
-            ManageRecoveryGrid(false); // SELL Recovery
+            // Only place NEW recovery orders when trend is favorable (bearish/neutral)
+            // Counter-trend (bullish) = wait, but keep existing recovery pendings alive
+            if(g_TrendBias <= 0) // Bearish or Neutral → safe to average SELL
+                ManageRecoveryGrid(false); // SELL Recovery
         }
     }
     else if(g_NewEntriesBlocked)
@@ -1070,6 +1089,8 @@ void DetectTrendSkip()
 {
     skipBuyGrid = false;
     skipSellGrid = false;
+    buyEquitySkipped = false;
+    sellEquitySkipped = false;
     
     if(!EnableTrendSkip && !EnableEquitySkip) return;
     
@@ -1134,6 +1155,7 @@ void DetectTrendSkip()
         // AND let SELL side (which is profiting from the down move) continue
         if(buyFloatingPnL < 0.0 && MathAbs(buyFloatingPnL) >= lossThreshold)
         {
+            buyEquitySkipped = true;  // Track equity-skip separately for recovery trigger
             if(!skipBuyGrid)  // Don't overwrite if pip-based already set it
             {
                 skipBuyGrid = true;
@@ -1144,6 +1166,7 @@ void DetectTrendSkip()
         // SELL side losing badly → skip SELL grid
         if(sellFloatingPnL < 0.0 && MathAbs(sellFloatingPnL) >= lossThreshold)
         {
+            sellEquitySkipped = true;  // Track equity-skip separately for recovery trigger
             if(!skipSellGrid)
             {
                 skipSellGrid = true;
@@ -1950,7 +1973,8 @@ bool IsSideBlocked(bool isBuy, string &outReason)
     outReason = "";
     bool inRecovery = isBuy ? buyInRecovery : sellInRecovery;
     
-    // Recovery mode bypasses skip/EMA — only blocked by hard master block
+    // Recovery mode bypasses equity skip & pip-based skip
+    // But NOW waits for favorable trend (EMA) before placing new orders
     if(inRecovery)
     {
         if(g_NewEntriesBlocked && g_BlockCancelPending)
@@ -1958,7 +1982,11 @@ bool IsSideBlocked(bool isBuy, string &outReason)
             outReason = "Recovery hard block (" + g_BlockReason + ")";
             return true;
         }
-        return false; // Recovery soft block keeps pendings, and recovery bypasses skip/EMA
+        // Recovery waits for favorable trend — don't delete existing pendings though
+        // IsSideBlocked is used by SkipEnforcementWorker which deletes pendings
+        // We return false here because we want to KEEP existing recovery pendings alive
+        // (ManageRecoveryGrid just won't place NEW ones during counter-trend)
+        return false;
     }
     
     // Normal mode checks (in priority order, matching OnTick branches)
@@ -3984,11 +4012,20 @@ void UpdateInfoPanel()
     {
         string skipText = "";
         if(skipBuyGrid && skipSellGrid)
-            skipText = ">>> BOTH GRIDS PAUSED (Heavy loss both sides) <<<";
+        {
+            if(buyInRecovery && sellInRecovery)
+                skipText = ">>> BOTH SIDES: RECOVERY ACTIVE (Averaging to breakeven) <<<";
+            else if(buyInRecovery)
+                skipText = ">>> BUY: RECOVERY | SELL: PAUSED <<<";
+            else if(sellInRecovery)
+                skipText = ">>> BUY: PAUSED | SELL: RECOVERY <<<";
+            else
+                skipText = ">>> BOTH GRIDS PAUSED (Heavy loss both sides) <<<";
+        }
         else if(skipBuyGrid)
-            skipText = ">>> BUY GRID PAUSED <<<";
+            skipText = buyInRecovery ? ">>> BUY: RECOVERY ACTIVE <<<" : ">>> BUY GRID PAUSED <<<";
         else
-            skipText = ">>> SELL GRID PAUSED <<<";
+            skipText = sellInRecovery ? ">>> SELL: RECOVERY ACTIVE <<<" : ">>> SELL GRID PAUSED <<<";
         
         ObjectCreate(0, "EA_SkipStatus", OBJ_LABEL, 0, 0, 0);
         ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_CORNER, CORNER_LEFT_UPPER);
@@ -4071,7 +4108,9 @@ void UpdateInfoPanel()
     sellYPos += 16;
     
     // SELL Mode
-    string sellModeText = sellInRecovery ? ">> RECOVERY MODE <<" : "Normal Grid Mode";
+    string sellModeText = "Normal Grid Mode";
+    if(sellInRecovery)
+        sellModeText = (g_TrendBias <= 0) ? ">> RECOVERY MODE <<" : ">> RECOVERY (Waiting Trend) <<";
     ObjectCreate(0, "EA_SellMode", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_SellMode", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_SellMode", OBJPROP_XDISTANCE, 10);
@@ -4147,7 +4186,9 @@ void UpdateInfoPanel()
     buyYPos += 16;
     
     // BUY Mode
-    string buyModeText = buyInRecovery ? ">> RECOVERY MODE <<" : "Normal Grid Mode";
+    string buyModeText = "Normal Grid Mode";
+    if(buyInRecovery)
+        buyModeText = (g_TrendBias >= 0) ? ">> RECOVERY MODE <<" : ">> RECOVERY (Waiting Trend) <<";
     ObjectCreate(0, "EA_BuyMode", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_BuyMode", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_BuyMode", OBJPROP_XDISTANCE, rightX);
