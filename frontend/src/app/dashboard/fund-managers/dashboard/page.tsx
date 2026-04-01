@@ -41,6 +41,13 @@ export default function FMDashboardPage() {
   const [tradeCommandLoading, setTradeCommandLoading] = useState<string | null>(null);
   const [tradeCommandSuccess, setTradeCommandSuccess] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // EA Control Settings per account
+  const [eaControlModal, setEaControlModal] = useState<{ assignmentId: number; mt5: string } | null>(null);
+  const [eaCtrl, setEaCtrl] = useState<any>(null);
+  const [eaCtrlLoading, setEaCtrlLoading] = useState(false);
+  const [eaCtrlSaving, setEaCtrlSaving] = useState(false);
+  const [eaCtrlMsg, setEaCtrlMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
   const positionsModalRef = useRef<{ subscriber: string; mt5_account?: string } | null>(null);
@@ -115,6 +122,52 @@ export default function FMDashboardPage() {
       alert('Network error. Please try again.');
     } finally {
       setTradeCommandLoading(null);
+    }
+  };
+
+  const openEaControlModal = async (assignmentId: number, mt5: string) => {
+    setEaControlModal({ assignmentId, mt5 });
+    setEaCtrl(null);
+    setEaCtrlMsg(null);
+    setEaCtrlLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/ea-control/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, assignment_id: assignmentId }),
+      });
+      const data = await res.json();
+      if (data.success) setEaCtrl(data.settings);
+      else setEaCtrlMsg({ type: 'error', text: data.error || 'Failed to load' });
+    } catch {
+      setEaCtrlMsg({ type: 'error', text: 'Network error' });
+    } finally {
+      setEaCtrlLoading(false);
+    }
+  };
+
+  const saveEaCtrl = async () => {
+    if (!eaControlModal || !eaCtrl) return;
+    setEaCtrlSaving(true);
+    setEaCtrlMsg(null);
+    try {
+      const res = await fetch(`${API_URL}/fund-managers/ea-control/save/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, assignment_id: eaControlModal.assignmentId, settings: eaCtrl }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEaCtrl(data.settings);
+        setEaCtrlMsg({ type: 'success', text: 'Settings saved!' });
+        setTimeout(() => setEaCtrlMsg(null), 3000);
+      } else {
+        setEaCtrlMsg({ type: 'error', text: data.error || 'Failed to save' });
+      }
+    } catch {
+      setEaCtrlMsg({ type: 'error', text: 'Network error' });
+    } finally {
+      setEaCtrlSaving(false);
     }
   };
 
@@ -638,6 +691,12 @@ export default function FMDashboardPage() {
                                   View Positions
                                 </button>
                               )}
+                              <button
+                                onClick={() => openEaControlModal(acc.assignment_id, acc.mt5_account)}
+                                className="text-[10px] px-2 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition whitespace-nowrap"
+                              >
+                                EA Settings
+                              </button>
                             </div>
                           </div>
                           {/* Balance/Equity/Profit */}
@@ -1052,6 +1111,120 @@ export default function FMDashboardPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* EA Control Settings Modal */}
+      {eaControlModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setEaControlModal(null)}>
+          <div className="bg-[#12121a] border border-purple-500/30 rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA CONTROL SETTINGS</h3>
+                <p className="text-gray-500 text-[10px] mt-0.5">MT5: {eaControlModal.mt5}</p>
+              </div>
+              <button onClick={() => setEaControlModal(null)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            {eaCtrlLoading ? (
+              <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 text-purple-400 animate-spin" /></div>
+            ) : eaCtrl ? (
+              <div className="space-y-3">
+                {/* Lot Size */}
+                <div>
+                  <label className="text-gray-400 text-[10px] sm:text-xs block mb-1">Trade Lot Size</label>
+                  <input type="number" step="0.01" min="0.01" value={eaCtrl.lot_size}
+                    onChange={e => setEaCtrl({ ...eaCtrl, lot_size: parseFloat(e.target.value) || 0.01 })}
+                    className="w-full bg-[#0a0a0f] border border-purple-500/20 rounded-lg px-3 py-2 text-white text-xs focus:border-purple-500/50 focus:outline-none" />
+                </div>
+                {/* Daily Target */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={eaCtrl.enable_daily_target}
+                      onChange={e => setEaCtrl({ ...eaCtrl, enable_daily_target: e.target.checked })} className="accent-purple-500" />
+                    <label className="text-gray-400 text-[10px] sm:text-xs font-semibold">Daily Profit Target (Auto-Stop)</label>
+                  </div>
+                  {eaCtrl.enable_daily_target && (
+                    <div className="grid grid-cols-3 gap-2 pl-5">
+                      <div>
+                        <label className="text-gray-500 text-[10px] block mb-0.5">Balance ($)</label>
+                        <input type="number" step="1" min="0" value={eaCtrl.daily_balance_target}
+                          onChange={e => setEaCtrl({ ...eaCtrl, daily_balance_target: parseFloat(e.target.value) || 0 })}
+                          className="w-full bg-[#0a0a0f] border border-purple-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-purple-500/50 focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-[10px] block mb-0.5">Equity ($)</label>
+                        <input type="number" step="1" min="0" value={eaCtrl.daily_equity_target}
+                          onChange={e => setEaCtrl({ ...eaCtrl, daily_equity_target: parseFloat(e.target.value) || 0 })}
+                          className="w-full bg-[#0a0a0f] border border-purple-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-purple-500/50 focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-[10px] block mb-0.5">Stop bot for (minutes)</label>
+                        <input type="number" step="1" min="1" value={eaCtrl.cooldown_minutes}
+                          onChange={e => setEaCtrl({ ...eaCtrl, cooldown_minutes: parseInt(e.target.value) || 60 })}
+                          className="w-full bg-[#0a0a0f] border border-purple-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-purple-500/50 focus:outline-none" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {/* Schedule Stop */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={eaCtrl.enable_schedule_stop}
+                      onChange={e => setEaCtrl({ ...eaCtrl, enable_schedule_stop: e.target.checked })} className="accent-purple-500" />
+                    <label className="text-gray-400 text-[10px] sm:text-xs font-semibold">Schedule Stop</label>
+                  </div>
+                  {eaCtrl.enable_schedule_stop && (
+                    <div className="grid grid-cols-3 gap-2 pl-5">
+                      <div>
+                        <label className="text-gray-500 text-[10px] block mb-0.5">Hour (0-23)</label>
+                        <input type="number" min="0" max="23" value={eaCtrl.schedule_stop_hour}
+                          onChange={e => setEaCtrl({ ...eaCtrl, schedule_stop_hour: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-[#0a0a0f] border border-purple-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-purple-500/50 focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-[10px] block mb-0.5">Minute (0-59)</label>
+                        <input type="number" min="0" max="59" value={eaCtrl.schedule_stop_minute}
+                          onChange={e => setEaCtrl({ ...eaCtrl, schedule_stop_minute: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-[#0a0a0f] border border-purple-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-purple-500/50 focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-[10px] block mb-0.5">Duration (min)</label>
+                        <input type="number" min="1" value={eaCtrl.schedule_stop_duration_minutes}
+                          onChange={e => setEaCtrl({ ...eaCtrl, schedule_stop_duration_minutes: parseInt(e.target.value) || 60 })}
+                          className="w-full bg-[#0a0a0f] border border-purple-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-purple-500/50 focus:outline-none" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {/* Status */}
+                {(eaCtrl.is_target_stopped || eaCtrl.is_schedule_stopped) && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2">
+                    <p className="text-yellow-400 text-[10px] sm:text-xs font-bold">
+                      {eaCtrl.is_target_stopped && 'Target reached — EA paused'}
+                      {eaCtrl.is_target_stopped && eaCtrl.is_schedule_stopped && ' | '}
+                      {eaCtrl.is_schedule_stopped && 'Schedule stop active'}
+                    </p>
+                  </div>
+                )}
+                {/* Save */}
+                <div className="flex items-center gap-2 pt-1">
+                  <button onClick={saveEaCtrl} disabled={eaCtrlSaving}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      eaCtrlSaving ? 'bg-gray-700 text-gray-400 cursor-wait' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30'
+                    }`} style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    {eaCtrlSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...</> : 'SAVE SETTINGS'}
+                  </button>
+                  {eaCtrlMsg && (
+                    <span className={`text-[10px] sm:text-xs font-bold ${eaCtrlMsg.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                      {eaCtrlMsg.text}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-xs py-4 text-center">{eaCtrlMsg?.text || 'Could not load settings.'}</p>
+            )}
           </div>
         </div>
       )}

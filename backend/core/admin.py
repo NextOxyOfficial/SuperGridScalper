@@ -9,7 +9,7 @@ from django.utils import timezone
 from decimal import Decimal
 from django.db.models import F
 from .models import (
-    SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData,
+    SubscriptionPlan, License, LicenseVerificationLog, EASettings, TradeData, EAControlSettings,
     EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout,
     TradeCommand, EAActionLog, SiteSettings, PaymentNetwork, LicensePurchaseRequest,
     SMTPSettings, EmailPreference, PayoutMethod,
@@ -1159,6 +1159,26 @@ class EASettingsAdmin(admin.ModelAdmin):
     def buy_range_display(self, obj):
         return f"{int(obj.buy_range_end)} - {int(obj.buy_range_start)}"
     buy_range_display.short_description = 'BUY Range'
+
+
+@admin.register(EAControlSettings)
+class EAControlSettingsAdmin(admin.ModelAdmin):
+    list_display = ['get_mt5_account', 'lot_size', 'enable_daily_target', 'daily_balance_target', 'daily_equity_target', 'cooldown_minutes', 'enable_schedule_stop', 'is_target_stopped', 'updated_at']
+    search_fields = ['license__license_key', 'license__mt5_account']
+    list_filter = ['enable_daily_target', 'enable_schedule_stop', 'is_target_stopped', 'is_schedule_stopped']
+    readonly_fields = ['license', 'target_hit_at', 'is_target_stopped', 'is_schedule_stopped', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('License', {'fields': ('license',)}),
+        ('Lot Size', {'fields': ('lot_size',)}),
+        ('Daily Target', {'fields': ('enable_daily_target', 'daily_balance_target', 'daily_equity_target', 'cooldown_minutes')}),
+        ('Schedule Stop', {'fields': ('enable_schedule_stop', 'schedule_stop_hour', 'schedule_stop_minute', 'schedule_stop_duration_minutes')}),
+        ('State', {'fields': ('target_hit_at', 'is_target_stopped', 'is_schedule_stopped', 'created_at', 'updated_at')}),
+    )
+    
+    def get_mt5_account(self, obj):
+        return obj.license.mt5_account or '-'
+    get_mt5_account.short_description = 'MT5 Account'
 
 
 @admin.register(TradeData)

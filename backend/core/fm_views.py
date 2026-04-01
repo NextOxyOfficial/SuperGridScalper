@@ -12,7 +12,8 @@ from django.db.models import Avg, Count, Q, Sum, F
 from core.models import (
     FundManager, FMSubscription, FMAccountAssignment, FMCommand,
     FMChatRoom, FMChatMessage, FMReview, FMPayout, FMSchedule,
-    EconomicEvent, TradingWaveAlert, License, TradeData, TradeCommand
+    EconomicEvent, TradingWaveAlert, License, TradeData, TradeCommand,
+    EAControlSettings
 )
 
 
@@ -2166,3 +2167,122 @@ def fm_trade_command(request):
         'command_id': cmd.id,
         'message': f'{tc_type} command sent to MT5 account {assignment.license.mt5_account}. Will execute within 30 seconds.',
     })
+
+
+# ============================================================
+# FM EA CONTROL SETTINGS: Daily target + schedule stop for subscriber accounts
+# ============================================================
+
+def _serialize_ea_control_fm(ctrl):
+    return {
+        'lot_size': float(ctrl.lot_size),
+        'enable_daily_target': ctrl.enable_daily_target,
+        'daily_balance_target': float(ctrl.daily_balance_target),
+        'daily_equity_target': float(ctrl.daily_equity_target),
+        'cooldown_minutes': ctrl.cooldown_minutes,
+        'enable_schedule_stop': ctrl.enable_schedule_stop,
+        'schedule_stop_hour': ctrl.schedule_stop_hour,
+        'schedule_stop_minute': ctrl.schedule_stop_minute,
+        'schedule_stop_duration_minutes': ctrl.schedule_stop_duration_minutes,
+        'is_target_stopped': ctrl.is_target_stopped,
+        'is_schedule_stopped': ctrl.is_schedule_stopped,
+        'target_hit_at': ctrl.target_hit_at.isoformat() if ctrl.target_hit_at else None,
+    }
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def fm_get_ea_control(request):
+    """FM gets EA control settings for a subscriber account"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    email = data.get('email', '').strip()
+    assignment_id = data.get('assignment_id')
+
+    if not assignment_id:
+        return JsonResponse({'success': False, 'error': 'assignment_id required'}, status=400)
+
+    user = _resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
+
+    fm = _get_fm_from_user(user)
+    if not fm:
+        return JsonResponse({'success': False, 'error': 'Not a fund manager'}, status=403)
+
+    try:
+        assignment = FMAccountAssignment.objects.select_related('license', 'subscription').get(
+            id=assignment_id,
+            subscription__fund_manager=fm,
+            subscription__status__in=['active', 'trial']
+        )
+    except FMAccountAssignment.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Account assignment not found'}, status=404)
+
+    ctrl, _ = EAControlSettings.objects.get_or_create(license=assignment.license)
+    return JsonResponse({'success': True, 'settings': _serialize_ea_control_fm(ctrl)})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def fm_save_ea_control(request):
+    """FM saves EA control settings for a subscriber account"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    email = data.get('email', '').strip()
+    assignment_id = data.get('assignment_id')
+    settings_data = data.get('settings', {})
+
+    if not assignment_id:
+        return JsonResponse({'success': False, 'error': 'assignment_id required'}, status=400)
+
+    user = _resolve_user(email)
+    if not user:
+        return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
+
+    fm = _get_fm_from_user(user)
+    if not fm:
+        return JsonResponse({'success': False, 'error': 'Not a fund manager'}, status=403)
+
+    try:
+        assignment = FMAccountAssignment.objects.select_related('license', 'subscription').get(
+            id=assignment_id,
+            subscription__fund_manager=fm,
+            subscription__status__in=['active', 'trial']
+        )
+    except FMAccountAssignment.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Account assignment not found'}, status=404)
+
+    ctrl, _ = EAControlSettings.objects.get_or_create(license=assignment.license)
+
+    field_map = {
+        'lot_size': ('lot_size', float),
+        'enable_daily_target': ('enable_daily_target', bool),
+        'daily_balance_target': ('daily_balance_target', float),
+        'daily_equity_target': ('daily_equity_target', float),
+        'cooldown_minutes': ('cooldown_minutes', int),
+        'enable_schedule_stop': ('enable_schedule_stop', bool),
+        'schedule_stop_hour': ('schedule_stop_hour', int),
+        'schedule_stop_minute': ('schedule_stop_minute', int),
+        'schedule_stop_duration_minutes': ('schedule_stop_duration_minutes', int),
+    }
+
+    for key, (field, cast) in field_map.items():
+        if key in settings_data:
+            try:
+                setattr(ctrl, field, cast(settings_data[key]))
+            except (ValueError, TypeError):
+                pass
+
+    if 'enable_daily_target' in settings_data or 'daily_balance_target' in settings_data or 'daily_equity_target' in settings_data:
+        ctrl.is_target_stopped = False
+        ctrl.target_hit_at = None
+
+    ctrl.save()
+    return JsonResponse({'success': True, 'settings': _serialize_ea_control_fm(ctrl), 'message': 'Settings saved'})

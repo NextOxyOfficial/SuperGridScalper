@@ -11,7 +11,7 @@ from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.db.models import Count, F
-from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest, PayoutMethod, EmailOTP, GuidelineCategory, GuidelineVideo, GiftLicense
+from .models import SubscriptionPlan, License, LicenseMT5Account, LicenseVerificationLog, EASettings, TradeData, EAControlSettings, EAActionLog, EAProduct, Referral, ReferralAttribution, ReferralTransaction, ReferralPayout, TradeCommand, SiteSettings, PaymentNetwork, LicensePurchaseRequest, PayoutMethod, EmailOTP, GuidelineCategory, GuidelineVideo, GiftLicense
 from decimal import Decimal
 import json
 
@@ -3463,3 +3463,111 @@ def get_gift_plans(request):
         'max_accounts': p.max_accounts,
     } for p in plans]
     return JsonResponse({'success': True, 'plans': data})
+
+
+# ============================================================
+# EA CONTROL SETTINGS (User-configurable)
+# ============================================================
+
+def _serialize_ea_control(ctrl):
+    return {
+        'lot_size': float(ctrl.lot_size),
+        'enable_daily_target': ctrl.enable_daily_target,
+        'daily_balance_target': float(ctrl.daily_balance_target),
+        'daily_equity_target': float(ctrl.daily_equity_target),
+        'cooldown_minutes': ctrl.cooldown_minutes,
+        'enable_schedule_stop': ctrl.enable_schedule_stop,
+        'schedule_stop_hour': ctrl.schedule_stop_hour,
+        'schedule_stop_minute': ctrl.schedule_stop_minute,
+        'schedule_stop_duration_minutes': ctrl.schedule_stop_duration_minutes,
+        'is_target_stopped': ctrl.is_target_stopped,
+        'is_schedule_stopped': ctrl.is_schedule_stopped,
+        'target_hit_at': ctrl.target_hit_at.isoformat() if ctrl.target_hit_at else None,
+    }
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def get_ea_control_settings(request):
+    """Get EA control settings for a license"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    license_key = data.get('license_key', '').strip().upper()
+    email = data.get('email', '').strip()
+
+    if not license_key:
+        return JsonResponse({'success': False, 'message': 'License key required'})
+
+    try:
+        lic = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+
+    # Verify ownership
+    if email:
+        if not User.objects.filter(email=email, id=lic.user_id).exists() and \
+           not User.objects.filter(username=email, id=lic.user_id).exists():
+            return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=403)
+
+    ctrl, _ = EAControlSettings.objects.get_or_create(license=lic)
+    return JsonResponse({'success': True, 'settings': _serialize_ea_control(ctrl)})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def save_ea_control_settings(request):
+    """Save EA control settings for a license"""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid request'}, status=400)
+
+    license_key = data.get('license_key', '').strip().upper()
+    email = data.get('email', '').strip()
+    settings_data = data.get('settings', {})
+
+    if not license_key or not email:
+        return JsonResponse({'success': False, 'message': 'License key and email required'})
+
+    try:
+        lic = License.objects.get(license_key=license_key)
+    except License.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Invalid license key'})
+
+    # Verify ownership
+    if not User.objects.filter(email=email, id=lic.user_id).exists() and \
+       not User.objects.filter(username=email, id=lic.user_id).exists():
+        return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=403)
+
+    ctrl, _ = EAControlSettings.objects.get_or_create(license=lic)
+
+    # Update fields
+    field_map = {
+        'lot_size': ('lot_size', float),
+        'enable_daily_target': ('enable_daily_target', bool),
+        'daily_balance_target': ('daily_balance_target', float),
+        'daily_equity_target': ('daily_equity_target', float),
+        'cooldown_minutes': ('cooldown_minutes', int),
+        'enable_schedule_stop': ('enable_schedule_stop', bool),
+        'schedule_stop_hour': ('schedule_stop_hour', int),
+        'schedule_stop_minute': ('schedule_stop_minute', int),
+        'schedule_stop_duration_minutes': ('schedule_stop_duration_minutes', int),
+    }
+
+    for key, (field, cast) in field_map.items():
+        if key in settings_data:
+            try:
+                setattr(ctrl, field, cast(settings_data[key]))
+            except (ValueError, TypeError):
+                pass
+
+    # Reset target stop state when user changes target settings
+    if 'enable_daily_target' in settings_data or 'daily_balance_target' in settings_data or 'daily_equity_target' in settings_data:
+        ctrl.is_target_stopped = False
+        ctrl.target_hit_at = None
+
+    ctrl.save()
+    return JsonResponse({'success': True, 'settings': _serialize_ea_control(ctrl), 'message': 'Settings saved'})

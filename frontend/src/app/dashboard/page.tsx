@@ -119,6 +119,18 @@ export default function DashboardHome() {
   const [waveAlerts, setWaveAlerts] = useState<{ mode: string; display_name: string; minutes_before: number; tips: string; is_active: boolean; remaining_seconds: number }[]>([]);
   const waveCountdownRef = useRef<NodeJS.Timeout | null>(null);
 
+  // EA Control Settings state
+  const [eaControl, setEaControl] = useState<any>(null);
+  const [eaControlLoading, setEaControlLoading] = useState(false);
+  const [eaControlSaving, setEaControlSaving] = useState(false);
+  const [eaControlMsg, setEaControlMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showEaControlPanel, setShowEaControlPanel] = useState(false);
+
+  // Close position modal state
+  const [closePositionModal, setClosePositionModal] = useState<any>(null);
+  const [closingPosition, setClosingPosition] = useState(false);
+  const [closePositionResult, setClosePositionResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const nicknameInputRef = useRef<HTMLInputElement>(null);
   const allLicensesPollingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -1037,6 +1049,88 @@ export default function DashboardHome() {
     }
   };
 
+  // ===== EA CONTROL SETTINGS =====
+  const fetchEaControl = async (licenseKey: string) => {
+    setEaControlLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/ea-control/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ license_key: licenseKey, email: user?.email || user?.username })
+      });
+      const data = await res.json();
+      if (data.success) setEaControl(data.settings);
+    } catch (e) {
+      console.error('Failed to fetch EA control settings');
+    } finally {
+      setEaControlLoading(false);
+    }
+  };
+
+  const saveEaControl = async (settingsData: any) => {
+    if (!selectedLicense) return;
+    setEaControlSaving(true);
+    setEaControlMsg(null);
+    try {
+      const res = await fetch(`${API_URL}/ea-control/save/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: selectedLicense.license_key,
+          email: user?.email || user?.username,
+          settings: settingsData
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEaControl(data.settings);
+        setEaControlMsg({ type: 'success', text: 'Settings saved!' });
+        setTimeout(() => setEaControlMsg(null), 3000);
+      } else {
+        setEaControlMsg({ type: 'error', text: data.message || 'Failed to save' });
+      }
+    } catch (e) {
+      setEaControlMsg({ type: 'error', text: 'Network error' });
+    } finally {
+      setEaControlSaving(false);
+    }
+  };
+
+  // Fetch EA control when license selected
+  useEffect(() => {
+    if (selectedLicense?.license_key && selectedLicense.status === 'active') {
+      fetchEaControl(selectedLicense.license_key);
+    }
+  }, [selectedLicense?.license_key]);
+
+  // ===== CLOSE POSITION =====
+  const handleClosePosition = async (ticket: number) => {
+    if (!selectedLicense) return;
+    setClosingPosition(true);
+    setClosePositionResult(null);
+    try {
+      const res = await fetch(`${API_URL}/trade-commands/close-position/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: selectedLicense.license_key,
+          ticket: ticket
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setClosePositionResult({ type: 'success', text: `Close command sent for #${ticket}. Will execute within 30 seconds.` });
+        setTimeout(() => { setClosePositionModal(null); setClosePositionResult(null); }, 3000);
+      } else {
+        setClosePositionResult({ type: 'error', text: data.message || 'Failed to close' });
+      }
+    } catch (e) {
+      setClosePositionResult({ type: 'error', text: 'Network error' });
+    } finally {
+      setClosingPosition(false);
+    }
+  };
+
   const getDaysRemaining = (lic: any) => {
     if (!lic?.expires_at) return 0;
     const expires = new Date(lic.expires_at);
@@ -1771,6 +1865,29 @@ export default function DashboardHome() {
             </div>
           </div>
 
+          {/* Live Gold Chart (TradingView Widget) — Above stats, below log */}
+          <div className="bg-[#12121a] border border-yellow-500/20 rounded-xl overflow-hidden">
+            <button 
+              onClick={() => setChartOpen(!chartOpen)}
+              className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/5 transition"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400 text-xs font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>LIVE GOLD CHART</span>
+                <span className="text-gray-500 text-[10px]">XAUUSD M15</span>
+              </div>
+              <span className="text-gray-500 text-xs">{chartOpen ? '▲ Collapse' : '▼ Expand'}</span>
+            </button>
+            {chartOpen && (
+              <div className="border-t border-yellow-500/10" style={{ height: '420px' }}>
+                <iframe
+                  src="https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=OANDA%3AXAUUSD&interval=15&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=0a0a0f&studies=&theme=dark&style=1&timezone=exchange&withdateranges=0&showpopupbutton=0&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%5D&showFloatingTooltip=1&locale=en&utm_source=markstrades.com"
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  allowFullScreen
+                />
+              </div>
+            )}
+          </div>
+
           {/* Compact Stats Row */}
           <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
             <div className="bg-[#12121a] border border-cyan-500/20 rounded-lg p-1.5 sm:p-2">
@@ -1908,29 +2025,6 @@ export default function DashboardHome() {
             );
           })()}
 
-          {/* Live Gold Chart (TradingView Widget) — Always visible, Collapsible */}
-          <div className="bg-[#12121a] border border-yellow-500/20 rounded-xl overflow-hidden">
-            <button 
-              onClick={() => setChartOpen(!chartOpen)}
-              className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/5 transition"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-yellow-400 text-xs font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>📈 LIVE GOLD CHART</span>
-                <span className="text-gray-500 text-[10px]">XAUUSD • M15</span>
-              </div>
-              <span className="text-gray-500 text-xs">{chartOpen ? '▲ Collapse' : '▼ Expand'}</span>
-            </button>
-            {chartOpen && (
-              <div className="border-t border-yellow-500/10" style={{ height: '420px' }}>
-                <iframe
-                  src="https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=OANDA%3AXAUUSD&interval=15&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=0a0a0f&studies=&theme=dark&style=1&timezone=exchange&withdateranges=0&showpopupbutton=0&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%5D&showFloatingTooltip=1&locale=en&utm_source=markstrades.com"
-                  style={{ width: '100%', height: '100%', border: 'none' }}
-                  allowFullScreen
-                />
-              </div>
-            )}
-          </div>
-
           {/* Positions Tabs (Open & Closed) */}
           {tradeData && (
             <div className="bg-[#12121a] border border-cyan-500/20 rounded-xl overflow-hidden">
@@ -1993,7 +2087,7 @@ export default function DashboardHome() {
                         </thead>
                         <tbody className="divide-y divide-gray-800">
                           {tradeData.open_positions.map((pos: any, i: number) => (
-                            <tr key={i} className="hover:bg-white/5">
+                            <tr key={i} className="hover:bg-white/5 cursor-pointer hover:bg-cyan-500/10 transition" onClick={() => setClosePositionModal(pos)}>
                               <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 font-mono text-[10px] sm:text-xs text-gray-400">{pos.ticket}</td>
                               <td className="px-1.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs text-yellow-400 font-medium">{pos.symbol || tradeData.symbol}</td>
                               <td className="px-1.5 sm:px-3 py-1.5 sm:py-2">
@@ -2189,6 +2283,180 @@ export default function DashboardHome() {
                   </div>
                 </div>
                 
+                {/* EA Control Settings Panel */}
+                <div className="bg-[#0a0a0f]/50 rounded-lg border border-cyan-500/10 overflow-hidden">
+                  <button
+                    onClick={() => setShowEaControlPanel(!showEaControlPanel)}
+                    className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/5 transition"
+                  >
+                    <span className="text-cyan-400 text-xs font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA CONTROL SETTINGS</span>
+                    <span className="text-gray-500 text-xs">{showEaControlPanel ? '▲' : '▼'}</span>
+                  </button>
+                  {showEaControlPanel && (
+                    <div className="px-3 pb-3 border-t border-cyan-500/10 space-y-3 pt-3">
+                      {eaControlLoading ? (
+                        <div className="flex items-center justify-center py-4"><Loader2 className="w-5 h-5 text-cyan-400 animate-spin" /></div>
+                      ) : eaControl ? (
+                        <>
+                          {/* Lot Size */}
+                          <div>
+                            <label className="text-gray-400 text-[10px] sm:text-xs block mb-1">Trade Lot Size</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              value={eaControl.lot_size}
+                              onChange={e => setEaControl({ ...eaControl, lot_size: parseFloat(e.target.value) || 0.01 })}
+                              className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-xs focus:border-cyan-500/50 focus:outline-none"
+                            />
+                          </div>
+
+                          {/* Daily Balance/Equity Target */}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={eaControl.enable_daily_target}
+                                onChange={e => setEaControl({ ...eaControl, enable_daily_target: e.target.checked })}
+                                className="accent-cyan-500"
+                              />
+                              <label className="text-gray-400 text-[10px] sm:text-xs font-semibold">Daily Profit Target (Auto-Stop)</label>
+                            </div>
+                            {eaControl.enable_daily_target && (
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-5">
+                                <div>
+                                  <label className="text-gray-500 text-[10px] block mb-0.5">Balance Target ($)</label>
+                                  <input
+                                    type="number"
+                                    step="1"
+                                    min="0"
+                                    value={eaControl.daily_balance_target}
+                                    onChange={e => setEaControl({ ...eaControl, daily_balance_target: parseFloat(e.target.value) || 0 })}
+                                    className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-gray-500 text-[10px] block mb-0.5">Equity Target ($)</label>
+                                  <input
+                                    type="number"
+                                    step="1"
+                                    min="0"
+                                    value={eaControl.daily_equity_target}
+                                    onChange={e => setEaControl({ ...eaControl, daily_equity_target: parseFloat(e.target.value) || 0 })}
+                                    className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-gray-500 text-[10px] block mb-0.5">Cooldown (min)</label>
+                                  <input
+                                    type="number"
+                                    step="1"
+                                    min="1"
+                                    value={eaControl.cooldown_minutes}
+                                    onChange={e => setEaControl({ ...eaControl, cooldown_minutes: parseInt(e.target.value) || 60 })}
+                                    className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            {eaControl.enable_daily_target && (
+                              <p className="text-gray-600 text-[9px] sm:text-[10px] pl-5">
+                                EA will stop when balance or equity target is reached, then restart after cooldown.
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Schedule Stop */}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={eaControl.enable_schedule_stop}
+                                onChange={e => setEaControl({ ...eaControl, enable_schedule_stop: e.target.checked })}
+                                className="accent-cyan-500"
+                              />
+                              <label className="text-gray-400 text-[10px] sm:text-xs font-semibold">Schedule Stop</label>
+                            </div>
+                            {eaControl.enable_schedule_stop && (
+                              <div className="grid grid-cols-3 gap-2 pl-5">
+                                <div>
+                                  <label className="text-gray-500 text-[10px] block mb-0.5">Hour (0-23)</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="23"
+                                    value={eaControl.schedule_stop_hour}
+                                    onChange={e => setEaControl({ ...eaControl, schedule_stop_hour: parseInt(e.target.value) || 0 })}
+                                    className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-gray-500 text-[10px] block mb-0.5">Minute (0-59)</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="59"
+                                    value={eaControl.schedule_stop_minute}
+                                    onChange={e => setEaControl({ ...eaControl, schedule_stop_minute: parseInt(e.target.value) || 0 })}
+                                    className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-gray-500 text-[10px] block mb-0.5">Duration (min)</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={eaControl.schedule_stop_duration_minutes}
+                                    onChange={e => setEaControl({ ...eaControl, schedule_stop_duration_minutes: parseInt(e.target.value) || 60 })}
+                                    className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            {eaControl.enable_schedule_stop && (
+                              <p className="text-gray-600 text-[9px] sm:text-[10px] pl-5">
+                                EA will stop at {String(eaControl.schedule_stop_hour).padStart(2, '0')}:{String(eaControl.schedule_stop_minute).padStart(2, '0')} for {eaControl.schedule_stop_duration_minutes} minutes daily.
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Status indicators */}
+                          {(eaControl.is_target_stopped || eaControl.is_schedule_stopped) && (
+                            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2">
+                              <p className="text-yellow-400 text-[10px] sm:text-xs font-bold">
+                                {eaControl.is_target_stopped && 'Target reached — EA paused'}
+                                {eaControl.is_target_stopped && eaControl.is_schedule_stopped && ' | '}
+                                {eaControl.is_schedule_stopped && 'Schedule stop active'}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Save Button */}
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => saveEaControl(eaControl)}
+                              disabled={eaControlSaving}
+                              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                eaControlSaving ? 'bg-gray-700 text-gray-400 cursor-wait' : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30'
+                              }`}
+                              style={{ fontFamily: 'Orbitron, sans-serif' }}
+                            >
+                              {eaControlSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...</> : 'SAVE SETTINGS'}
+                            </button>
+                            {eaControlMsg && (
+                              <span className={`text-[10px] sm:text-xs font-bold ${eaControlMsg.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                                {eaControlMsg.text}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-gray-500 text-xs py-2">Could not load settings.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* MT5 Account & Expires - Side by side */}
                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div className="bg-[#0a0a0f]/50 rounded-lg p-2.5 sm:p-3 border border-cyan-500/10">
@@ -2257,6 +2525,58 @@ export default function DashboardHome() {
             </div>
           </div>
         </div>
+
+        {/* Close Position Modal */}
+        {closePositionModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => { setClosePositionModal(null); setClosePositionResult(null); }}>
+            <div className="bg-[#12121a] border border-red-500/30 rounded-2xl p-4 sm:p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-bold text-sm sm:text-base" style={{ fontFamily: 'Orbitron, sans-serif' }}>CLOSE POSITION</h3>
+                <button onClick={() => { setClosePositionModal(null); setClosePositionResult(null); }} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="space-y-3">
+                <div className="bg-[#0a0a0f] rounded-lg p-3 border border-gray-800 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 text-xs">Ticket</span>
+                    <span className="text-white text-xs font-mono">{closePositionModal.ticket}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 text-xs">Type</span>
+                    <span className={`text-xs font-bold ${closePositionModal.type === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{closePositionModal.type}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 text-xs">Lots</span>
+                    <span className="text-white text-xs">{closePositionModal.lots}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 text-xs">Open Price</span>
+                    <span className="text-white text-xs font-mono">{closePositionModal.open_price}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 text-xs">P/L</span>
+                    <span className={`text-xs font-bold ${(closePositionModal.profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {(closePositionModal.profit || 0) >= 0 ? '+' : ''}${closePositionModal.profit?.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+                {closePositionResult && (
+                  <div className={`p-2 rounded-lg text-xs font-bold text-center ${closePositionResult.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
+                    {closePositionResult.text}
+                  </div>
+                )}
+                <button
+                  onClick={() => handleClosePosition(closePositionModal.ticket)}
+                  disabled={closingPosition}
+                  className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all ${closingPosition ? 'bg-gray-700 text-gray-400 cursor-wait' : 'bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30'}`}
+                  style={{ fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  {closingPosition ? 'CLOSING...' : 'CLOSE THIS POSITION'}
+                </button>
+                <p className="text-gray-600 text-[10px] text-center">Command will be sent to EA. Position will close within 30 seconds.</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Extend License Modal - Multi-step Payment Flow */}
         {showExtendModal && (

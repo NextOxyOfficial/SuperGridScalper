@@ -87,7 +87,13 @@ urlpatterns = [
     path('fund-managers/chat/media/', fm_views.fm_chat_media_upload, name='fm_chat_media_upload'),
     path('fund-managers/chat/profanity-check/', fm_views.check_chat_profanity, name='check_chat_profanity'),
     path('fund-managers/trade-command/', fm_views.fm_trade_command, name='fm_trade_command'),
+    path('fund-managers/ea-control/', fm_views.fm_get_ea_control, name='fm_get_ea_control'),
+    path('fund-managers/ea-control/save/', fm_views.fm_save_ea_control, name='fm_save_ea_control'),
     path('user-badges/', fm_views.get_user_badges, name='get_user_badges'),
+    
+    # EA Control Settings (user-configurable)
+    path('ea-control/', views.get_ea_control_settings, name='get_ea_control_settings'),
+    path('ea-control/save/', views.save_ea_control_settings, name='save_ea_control_settings'),
     
     # Guideline Videos
     path('guideline-videos/', views.get_guideline_videos, name='get_guideline_videos'),

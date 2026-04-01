@@ -329,6 +329,42 @@ class TradeData(models.Model):
         ]
 
 
+class EAControlSettings(models.Model):
+    """User-configurable EA control settings per license — lot size, daily targets, schedule stop"""
+    
+    license = models.OneToOneField(License, on_delete=models.CASCADE, related_name='ea_control')
+    
+    # Trade Lot Size
+    lot_size = models.DecimalField(max_digits=10, decimal_places=2, default=0.01, help_text="Trade lot size for EA")
+    
+    # Daily Balance/Equity Target
+    enable_daily_target = models.BooleanField(default=False, help_text="Enable daily profit target auto-stop")
+    daily_balance_target = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text="Daily balance target ($). EA stops when balance reaches this.")
+    daily_equity_target = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text="Daily equity target ($). EA stops when equity reaches this.")
+    cooldown_minutes = models.IntegerField(default=60, help_text="Minutes to keep EA stopped after hitting target before restarting")
+    
+    # Schedule Stop
+    enable_schedule_stop = models.BooleanField(default=False, help_text="Enable scheduled EA stop")
+    schedule_stop_hour = models.IntegerField(default=0, help_text="Hour to stop EA (0-23, server time)")
+    schedule_stop_minute = models.IntegerField(default=0, help_text="Minute to stop EA (0-59)")
+    schedule_stop_duration_minutes = models.IntegerField(default=60, help_text="How long to keep EA stopped (minutes)")
+    
+    # State tracking
+    target_hit_at = models.DateTimeField(null=True, blank=True, help_text="When the daily target was last hit")
+    is_target_stopped = models.BooleanField(default=False, help_text="Whether EA is currently stopped due to target hit")
+    is_schedule_stopped = models.BooleanField(default=False, help_text="Whether EA is currently stopped due to schedule")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"EA Control - {self.license.license_key[:12]}..."
+    
+    class Meta:
+        verbose_name = "EA Control Settings"
+        verbose_name_plural = "EA Control Settings"
+
+
 class EAProduct(models.Model):
     """EA Products for the EA Store - Managed from Django Admin"""
     

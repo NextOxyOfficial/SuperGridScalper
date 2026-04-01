@@ -14,10 +14,10 @@ input string    LicenseKey      = "";
 input bool      TesterMode      = false;
 input string    TesterAccountOverride = "";
 input bool      UseCachedLicenseInTester = true;
-#define CachedLicenseMaxAgeHours  24   // Hidden — cache expiry for tester only (live checks every 30s)
+input int       CachedLicenseMaxAgeHours = 24;
 
-//--- Max Drawdown Protection (fixed dollar amount)
-input double    MaxDrawdownAmount = 0;  // Max loss in $ to close all (0 = disabled). e.g. 500 = close all when $500 loss
+//--- Max Drawdown Protection
+input double    MaxDrawdownAmount = 0.0;  // Max loss in $ (0 = disabled). e.g. 200 means close all if loss >= $200
 
 //--- Per Order Stop Loss (0 = disabled)
 input double    BuyStopLossPips  = 120.0;   // Buy SL in pips (0 = no SL)
@@ -26,131 +26,163 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       2001.0
 #define BuyRangeEnd         8801.0
-#define BuyGapPips          3.0
-#define MaxBuyOrders        3
+#define BuyGapPips          5.0
+#define MaxBuyOrders        6
 #define BuyTakeProfitPips   25
 
 #define SellRangeStart      8802.0
 #define SellRangeEnd        2002.0
-#define SellGapPips         3.0
-#define MaxSellOrders       3
+#define SellGapPips         6.0
+#define MaxSellOrders       6
 #define SellTakeProfitPips  25
 
-#define BuyRecoveryGapPips   3
-#define SellRecoveryGapPips  3
+#define BuyRecoveryGapPips   6
+#define SellRecoveryGapPips  6
 
-// ===== TRAILING STOP SETTINGS (Normal Mode) =====
-// Formula: newSL = openPrice + InitialSL + ((profit - TrailingStart) × TrailingRatio)
-// 
-// Example (BUY @ 2650, Current = 2656, Profit = 6 pips):
-//   priceMovement = 6 - 3 = 3 pips
-//   slMovement = 3 × 0.5 = 1.5 pips  
-//   newSL = 2650 + 2 + 1.5 = 2653.50 (3.5 pips profit locked)
-//
-// | Profit | SL Position | Calculation |
-// |--------|-------------|-------------|
-// | 3 pip  | +2.0 pip    | Initial SL set |
-// | 5 pip  | +3.0 pip    | 2 + (2 × 0.5) |
-// | 10 pip | +5.5 pip    | 2 + (7 × 0.5) |
-// | 20 pip | +10.5 pip   | 2 + (17 × 0.5) |
+// ===== MULTI-TIMEFRAME DECISION ENGINE SETTINGS =====
+// Hierarchy: D1/H4 = macro bias, H1 = primary trend, M15 = regime, M5 = entry trigger
 
-#define BuyTrailingStartPips    3.0   // Pips in profit before trailing starts
-#define BuyInitialSLPips        2.5   // Initial SL lock-in pips when trailing activates
-#define BuyTrailingRatio        0.5   // SL moves this ratio per 1 pip of price movement (0.5 = 50%)
+// EMA Periods per timeframe
+#define D1_EMA_Period           20
+#define H4_EMA_Period           20
+#define H1_EMA_Period           20
+#define M15_EMA_Period          20
+#define M5_EMA_Period           14
 
-#define SellTrailingStartPips   3.0   // SELL trailing activation threshold
-#define SellInitialSLPips       2.5   // SELL initial SL lock-in pips
-#define SellTrailingRatio       0.5   // SELL trailing ratio
+// Slope bars (how many bars to measure EMA slope)
+#define D1_SlopeBars            5
+#define H4_SlopeBars            5
+#define H1_SlopeBars            5
+#define M15_SlopeBars           5
+#define M5_SlopeBars            3
+
+// ATR Settings
+#define ATR_Period              14
+#define ATR_Smoothing_Alpha     0.15            // EMA smoothing for ATR gap stability (lower = smoother)
+
+// ADX Settings (M15 regime detection)
+#define M15_ADX_Period          14
+#define ADX_TrendThreshold      25.0            // ADX >= 25 = trending
+#define ADX_StrongThreshold     35.0            // ADX >= 35 = strong trend
+
+// RSI Settings (M5 entry trigger)
+#define M5_RSI_Period           14
+#define M5_RSI_Overbought       70
+#define M5_RSI_Oversold         30
+#define M5_MinCandleBodyPips    1.0             // Min candle body for M5 momentum signal
+
+// Trend Score Thresholds (ATR-normalized slopes)
+#define H1_SlopeStrong          0.30            // H1 slope / H1_ATR >= 0.30 = strong trend
+#define H1_SlopeWeak            0.10            // H1 slope / H1_ATR >= 0.10 = weak trend
+#define MacroSlopeThreshold     0.08            // D1/H4 slope / ATR threshold for bias
+
+// Regime Detection Thresholds
+#define ATR_HighVolMultiple     1.6             // ATR > 1.6× avg = high volatility
+#define ATR_LowVolMultiple      0.5             // ATR < 0.5× avg = compression
+#define RegimeOverlapBars       6               // Candle overlap check bars for M15
+#define RegimeDirectionalMin    0.55            // Min directional efficiency for trend regime
+
+// Safety Limits
+#define MaxSpreadPips           4.0             // Max spread to allow new entries
+#define MaxFloatingLossPercent  30.0            // Max floating loss % per side before pause
+#define MaxTotalLotsPerSide     5.0             // Max total lots per side
+#define MinFreeMarginUSD        50.0            // Min free margin to open new trades
+#define RecoveryCooldownSec     30              // Seconds between recovery order additions
+
+// ===== TRAILING STOP SETTINGS =====
+// Staged trailing: mode chosen by regime/trend strength
+// Strong trend = looser trail, Neutral = tighter trail, Recovery = protect basket
+
+// Normal mode trailing
+#define BuyTrailingStartPips    3.0
+#define BuyInitialSLPips        2.0
+#define BuyTrailingRatio        0.65
+
+#define SellTrailingStartPips   3.0
+#define SellInitialSLPips       2.0
+#define SellTrailingRatio       0.65
+
+// Regime-adjusted trailing multipliers
+#define TrailRatioStrongTrend   0.50            // Looser in strong trend (let it run)
+#define TrailRatioWeakTrend     0.65            // Normal in weak trend
+#define TrailRatioNeutral       0.80            // Tighter in neutral (lock profits fast)
+
+// ===== ATR DYNAMIC GAP SETTINGS =====
+#define EnableATRGap            true
+#define ATR_Multiplier_Normal   0.6
+#define ATR_Multiplier_Recovery 1.0
+#define MinGapPips_Normal       5.0
+#define MinGapPips_Recovery     8.0
+#define MaxGapPips              25.0            // Higher ceiling for volatile H1 moves
+#define GapVolatilityBoost      1.4             // Gap multiplier in high-vol regime
+#define GapTrendBoost           1.2             // Gap multiplier in trending regime
 
 // ===== RECOVERY MODE SETTINGS =====
-// Recovery mode calculates from average price, not individual positions
+// Recovery mode এ average price থেকে calculate হয়, individual position থেকে না
 // Recovery mode activates when positions >= MaxOrders
 
 #define EnableRecovery          true   // Recovery mode enable/disable
-#define RecoveryTakeProfitPips  25.0  // Recovery TP from average price - NOT USED for breakeven
-#define RecoveryBreakevenPips   3.0  // Profit pips for breakeven close (long-distance + profitable positions)
-#define RecoveryTrailingStartPips 2.5  // Recovery trailing activation threshold
-#define RecoveryInitialSLPips   2.50    // Recovery initial SL lock-in pips
-#define RecoveryTrailingRatio   0.5    // Recovery trailing ratio
-#define RecoveryLotIncrement    0.01   // Lot size increment per recovery order (fixed)
-#define MaxRecoveryLotSize      0.35    // Recovery lot cap (base 0.30 + max 5 increments = 0.35)
-#define MaxRecoveryOrders       30
-#define RecoveryCleanupThreshold 3  // When only recovery positions remain and count <= this, close all and restart normal mode
+#define RecoveryTakeProfitPips  25.0  // Recovery mode এ TP (average price থেকে) - NOT USED for breakeven
+#define RecoveryBreakevenPips   3.5  // Breakeven close এ profit pips (long-distance + profitable positions)
+#define RecoveryTrailingStartPips 3.5  // Recovery mode এ trailing শুরু threshold
+#define RecoveryInitialSLPips   2.75    // Recovery mode এ initial SL
+#define RecoveryTrailingRatio   0.5    // Recovery mode এ trailing ratio
+#define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
+#define MaxRecoveryLotSize      0.25    // Recovery mode এ সর্বোচ্চ lot size (এর বেশি হবে না)
+#define MaxRecoveryOrders       200
+#define RecoveryCleanupThreshold 4  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
 
-// ===== TREND SKIP MODE SETTINGS =====
-// When one side (BUY or SELL) has positions trailing in profit,
-// new grid orders on the opposite side are SKIPPED.
-// Prevents accumulating positions against strong trends, protecting equity.
-// Normal grid resumes when the trailing profitable side closes.
-
-#define EnableTrendSkip         true    // Trend skip mode enable/disable
-#define SkipActivationPips      1.0     // Pips in profit to skip opposite side (1 pip = very early skip)
-
-// ===== EQUITY-BASED SKIP SETTINGS =====
-// If floating loss exceeds a certain % of balance, that losing side's grid auto-pauses.
-// Works as OR condition with Trend Skip — either one triggers the pause.
-// Example: Balance=$1000, EquitySkipPercent=5.0 → $50 floating loss triggers skip.
-
-#define EnableEquitySkip        true    // Equity-based skip enable/disable
-#define EquitySkipPercent       5.0     // % of balance loss to trigger skip on the losing side
-
-// ===== SPREAD FILTER =====
-// High spread pauses new orders (existing position management continues)
-// XAUUSD normal spread: 20-30 pts, news time: 50-100+
-#define EnableSpreadFilter      true    // Block new orders during extreme spread
-#define MaxSpreadPoints         400     // XAUUSD: normal 20-50, news 100+. 400 = only extreme spike block
-
-// ===== SESSION FILTER =====
-// Trade only during specific session hours. Uses broker server time.
-// Check your broker's server time and adjust accordingly.
-// Typically GMT+2/+3. London open = 09 (GMT+2), NY close = 23 (GMT+2)
-#define EnableSessionFilter     false   // Enable session time filter (keep false initially)
-#define SessionStartHour        9       // Broker server hour — session start (adjust for your broker)
-#define SessionEndHour          23      // Broker server hour — session end (adjust for your broker)
-
-// ===== ATR-BASED DYNAMIC GRID =====
-// Uses ATR instead of static gap for dynamic grid spacing
-// High volatility = wider gap (fewer trades, safer), Low volatility = tighter gap
-#define EnableATRGrid           true    // M15 ATR-based dynamic gap — high volatility = wider gap = safer entries
-#define ATRPeriod               14      // ATR calculation period
-#define ATRTimeframe            PERIOD_M15  // ATR timeframe
-#define ATRGridMultiplier       0.5     // Grid gap = ATR × multiplier (0.5 = half ATR)
-#define MinGridGapPips          2.0     // Minimum gap (floor even if ATR is very low)
-#define MaxGridGapPips          8.0     // Maximum gap (cap even if ATR is very high)
-
-// ===== TREND DIRECTION FILTER (EMA) =====
-// EMA slope detects trend direction to reduce counter-trend entries
-// Complements Trend Skip — Skip is reactive, EMA is proactive
-#define EnableTrendFilter       true    // M15 EMA trend follow ON — blocks counter-trend normal grid, allows with-trend
-#define EMA_Period              50      // EMA period (50 = medium-term trend)
-#define EMA_Timeframe           PERIOD_M15  // EMA calculation timeframe
-#define EMA_SlopeMinPips        1.5     // Minimum slope (last 5 bars) to consider trending (1.5 = more sensitive)
-
-// ===== RECOVERY SAFETY CAPS =====
-// Limits total exposure in recovery mode
-#define MaxTotalLotsPerSide     3.0     // Max total lots per side (normal + recovery combined)
-#define MaxFloatingLossPerSide  30.0    // Max floating loss per side as % of balance (30% = $2250 on $7500). 0 = disabled
-#define MinFreeMarginForRecovery 200.0  // Minimum free margin ($) required to place recovery order
-#define RecoveryCooldownSeconds  30     // Wait seconds after recovery fill before next recovery order
-
-// ===== DAILY LIMITS =====
-// Pause new entries after daily profit/loss target is reached
-#define EnableDailyLimits       false   // Enable daily profit/loss limits
-#define DailyProfitTarget       0.0     // Daily profit target in $ to pause entries (0 = disabled)
-#define DailyMaxLoss            0.0     // Daily max loss in $ to pause entries (0 = disabled)
-
-// ===== NEWS PAUSE (Manual) =====
-// Toggle manually to pause EA during news events
-// Future: auto news API integration planned
-input bool      PauseForNews    = false;  // true = pause all new orders (existing positions still managed)
-
-#define LotSize         0.30
+#define LotSize         0.10
 #define MagicNumber     999888
 #define OrderComment    "CleanGrid"
 #define ManageAllTrades false
 
 //--- Server URL (Hidden from user)
 string    LicenseServer     = "https://markstrades.com";
+
+// ===== MARKET REGIME ENUM =====
+enum ENUM_MARKET_REGIME
+{
+    REGIME_TREND_UP,            // Strong directional up — BUY only
+    REGIME_TREND_DOWN,          // Strong directional down — SELL only
+    REGIME_NEUTRAL_RANGE,       // Low velocity range — both-side hedging OK
+    REGIME_HIGH_VOLATILITY,     // Chaos / spike — reduce entries, widen gaps
+    REGIME_LOW_COMPRESSION,     // Squeeze — both sides OK with caution
+    REGIME_TRANSITION           // Conflict / unclear — defensive, minimal entries
+};
+
+// ===== TRAILING MODE ENUM =====
+enum ENUM_TRAIL_MODE
+{
+    TRAIL_NONE,                 // No trailing active yet
+    TRAIL_SAFETY_SL,            // Safety SL set (from open price)
+    TRAIL_BREAKEVEN,            // Breakeven lock
+    TRAIL_SOFT,                 // Soft trailing (low ratio)
+    TRAIL_AGGRESSIVE            // Aggressive trailing (high ratio)
+};
+
+// ===== MARKET STATE — single source of truth for all decisions =====
+struct MarketState
+{
+    int               macroBias;         // D1/H4: -2=strong bear, -1=bear, 0=neutral, +1=bull, +2=strong bull
+    int               trendScore;        // H1: -2=strong bear, -1=bear, 0=neutral, +1=bull, +2=strong bull
+    ENUM_MARKET_REGIME regime;           // M15 regime classification
+    int               m5Entry;           // M5: -1=sell trigger, 0=no trigger, +1=buy trigger
+    double            atrH1;             // H1 ATR in pips (raw)
+    double            atrM15;            // M15 ATR in pips (raw)
+    double            smoothedATR;       // EMA-smoothed H1 ATR for gap stability
+    double            atrM15Avg;         // Rolling average M15 ATR for regime detection
+    double            spreadPips;        // Current spread in pips
+    double            adxValue;          // M15 ADX value
+    bool              buyAllowed;        // Final decision: can open new BUY?
+    bool              sellAllowed;       // Final decision: can open new SELL?
+    string            buyBlockReason;    // Why BUY blocked (for panel/log)
+    string            sellBlockReason;   // Why SELL blocked (for panel/log)
+    string            regimeText;        // Human-readable regime name
+    double            h1SlopeNorm;       // H1 slope normalized by ATR (for diagnostics)
+    datetime          lastRecoveryBuyAdd;  // Last time recovery BUY order added
+    datetime          lastRecoverySellAdd; // Last time recovery SELL order added
+};
 
 //--- Global Variables
 double pip = 1.0;
@@ -160,6 +192,25 @@ int totalBuyOrders = 0;           // Positions + Pending (for grid limit)
 int totalSellOrders = 0;          // Positions + Pending (for grid limit)
 bool buyInRecovery = false;
 bool sellInRecovery = false;
+
+// Multi-TF Indicator Handles
+int g_D1_EMA_Handle  = INVALID_HANDLE;
+int g_H4_EMA_Handle  = INVALID_HANDLE;
+int g_H1_EMA_Handle  = INVALID_HANDLE;
+int g_M15_EMA_Handle = INVALID_HANDLE;
+int g_M5_EMA_Handle  = INVALID_HANDLE;
+int g_H1_ATR_Handle  = INVALID_HANDLE;
+int g_M15_ATR_Handle = INVALID_HANDLE;
+int g_M15_ADX_Handle = INVALID_HANDLE;
+int g_M5_RSI_Handle  = INVALID_HANDLE;
+
+// Market State (updated every tick by UpdateMarketState)
+MarketState g_State;
+
+// Legacy compat aliases (used by existing grid/panel code)
+#define g_TrendBias      g_State.trendScore
+#define g_MomentumSignal g_State.m5Entry
+#define g_CurrentATR     g_State.atrH1
 // Multi-bundle system: each bundle has unique ID and tracks its own positions
 struct BundleEntry
 {
@@ -170,22 +221,6 @@ BundleEntry buyBundles[];
 BundleEntry sellBundles[];
 int nextBuyBundleId = 1;
 int nextSellBundleId = 1;
-
-// Trend Skip Mode state
-bool skipBuyGrid = false;    // true = don't place new BUY grid/recovery orders
-bool skipSellGrid = false;   // true = don't place new SELL grid/recovery orders
-bool buyEquitySkipped = false;  // true = BUY side skipped due to heavy floating loss (equity skip)
-bool sellEquitySkipped = false; // true = SELL side skipped due to heavy floating loss (equity skip)
-
-// Smart Filter state
-bool g_NewEntriesBlocked = false;  // Master block flag (spread/session/daily/news)
-string g_BlockReason = "";         // Why entries are blocked
-bool g_BlockCancelPending = false; // true = pending orders are deleted when blocked (hard block only)
-int g_ATRHandle = INVALID_HANDLE;  // ATR indicator handle
-int g_EMAHandle = INVALID_HANDLE;  // EMA indicator handle
-datetime g_LastBuyRecoveryFill = 0;  // Last BUY recovery order fill time (for cooldown)
-datetime g_LastSellRecoveryFill = 0; // Last SELL recovery order fill time (for cooldown)
-int g_TrendBias = 0;              // -1=bearish, 0=neutral, +1=bullish (from EMA)
 
 // Trading Log
 struct LogEntry
@@ -216,21 +251,43 @@ int OnInit()
     pip = 1.0; // For XAUUSD
     trade.SetExpertMagicNumber(MagicNumber);
     
-    // Initialize ATR indicator
-    if(EnableATRGrid)
-    {
-        g_ATRHandle = iATR(_Symbol, ATRTimeframe, ATRPeriod);
-        if(g_ATRHandle == INVALID_HANDLE)
-            Print("WARNING: Failed to create ATR indicator handle");
-    }
+    // ===== Initialize Multi-TF Indicator Handles =====
+    // EMA handles (all timeframes)
+    g_D1_EMA_Handle  = iMA(_Symbol, PERIOD_D1,  D1_EMA_Period,  0, MODE_EMA, PRICE_CLOSE);
+    g_H4_EMA_Handle  = iMA(_Symbol, PERIOD_H4,  H4_EMA_Period,  0, MODE_EMA, PRICE_CLOSE);
+    g_H1_EMA_Handle  = iMA(_Symbol, PERIOD_H1,  H1_EMA_Period,  0, MODE_EMA, PRICE_CLOSE);
+    g_M15_EMA_Handle = iMA(_Symbol, PERIOD_M15, M15_EMA_Period, 0, MODE_EMA, PRICE_CLOSE);
+    g_M5_EMA_Handle  = iMA(_Symbol, PERIOD_M5,  M5_EMA_Period,  0, MODE_EMA, PRICE_CLOSE);
     
-    // Initialize EMA indicator
-    if(EnableTrendFilter)
-    {
-        g_EMAHandle = iMA(_Symbol, EMA_Timeframe, EMA_Period, 0, MODE_EMA, PRICE_CLOSE);
-        if(g_EMAHandle == INVALID_HANDLE)
-            Print("WARNING: Failed to create EMA indicator handle");
-    }
+    // ATR handles (H1 for gap sizing, M15 for regime detection)
+    g_H1_ATR_Handle  = iATR(_Symbol, PERIOD_H1,  ATR_Period);
+    g_M15_ATR_Handle = iATR(_Symbol, PERIOD_M15, ATR_Period);
+    
+    // ADX handle (M15 for regime detection)
+    g_M15_ADX_Handle = iADX(_Symbol, PERIOD_M15, M15_ADX_Period);
+    
+    // RSI handle (M5 for entry trigger)
+    g_M5_RSI_Handle  = iRSI(_Symbol, PERIOD_M5, M5_RSI_Period, PRICE_CLOSE);
+    
+    // Validate all handles
+    if(g_D1_EMA_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create D1 EMA handle");
+    if(g_H4_EMA_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create H4 EMA handle");
+    if(g_H1_EMA_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create H1 EMA handle");
+    if(g_M15_EMA_Handle == INVALID_HANDLE) Print("WARNING: Failed to create M15 EMA handle");
+    if(g_M5_EMA_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create M5 EMA handle");
+    if(g_H1_ATR_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create H1 ATR handle");
+    if(g_M15_ATR_Handle == INVALID_HANDLE) Print("WARNING: Failed to create M15 ATR handle");
+    if(g_M15_ADX_Handle == INVALID_HANDLE) Print("WARNING: Failed to create M15 ADX handle");
+    if(g_M5_RSI_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create M5 RSI handle");
+    
+    // Initialize state
+    ZeroMemory(g_State);
+    g_State.regime = REGIME_NEUTRAL_RANGE;
+    g_State.buyAllowed = true;
+    g_State.sellAllowed = true;
+    g_State.buyBlockReason = "OK";
+    g_State.sellBlockReason = "OK";
+    g_State.regimeText = "INITIALIZING";
     
     // FORCE license to invalid until verified
     g_LicenseValid = false;
@@ -277,9 +334,16 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-    // Release indicator handles
-    if(g_ATRHandle != INVALID_HANDLE) IndicatorRelease(g_ATRHandle);
-    if(g_EMAHandle != INVALID_HANDLE) IndicatorRelease(g_EMAHandle);
+    // Release all multi-TF indicator handles
+    if(g_D1_EMA_Handle  != INVALID_HANDLE) IndicatorRelease(g_D1_EMA_Handle);
+    if(g_H4_EMA_Handle  != INVALID_HANDLE) IndicatorRelease(g_H4_EMA_Handle);
+    if(g_H1_EMA_Handle  != INVALID_HANDLE) IndicatorRelease(g_H1_EMA_Handle);
+    if(g_M15_EMA_Handle != INVALID_HANDLE) IndicatorRelease(g_M15_EMA_Handle);
+    if(g_M5_EMA_Handle  != INVALID_HANDLE) IndicatorRelease(g_M5_EMA_Handle);
+    if(g_H1_ATR_Handle  != INVALID_HANDLE) IndicatorRelease(g_H1_ATR_Handle);
+    if(g_M15_ATR_Handle != INVALID_HANDLE) IndicatorRelease(g_M15_ATR_Handle);
+    if(g_M15_ADX_Handle != INVALID_HANDLE) IndicatorRelease(g_M15_ADX_Handle);
+    if(g_M5_RSI_Handle  != INVALID_HANDLE) IndicatorRelease(g_M5_RSI_Handle);
     
     // Delete all chart objects
     ObjectDelete(0, "EA_ModeStatus");
@@ -305,10 +369,14 @@ void OnDeinit(const int reason)
     ObjectDelete(0, "EA_LicenseDays");
     ObjectDelete(0, "EA_LicenseStatus");
     ObjectDelete(0, "EA_LicenseWarning");
-    ObjectDelete(0, "EA_SkipStatus");
-    ObjectDelete(0, "EA_SkipStatus2");
-    ObjectDelete(0, "EA_FilterStatus");
+    ObjectDelete(0, "EA_MacroBias");
     ObjectDelete(0, "EA_TrendInfo");
+    ObjectDelete(0, "EA_RegimeInfo");
+    ObjectDelete(0, "EA_M5Entry");
+    ObjectDelete(0, "EA_EntrySignal");
+    ObjectDelete(0, "EA_ATRInfo");
+    ObjectDelete(0, "EA_BuyBlock");
+    ObjectDelete(0, "EA_SellBlock");
     
     // Only delete pending orders when EA is actually removed
     if(reason == REASON_REMOVE || reason == REASON_CHARTCLOSE || reason == REASON_PROGRAM)
@@ -380,57 +448,24 @@ void OnTick()
     // Max Drawdown Protection — close all if loss exceeds limit
     if(CheckMaxDrawdown()) return;
     
-    // Smart Filters — update entry block status (spread, session, daily limits, news)
-    UpdateEntryBlockStatus();
-    
-    // Update trend bias from EMA (runs every tick, lightweight)
-    UpdateTrendBias();
+    // ===== MULTI-TF STATE UPDATE (single call updates everything) =====
+    UpdateMarketState();
     
     // Count current positions
     CountPositions();
-    
-    // Trend Skip Detection — check if one side is profiting and should skip opposite
-    DetectTrendSkip();
-    
-    // Debug: Log current state every 30 seconds
-    static datetime lastDebugLog = 0;
-    if(TimeCurrent() - lastDebugLog > 30)
-    {
-        double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-        string trendStr = (g_TrendBias == 1) ? "UP" : (g_TrendBias == -1) ? "DOWN" : "FLAT";
-        AddToLog(StringFormat("DEBUG | Price: %.2f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d | SkipBuy: %s | SkipSell: %s | Trend: %s | Block: %s", 
-            currentBid,
-            buyInRecovery ? "RECOVERY" : "NORMAL",
-            sellInRecovery ? "RECOVERY" : "NORMAL",
-            currentBuyPositions,
-            currentSellPositions,
-            skipBuyGrid ? "YES" : "NO",
-            skipSellGrid ? "YES" : "NO",
-            trendStr,
-            g_NewEntriesBlocked ? g_BlockReason : "NO"), "DEBUG");
-        lastDebugLog = TimeCurrent();
-    }
     
     // Track previous mode for logging mode changes
     static bool prevBuyInRecovery = false;
     static bool prevSellInRecovery = false;
     
     // Determine mode
-    // Primary trigger: positions >= MaxOrders (normal grid full)
-    // Secondary trigger: equity-skipped + has positions (deadlock breaker)
-    //   Without this, equity skip blocks new normal orders but positions < MaxOrders
-    //   means recovery never activates = stuck with losing positions forever.
-    //   Recovery bypasses equity skip, so it can place averaging orders to breakeven.
-    buyInRecovery = (currentBuyPositions >= MaxBuyOrders) || 
-                    (buyEquitySkipped && currentBuyPositions > 0 && EnableRecovery);
-    sellInRecovery = (currentSellPositions >= MaxSellOrders) || 
-                     (sellEquitySkipped && currentSellPositions > 0 && EnableRecovery);
+    buyInRecovery = (currentBuyPositions >= MaxBuyOrders);
+    sellInRecovery = (currentSellPositions >= MaxSellOrders);
     
     // Log mode changes
     if(buyInRecovery && !prevBuyInRecovery)
     {
-        string trigger = (currentBuyPositions >= MaxBuyOrders) ? "Grid Full" : "Equity Skip Deadlock";
-        AddToLog(StringFormat("BUY RECOVERY MODE ACTIVATED (%s | Pos: %d)", trigger, currentBuyPositions), "MODE");
+        AddToLog("BUY RECOVERY MODE ACTIVATED", "MODE");
     }
     else if(!buyInRecovery && prevBuyInRecovery)
     {
@@ -442,8 +477,7 @@ void OnTick()
     
     if(sellInRecovery && !prevSellInRecovery)
     {
-        string trigger = (currentSellPositions >= MaxSellOrders) ? "Grid Full" : "Equity Skip Deadlock";
-        AddToLog(StringFormat("SELL RECOVERY MODE ACTIVATED (%s | Pos: %d)", trigger, currentSellPositions), "MODE");
+        AddToLog("SELL RECOVERY MODE ACTIVATED", "MODE");
     }
     else if(!sellInRecovery && prevSellInRecovery)
     {
@@ -466,100 +500,61 @@ void OnTick()
     // and recovery count <= threshold, allowing fresh normal mode restart
     RecoveryCleanupWorker();
     
-    // Skip Enforcement Worker — safety net: delete any pending orders that violate
-    // skip/EMA/block rules (catches race conditions, EA restart, mode transitions)
-    SkipEnforcementWorker();
-    
-    // Manage grids based on mode (with Trend Skip + Smart Filter protection)
-    // Priority: Master Block > Trend Skip > Trend Filter > Normal/Recovery Grid
+    // ===== STATE-DRIVEN GRID MANAGEMENT =====
+    // Uses AllowNewNormalEntry() results from UpdateMarketState()
+    // Behavior adapts: directional in trend, both-side in neutral, defensive in conflict
     
     // === BUY SIDE ===
-    if(buyInRecovery)
+    if(!buyInRecovery)
     {
-        // Recovery bypasses: Equity Skip, Pip-based Trend Skip
-        // Recovery WAITS for: Favorable trend (EMA bullish or neutral)
-        // Recovery PAUSES: Spread spike, Session, News, Daily limit
-        // Recovery Safety Caps (lots/loss/margin/cooldown) provide their own protection
-        if(g_NewEntriesBlocked)
-        {
-            if(g_BlockCancelPending)
-                DeleteAllPendingOrdersForSide(true);
-            // else: spread/session = soft pause, recovery pendings stay but no new placement
-        }
+        if(g_State.buyAllowed)
+            ManageNormalGrid(true);
         else
-        {
-            DeleteNormalPendingOrders(true);
-            // Only place NEW recovery orders when trend is favorable (bullish/neutral)
-            // Counter-trend (bearish) = wait, but keep existing recovery pendings alive
-            if(g_TrendBias >= 0) // Bullish or Neutral → safe to average BUY
-                ManageRecoveryGrid(true); // BUY Recovery
-        }
-    }
-    else if(g_NewEntriesBlocked)
-    {
-        // Soft block (spread/session) = pause new placement only, pendings stay
-        // Hard block (news/daily) = delete pending orders
-        if(g_BlockCancelPending)
-            DeleteAllPendingOrdersForSide(true);
-        // else: only ManageNormalGrid is skipped, existing pendings stay alive
-    }
-    else if(skipBuyGrid)
-    {
-        // Pip-based or equity skip → BUY normal grid PAUSE
-        // Delete pending BUY orders so broker can't fill them during skip
-        DeleteAllPendingOrdersForSide(true);
-    }
-    else if(IsTrendFiltered(true) && !skipSellGrid)
-    {
-        // EMA bearish → BUY pause, BUT only if SELL side is NOT equity-skipped
-        // If SELL is equity-skipped (losing), BUY MUST trade to earn — bypass EMA filter
-        DeleteAllPendingOrdersForSide(true);
+            DeleteAllPendingOrdersForSide(true); // Block BUY — clear pending
     }
     else
     {
-        ManageNormalGrid(true);  // BUY Normal Mode — trend WITH us, neutral, or opposite side equity-skipped
+        // BUY Recovery Mode — apply safety check before allowing new recovery orders
+        DeleteNormalPendingOrders(true);
+        string recReason = "";
+        if(IsRecoverySafe(true, recReason))
+            ManageRecoveryGrid(true);
+        else
+        {
+            // Recovery paused — keep existing positions, just don't add new ones
+            static datetime lastBuyRecLog = 0;
+            if(TimeCurrent() - lastBuyRecLog > 15)
+            {
+                AddToLog(StringFormat("BUY Recovery PAUSED: %s", recReason), "RECOVERY");
+                lastBuyRecLog = TimeCurrent();
+            }
+        }
     }
     
     // === SELL SIDE ===
-    if(sellInRecovery)
+    if(!sellInRecovery)
     {
-        // Recovery bypasses: Equity Skip, Pip-based Trend Skip
-        // Recovery WAITS for: Favorable trend (EMA bearish or neutral)
-        // Recovery PAUSES: Spread spike, Session, News, Daily limit
-        if(g_NewEntriesBlocked)
-        {
-            if(g_BlockCancelPending)
-                DeleteAllPendingOrdersForSide(false);
-        }
+        if(g_State.sellAllowed)
+            ManageNormalGrid(false);
         else
-        {
-            DeleteNormalPendingOrders(false);
-            // Only place NEW recovery orders when trend is favorable (bearish/neutral)
-            // Counter-trend (bullish) = wait, but keep existing recovery pendings alive
-            if(g_TrendBias <= 0) // Bearish or Neutral → safe to average SELL
-                ManageRecoveryGrid(false); // SELL Recovery
-        }
-    }
-    else if(g_NewEntriesBlocked)
-    {
-        if(g_BlockCancelPending)
-            DeleteAllPendingOrdersForSide(false);
-    }
-    else if(skipSellGrid)
-    {
-        // Pip-based or equity skip → SELL normal grid PAUSE
-        // Delete pending SELL orders so broker can't fill them during skip
-        DeleteAllPendingOrdersForSide(false);
-    }
-    else if(IsTrendFiltered(false) && !skipBuyGrid)
-    {
-        // EMA bullish → SELL pause, BUT only if BUY side is NOT equity-skipped
-        // If BUY is equity-skipped (losing), SELL MUST trade to earn — bypass EMA filter
-        DeleteAllPendingOrdersForSide(false);
+            DeleteAllPendingOrdersForSide(false); // Block SELL — clear pending
     }
     else
     {
-        ManageNormalGrid(false); // SELL Normal Mode — trend WITH us, neutral, or opposite side equity-skipped
+        // SELL Recovery Mode — apply safety check
+        DeleteNormalPendingOrders(false);
+        string recReason = "";
+        if(IsRecoverySafe(false, recReason))
+            ManageRecoveryGrid(false);
+        else
+        {
+            static datetime lastSellRecLog = 0;
+            if(TimeCurrent() - lastSellRecLog > 15)
+            {
+                AddToLog(StringFormat("SELL Recovery PAUSED: %s", recReason), "RECOVERY");
+                lastSellRecLog = TimeCurrent();
+            }
+        }
     }
     
     // CRITICAL: Recovery Mode TP Worker - runs every tick to ensure TP is at breakeven
@@ -753,185 +748,337 @@ bool IsTesterMode()
     return (TesterMode && (MQLInfoInteger(MQL_TESTER) != 0));
 }
 
-//+------------------------------------------------------------------+
-//| SMART FILTER SYSTEM — All entry quality checks                    |
-//+------------------------------------------------------------------+
+// =====================================================================
+// MULTI-TIMEFRAME DECISION ENGINE
+// D1/H4 = macro bias | H1 = trend score | M15 = regime | M5 = entry
+// =====================================================================
 
-// Check if spread is acceptable for new orders
-bool IsSpreadOK()
+//+------------------------------------------------------------------+
+//| Helper: Read EMA slope in pips over N bars for given handle       |
+//+------------------------------------------------------------------+
+double ReadEMASlope(int handle, int bars)
 {
-    if(!EnableSpreadFilter) return true;
-    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    if(handle == INVALID_HANDLE) return 0.0;
+    double buf[];
+    ArraySetAsSeries(buf, true);
+    if(CopyBuffer(handle, 0, 0, bars + 1, buf) < bars + 1) return 0.0;
+    return (buf[0] - buf[bars]) / pip;
+}
+
+//+------------------------------------------------------------------+
+//| Helper: Read single ATR value in pips for given handle            |
+//+------------------------------------------------------------------+
+double ReadATR(int handle)
+{
+    if(handle == INVALID_HANDLE) return 0.0;
+    double buf[];
+    ArraySetAsSeries(buf, true);
+    if(CopyBuffer(handle, 0, 0, 1, buf) < 1) return 0.0;
+    return buf[0] / pip;
+}
+
+//+------------------------------------------------------------------+
+//| Helper: Read ADX main value for given handle                      |
+//+------------------------------------------------------------------+
+double ReadADX(int handle)
+{
+    if(handle == INVALID_HANDLE) return 0.0;
+    double buf[];
+    ArraySetAsSeries(buf, true);
+    if(CopyBuffer(handle, 0, 0, 1, buf) < 1) return 0.0; // buffer 0 = main ADX
+    return buf[0];
+}
+
+//+------------------------------------------------------------------+
+//| Helper: Read RSI value                                            |
+//+------------------------------------------------------------------+
+double ReadRSI(int handle)
+{
+    if(handle == INVALID_HANDLE) return 50.0;
+    double buf[];
+    ArraySetAsSeries(buf, true);
+    if(CopyBuffer(handle, 0, 0, 1, buf) < 1) return 50.0;
+    return buf[0];
+}
+
+//+------------------------------------------------------------------+
+//| Helper: Read EMA value (latest bar)                               |
+//+------------------------------------------------------------------+
+double ReadEMA(int handle)
+{
+    if(handle == INVALID_HANDLE) return 0.0;
+    double buf[];
+    ArraySetAsSeries(buf, true);
+    if(CopyBuffer(handle, 0, 0, 1, buf) < 1) return 0.0;
+    return buf[0];
+}
+
+//+------------------------------------------------------------------+
+//| Calculate M15 directional efficiency (% of net move vs total)     |
+//| High efficiency = trending, Low = choppy/overlapping              |
+//+------------------------------------------------------------------+
+double CalcDirectionalEfficiency(ENUM_TIMEFRAMES tf, int bars)
+{
+    double closes[];
+    ArraySetAsSeries(closes, true);
+    if(CopyClose(_Symbol, tf, 1, bars, closes) < bars) return 0.5;
+    
+    double netMove = MathAbs(closes[0] - closes[bars - 1]);
+    double totalMove = 0.0;
+    for(int i = 0; i < bars - 1; i++)
+        totalMove += MathAbs(closes[i] - closes[i + 1]);
+    
+    if(totalMove <= 0.0) return 0.5;
+    return netMove / totalMove; // 0.0=pure chop, 1.0=pure trend
+}
+
+//+------------------------------------------------------------------+
+//| H1 Market Structure: detect HH/HL (bullish) or LH/LL (bearish)   |
+//| Returns: +1 bullish structure, -1 bearish, 0 unclear              |
+//+------------------------------------------------------------------+
+int DetectH1Structure()
+{
+    double highs[], lows[];
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+    if(CopyHigh(_Symbol, PERIOD_H1, 1, 10, highs) < 10) return 0;
+    if(CopyLow(_Symbol, PERIOD_H1, 1, 10, lows) < 10) return 0;
+    
+    // Find swing points (simplified: compare bar with neighbors)
+    double swingHighs[3], swingLows[3];
+    int shCount = 0, slCount = 0;
+    
+    for(int i = 1; i < 9 && (shCount < 3 || slCount < 3); i++)
+    {
+        if(shCount < 3 && highs[i] > highs[i-1] && highs[i] > highs[i+1])
+        {
+            swingHighs[shCount] = highs[i];
+            shCount++;
+        }
+        if(slCount < 3 && lows[i] < lows[i-1] && lows[i] < lows[i+1])
+        {
+            swingLows[slCount] = lows[i];
+            slCount++;
+        }
+    }
+    
+    if(shCount < 2 || slCount < 2) return 0;
+    
+    // HH + HL = bullish (swing[0] is newest)
+    bool higherHigh = swingHighs[0] > swingHighs[1];
+    bool higherLow  = swingLows[0] > swingLows[1];
+    bool lowerHigh  = swingHighs[0] < swingHighs[1];
+    bool lowerLow   = swingLows[0] < swingLows[1];
+    
+    if(higherHigh && higherLow) return 1;   // Bullish structure
+    if(lowerHigh && lowerLow)   return -1;  // Bearish structure
+    return 0;
+}
+
+//+------------------------------------------------------------------+
+//| Calculate Macro Bias from D1 + H4 (filter only)                   |
+//| Returns: -2 strong bear, -1 bear, 0 neutral, +1 bull, +2 strong  |
+//+------------------------------------------------------------------+
+int CalcMacroBias()
+{
+    double d1Slope = ReadEMASlope(g_D1_EMA_Handle, D1_SlopeBars);
+    double h4Slope = ReadEMASlope(g_H4_EMA_Handle, H4_SlopeBars);
+    double atrH1   = g_State.atrH1;
+    if(atrH1 <= 0) atrH1 = 10.0; // safety fallback
+    
+    // Normalize slopes by ATR
+    double d1Norm = d1Slope / atrH1;
+    double h4Norm = h4Slope / atrH1;
+    
+    int d1Bias = 0, h4Bias = 0;
+    if(d1Norm >  MacroSlopeThreshold) d1Bias =  1;
+    if(d1Norm < -MacroSlopeThreshold) d1Bias = -1;
+    if(d1Norm >  MacroSlopeThreshold * 2.5) d1Bias =  2;
+    if(d1Norm < -MacroSlopeThreshold * 2.5) d1Bias = -2;
+    
+    if(h4Norm >  MacroSlopeThreshold) h4Bias =  1;
+    if(h4Norm < -MacroSlopeThreshold) h4Bias = -1;
+    if(h4Norm >  MacroSlopeThreshold * 2.5) h4Bias =  2;
+    if(h4Norm < -MacroSlopeThreshold * 2.5) h4Bias = -2;
+    
+    // Weighted average: H4 has more weight than D1 (more responsive)
+    double composite = d1Bias * 0.35 + h4Bias * 0.65;
+    
+    if(composite >=  1.3) return  2;
+    if(composite >=  0.4) return  1;
+    if(composite <= -1.3) return -2;
+    if(composite <= -0.4) return -1;
+    return 0;
+}
+
+//+------------------------------------------------------------------+
+//| Calculate H1 Trend Score using EMA slope + structure + macro      |
+//| Returns: -2 strong bear, -1 bear, 0 neutral, +1 bull, +2 strong  |
+//+------------------------------------------------------------------+
+int CalcH1TrendScore()
+{
+    double h1Slope = ReadEMASlope(g_H1_EMA_Handle, H1_SlopeBars);
+    double atrH1   = g_State.atrH1;
+    if(atrH1 <= 0) atrH1 = 10.0;
+    
+    // ATR-normalized slope
+    double normSlope = h1Slope / atrH1;
+    g_State.h1SlopeNorm = normSlope;
+    
+    // Base score from slope
+    int slopeScore = 0;
+    if(normSlope >=  H1_SlopeStrong) slopeScore =  2;
+    else if(normSlope >=  H1_SlopeWeak) slopeScore =  1;
+    else if(normSlope <= -H1_SlopeStrong) slopeScore = -2;
+    else if(normSlope <= -H1_SlopeWeak) slopeScore = -1;
+    
+    // Structure confirmation
+    int structure = DetectH1Structure();
+    
+    // Price vs H1 EMA
+    double h1EMA = ReadEMA(g_H1_EMA_Handle);
     double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-    double spreadPoints = (ask - bid) / _Point;
-    return (spreadPoints <= MaxSpreadPoints);
-}
-
-// Check if current time is within allowed trading session (broker server time)
-bool IsSessionOK()
-{
-    if(!EnableSessionFilter) return true;
-    MqlDateTime dt;
-    TimeTradeServer(dt);
-    int hour = dt.hour;
+    int priceVsEMA = 0;
+    if(h1EMA > 0)
+    {
+        double distPips = (bid - h1EMA) / pip;
+        if(distPips > 2.0) priceVsEMA = 1;
+        if(distPips < -2.0) priceVsEMA = -1;
+    }
     
-    if(SessionStartHour < SessionEndHour)
-        return (hour >= SessionStartHour && hour < SessionEndHour);
-    else // Wraps midnight (e.g. 22 to 06)
-        return (hour >= SessionStartHour || hour < SessionEndHour);
-}
-
-// Get ATR-based dynamic grid gap (in pips). Falls back to static gap if ATR unavailable.
-double GetATRGridGap(bool isBuy)
-{
-    double staticGap = isBuy ? BuyGapPips : SellGapPips;
-    if(!EnableATRGrid || g_ATRHandle == INVALID_HANDLE) return staticGap;
+    // Composite: slope is primary, structure and price confirm
+    double raw = slopeScore * 0.55 + structure * 0.25 + priceVsEMA * 0.20;
     
-    double atrBuffer[];
-    if(CopyBuffer(g_ATRHandle, 0, 0, 1, atrBuffer) <= 0) return staticGap;
+    // Macro alignment bonus: if macro agrees, strengthen score
+    if(g_State.macroBias != 0 && ((g_State.macroBias > 0 && raw > 0) || (g_State.macroBias < 0 && raw < 0)))
+        raw *= 1.15;
     
-    double atrValue = atrBuffer[0]; // ATR in price (e.g. 3.5 for XAUUSD = 3.5 pips)
-    double atrGap = (atrValue / pip) * ATRGridMultiplier;
+    // Macro conflict penalty: if macro strongly opposes, weaken score
+    if((g_State.macroBias >= 2 && raw < -0.3) || (g_State.macroBias <= -2 && raw > 0.3))
+        raw *= 0.6;
     
-    // Clamp to min/max
-    atrGap = MathMax(MinGridGapPips, MathMin(MaxGridGapPips, atrGap));
-    
-    return NormalizeDouble(atrGap, 1);
-}
-
-// Get trend bias from EMA slope: -1=bearish, 0=neutral, +1=bullish
-void UpdateTrendBias()
-{
-    g_TrendBias = 0;
-    if(!EnableTrendFilter || g_EMAHandle == INVALID_HANDLE) return;
-    
-    double emaBuffer[];
-    ArraySetAsSeries(emaBuffer, true); // [0]=newest bar, [5]=5 bars ago
-    if(CopyBuffer(g_EMAHandle, 0, 0, 6, emaBuffer) < 6) return;
-    
-    // Slope = (current EMA - EMA 5 bars ago) in pips
-    double slopeValue = (emaBuffer[0] - emaBuffer[5]) / pip;
-    
-    if(slopeValue >= EMA_SlopeMinPips)
-        g_TrendBias = 1;   // Bullish — EMA rising
-    else if(slopeValue <= -EMA_SlopeMinPips)
-        g_TrendBias = -1;  // Bearish — EMA falling
+    if(raw >=  1.2) return  2;
+    if(raw >=  0.35) return  1;
+    if(raw <= -1.2) return -2;
+    if(raw <= -0.35) return -1;
+    return 0;
 }
 
 //+------------------------------------------------------------------+
-//| Validate SL/TP for PENDING ORDERS (checks against order price)   |
-//| For pending orders, broker checks SL/TP relative to order price   |
-//| BUY: TP > orderPrice, SL < orderPrice                            |
-//| SELL: TP < orderPrice, SL > orderPrice                           |
+//| Detect Market Regime from M15 data                                |
+//| Uses: ATR ratio, ADX, directional efficiency, H1 trend           |
 //+------------------------------------------------------------------+
-void ValidateStops(bool isBuy, double orderPrice, double &sl, double &tp)
+ENUM_MARKET_REGIME DetectMarketRegime()
 {
-    int stopsLevel = (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
-    if(stopsLevel <= 0) stopsLevel = 10; // Fallback minimum
-    double minDist = stopsLevel * _Point;
+    double m15ATR = g_State.atrM15;
+    double m15Avg = g_State.atrM15Avg;
+    double adx    = g_State.adxValue;
+    int    trend  = g_State.trendScore;
     
-    // Validate TP direction and distance (relative to order price)
-    if(tp != 0)
+    // Calculate directional efficiency on M15
+    double dirEff = CalcDirectionalEfficiency(PERIOD_M15, RegimeOverlapBars);
+    
+    // ATR ratio for volatility classification
+    double atrRatio = (m15Avg > 0) ? (m15ATR / m15Avg) : 1.0;
+    
+    // HIGH VOLATILITY: ATR spike + low directional efficiency
+    if(atrRatio > ATR_HighVolMultiple && dirEff < 0.4)
     {
-        if(isBuy)
+        g_State.regimeText = "HIGH VOLATILITY";
+        return REGIME_HIGH_VOLATILITY;
+    }
+    
+    // STRONG TREND: good directional efficiency + ADX trending + H1 confirms
+    if(dirEff >= RegimeDirectionalMin && adx >= ADX_TrendThreshold)
+    {
+        if(trend >= 1)
         {
-            if(tp <= orderPrice) tp = 0;
-            else if(tp - orderPrice < minDist) tp = NormalizeDouble(orderPrice + minDist, _Digits);
+            g_State.regimeText = "TREND UP";
+            return REGIME_TREND_UP;
         }
-        else
+        if(trend <= -1)
         {
-            if(tp >= orderPrice) tp = 0;
-            else if(orderPrice - tp < minDist) tp = NormalizeDouble(orderPrice - minDist, _Digits);
+            g_State.regimeText = "TREND DOWN";
+            return REGIME_TREND_DOWN;
         }
     }
     
-    // Validate SL direction and distance (relative to order price)
-    if(sl != 0)
+    // LOW COMPRESSION: ATR very low
+    if(atrRatio < ATR_LowVolMultiple)
     {
-        if(isBuy)
-        {
-            if(sl >= orderPrice) sl = 0;
-            else if(orderPrice - sl < minDist) sl = NormalizeDouble(orderPrice - minDist, _Digits);
-        }
-        else
-        {
-            if(sl <= orderPrice) sl = 0;
-            else if(sl - orderPrice < minDist) sl = NormalizeDouble(orderPrice + minDist, _Digits);
-        }
+        g_State.regimeText = "COMPRESSION";
+        return REGIME_LOW_COMPRESSION;
     }
+    
+    // TRANSITION: H1 trend conflicts with macro, or ADX fading
+    if((g_State.macroBias > 0 && trend < 0) || (g_State.macroBias < 0 && trend > 0))
+    {
+        g_State.regimeText = "TRANSITION";
+        return REGIME_TRANSITION;
+    }
+    if(adx < 15.0 && MathAbs(trend) >= 1)
+    {
+        g_State.regimeText = "TRANSITION";
+        return REGIME_TRANSITION;
+    }
+    
+    // DEFAULT: Neutral range — both-side hedging allowed
+    g_State.regimeText = "NEUTRAL RANGE";
+    return REGIME_NEUTRAL_RANGE;
 }
 
 //+------------------------------------------------------------------+
-//| Validate SL/TP for POSITION MODIFICATIONS (against market price)  |
-//| For open positions, broker checks SL/TP distance from CURRENT     |
-//| market price (Bid for BUY, Ask for SELL), NOT from open price.    |
-//| Trailing SL on profitable positions moves between open and market  |
-//| price — this is valid and must NOT be rejected.                    |
-//| BUY: SL < Bid, TP > Bid (distance from Bid >= STOPS_LEVEL)       |
-//| SELL: SL > Ask, TP < Ask (distance from Ask >= STOPS_LEVEL)       |
+//| M5 Entry Trigger — fast timing signal                             |
+//| Returns: +1=buy trigger, -1=sell trigger, 0=no trigger            |
 //+------------------------------------------------------------------+
-void ValidateStopsForPosition(bool isBuy, double &sl, double &tp)
+int CalcM5EntryTrigger()
 {
-    int stopsLevel = (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
-    if(stopsLevel <= 0) stopsLevel = 10;
-    double minDist = stopsLevel * _Point;
+    double rsi = ReadRSI(g_M5_RSI_Handle);
+    double m5EMA = ReadEMA(g_M5_EMA_Handle);
+    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    if(m5EMA <= 0) return 0;
     
-    double marketPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    // M5 candle body check (last 3 closed candles)
+    double closes[], opens[];
+    ArraySetAsSeries(closes, true);
+    ArraySetAsSeries(opens, true);
+    if(CopyClose(_Symbol, PERIOD_M5, 1, 3, closes) < 3) return 0;
+    if(CopyOpen(_Symbol, PERIOD_M5, 1, 3, opens) < 3) return 0;
     
-    // Validate TP (must be on profitable side of market price)
-    if(tp != 0)
+    int bullCount = 0, bearCount = 0;
+    for(int i = 0; i < 3; i++)
     {
-        if(isBuy)
+        double body = MathAbs(closes[i] - opens[i]) / pip;
+        if(body >= M5_MinCandleBodyPips)
         {
-            if(tp <= marketPrice) tp = 0; // TP below current Bid = already triggered or invalid
-            else if(tp - marketPrice < minDist) tp = NormalizeDouble(marketPrice + minDist, _Digits);
-        }
-        else
-        {
-            if(tp >= marketPrice) tp = 0; // TP above current Ask = already triggered or invalid
-            else if(marketPrice - tp < minDist) tp = NormalizeDouble(marketPrice - minDist, _Digits);
+            if(closes[i] > opens[i]) bullCount++;
+            else bearCount++;
         }
     }
     
-    // Validate SL (must be on loss side of market price)
-    if(sl != 0)
-    {
-        if(isBuy)
-        {
-            if(sl >= marketPrice) sl = 0; // SL above Bid = would trigger immediately
-            else if(marketPrice - sl < minDist) sl = NormalizeDouble(marketPrice - minDist, _Digits);
-        }
-        else
-        {
-            if(sl <= marketPrice) sl = 0; // SL below Ask = would trigger immediately
-            else if(sl - marketPrice < minDist) sl = NormalizeDouble(marketPrice + minDist, _Digits);
-        }
-    }
+    bool priceAboveEMA = (bid > m5EMA);
+    bool priceBelowEMA = (bid < m5EMA);
+    
+    // Bullish trigger: bullish candles + above EMA + RSI not overbought
+    if(bullCount >= 2 && priceAboveEMA && rsi < M5_RSI_Overbought)
+        return 1;
+    
+    // Bearish trigger: bearish candles + below EMA + RSI not oversold
+    if(bearCount >= 2 && priceBelowEMA && rsi > M5_RSI_Oversold)
+        return -1;
+    
+    return 0;
 }
 
-// Check if a new NORMAL grid order should be blocked by trend filter
-// Returns true if this side SHOULD be blocked
-bool IsTrendFiltered(bool isBuy)
+//+------------------------------------------------------------------+
+//| Calculate floating loss for one side as % of balance              |
+//+------------------------------------------------------------------+
+double GetSideFloatingLossPercent(bool isBuy)
 {
-    if(!EnableTrendFilter) return false;
+    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+    if(balance <= 0) return 0.0;
     
-    // In strong uptrend: block new SELL entries (counter-trend)
-    // In strong downtrend: block new BUY entries (counter-trend)
-    if(isBuy && g_TrendBias == -1) return true;   // Bearish → don't open new BUY
-    if(!isBuy && g_TrendBias == 1) return true;    // Bullish → don't open new SELL
-    
-    return false;
-}
-
-// Check if recovery is safe to place a new order for this side
-bool IsRecoverySafe(bool isBuy, string &outReason)
-{
-    outReason = "";
-    
-    // Check 1: Total lots per side cap
-    double totalLots = 0;
-    double floatingLoss = 0;
-    
+    double sideLoss = 0.0;
     for(int i = 0; i < PositionsTotal(); i++)
     {
         ulong ticket = PositionGetTicket(i);
@@ -942,168 +1089,19 @@ bool IsRecoverySafe(bool isBuy, string &outReason)
         ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
         if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
         
-        totalLots += PositionGetDouble(POSITION_VOLUME);
         double profit = PositionGetDouble(POSITION_PROFIT);
-        if(profit < 0) floatingLoss += MathAbs(profit);
+        if(profit < 0) sideLoss += MathAbs(profit);
     }
     
-    if(MaxTotalLotsPerSide > 0 && totalLots >= MaxTotalLotsPerSide)
-    {
-        outReason = StringFormat("Lot cap (%.2f/%.2f)", totalLots, MaxTotalLotsPerSide);
-        return false;
-    }
-    
-    // Check 2: Max floating loss per side (% of balance)
-    if(MaxFloatingLossPerSide > 0)
-    {
-        double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-        double lossCap = balance * MaxFloatingLossPerSide / 100.0;
-        if(floatingLoss >= lossCap)
-        {
-            outReason = StringFormat("Loss cap ($%.0f / %.0f%% of $%.0f = $%.0f)", floatingLoss, MaxFloatingLossPerSide, balance, lossCap);
-            return false;
-        }
-    }
-    
-    // Check 3: Minimum free margin
-    if(MinFreeMarginForRecovery > 0)
-    {
-        double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
-        if(freeMargin < MinFreeMarginForRecovery)
-        {
-            outReason = StringFormat("Low margin ($%.0f < $%.0f)", freeMargin, MinFreeMarginForRecovery);
-            return false;
-        }
-    }
-    
-    // Check 4: Recovery cooldown
-    if(RecoveryCooldownSeconds > 0)
-    {
-        datetime lastFill = isBuy ? g_LastBuyRecoveryFill : g_LastSellRecoveryFill;
-        if(lastFill > 0 && (TimeCurrent() - lastFill) < RecoveryCooldownSeconds)
-        {
-            outReason = StringFormat("Cooldown (%ds)", RecoveryCooldownSeconds);
-            return false;
-        }
-    }
-    
-    return true;
-}
-
-// Calculate today's closed P/L for daily limit check
-double GetTodayClosedPnL()
-{
-    double todayPnL = 0;
-    MqlDateTime dt;
-    TimeCurrent(dt);
-    datetime dayStart = StringToTime(StringFormat("%04d.%02d.%02d 00:00:00", dt.year, dt.mon, dt.day));
-    
-    if(!HistorySelect(dayStart, TimeCurrent())) return 0;
-    
-    int totalDeals = HistoryDealsTotal();
-    for(int i = 0; i < totalDeals; i++)
-    {
-        ulong dealTicket = HistoryDealGetTicket(i);
-        if(dealTicket <= 0) continue;
-        if(HistoryDealGetString(dealTicket, DEAL_SYMBOL) != _Symbol) continue;
-        if(HistoryDealGetInteger(dealTicket, DEAL_MAGIC) != MagicNumber) continue;
-        
-        ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
-        if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT)
-            todayPnL += HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
-    }
-    return todayPnL;
-}
-
-// Check if daily limits are hit
-bool IsDailyLimitHit()
-{
-    if(!EnableDailyLimits) return false;
-    if(DailyProfitTarget <= 0 && DailyMaxLoss <= 0) return false;
-    
-    double todayPnL = GetTodayClosedPnL();
-    
-    if(DailyProfitTarget > 0 && todayPnL >= DailyProfitTarget) return true;
-    if(DailyMaxLoss > 0 && todayPnL <= -DailyMaxLoss) return true;
-    
-    return false;
-}
-
-// Master check: should new entries be blocked?
-// This checks spread, session, daily limits, news pause
-// Does NOT check trend skip (that's separate logic)
-void UpdateEntryBlockStatus()
-{
-    g_NewEntriesBlocked = false;
-    g_BlockReason = "";
-    g_BlockCancelPending = false;
-    
-    if(PauseForNews)
-    {
-        g_NewEntriesBlocked = true;
-        g_BlockReason = "NEWS PAUSE (manual)";
-        g_BlockCancelPending = true;
-        return;
-    }
-    
-    if(!IsSpreadOK())
-    {
-        g_NewEntriesBlocked = true;
-        double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-        double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-        double sp = (ask - bid) / _Point;
-        g_BlockReason = StringFormat("SPREAD %.0f > %d pts", sp, MaxSpreadPoints);
-        g_BlockCancelPending = false;
-        return;
-    }
-    
-    if(!IsSessionOK())
-    {
-        g_NewEntriesBlocked = true;
-        MqlDateTime dt;
-        TimeTradeServer(dt);
-        g_BlockReason = StringFormat("OUT OF SESSION (now=%02d, allowed=%d-%d)", dt.hour, SessionStartHour, SessionEndHour);
-        g_BlockCancelPending = false;
-        return;
-    }
-    
-    if(IsDailyLimitHit())
-    {
-        g_NewEntriesBlocked = true;
-        double pnl = GetTodayClosedPnL();
-        g_BlockReason = StringFormat("DAILY LIMIT (PnL=$%.2f)", pnl);
-        g_BlockCancelPending = true;
-        return;
-    }
+    return (sideLoss / balance) * 100.0;
 }
 
 //+------------------------------------------------------------------+
-//| Trend Skip Detection (Enhanced: Early + Equity-Based)             |
-//| 3 layers of protection:                                           |
-//| Layer 1: Pip-based — any position profit ≥ SkipActivationPips     |
-//| Layer 2: Equity-based — floating loss ≥ EquitySkipPercent% of bal |
-//|          → skip the LOSING side (don't add more losing orders)    |
-//| Layer 3: Both sides profit = ranging market = NO skip             |
+//| Get total lots for one side                                       |
 //+------------------------------------------------------------------+
-void DetectTrendSkip()
+double GetSideTotalLots(bool isBuy)
 {
-    skipBuyGrid = false;
-    skipSellGrid = false;
-    buyEquitySkipped = false;
-    sellEquitySkipped = false;
-    
-    if(!EnableTrendSkip && !EnableEquitySkip) return;
-    
-    double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-    double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-    double threshold = SkipActivationPips * pip;
-    
-    // ===== LAYER 1: Pip-Based Trend Detection =====
-    bool buyHasProfit = false;
-    bool sellHasProfit = false;
-    double buyFloatingPnL = 0.0;   // Total floating PnL for BUY side (for equity skip)
-    double sellFloatingPnL = 0.0;  // Total floating PnL for SELL side (for equity skip)
-    
+    double total = 0.0;
     for(int i = 0; i < PositionsTotal(); i++)
     {
         ulong ticket = PositionGetTicket(i);
@@ -1112,102 +1110,210 @@ void DetectTrendSkip()
         if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
         
         ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-        double profit = PositionGetDouble(POSITION_PROFIT);
-        
-        if(type == POSITION_TYPE_BUY)
-        {
-            buyFloatingPnL += profit;
-            // Pip-based check
-            if(EnableTrendSkip && (currentBid - openPrice) >= threshold)
-                buyHasProfit = true;
-        }
-        else if(type == POSITION_TYPE_SELL)
-        {
-            sellFloatingPnL += profit;
-            // Pip-based check
-            if(EnableTrendSkip && (openPrice - currentAsk) >= threshold)
-                sellHasProfit = true;
-        }
+        if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
+            total += PositionGetDouble(POSITION_VOLUME);
+    }
+    return total;
+}
+
+//+------------------------------------------------------------------+
+//| AllowNewNormalEntry — comprehensive pre-entry validation          |
+//| Returns true if a new normal grid order can be placed             |
+//+------------------------------------------------------------------+
+bool AllowNewNormalEntry(bool isBuy, string &reason)
+{
+    // License
+    if(!g_LicenseValid) { reason = "License invalid"; return false; }
+    
+    // Spread check
+    if(g_State.spreadPips > MaxSpreadPips) { reason = StringFormat("Spread %.1f > max %.1f", g_State.spreadPips, MaxSpreadPips); return false; }
+    
+    // Free margin check
+    double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+    if(freeMargin < MinFreeMarginUSD) { reason = StringFormat("FreeMargin $%.0f < $%.0f", freeMargin, MinFreeMarginUSD); return false; }
+    
+    // Max floating loss per side
+    double sideLoss = GetSideFloatingLossPercent(isBuy);
+    if(sideLoss > MaxFloatingLossPercent) { reason = StringFormat("Side loss %.1f%% > %.1f%%", sideLoss, MaxFloatingLossPercent); return false; }
+    
+    // Max total lots per side
+    double sideLots = GetSideTotalLots(isBuy);
+    if(sideLots >= MaxTotalLotsPerSide) { reason = StringFormat("Side lots %.2f >= %.2f", sideLots, MaxTotalLotsPerSide); return false; }
+    
+    // HIGH VOLATILITY CHAOS: block all new entries
+    if(g_State.regime == REGIME_HIGH_VOLATILITY) { reason = "High volatility chaos"; return false; }
+    
+    // TRANSITION: reduce new entries — block if no M5 trigger
+    if(g_State.regime == REGIME_TRANSITION)
+    {
+        if(isBuy && g_State.m5Entry != 1) { reason = "Transition + no M5 buy trigger"; return false; }
+        if(!isBuy && g_State.m5Entry != -1) { reason = "Transition + no M5 sell trigger"; return false; }
     }
     
-    // Both sides profit = ranging = no pip-based skip
-    if(buyHasProfit && sellHasProfit)
+    // TREND REGIME: directional filtering
+    if(g_State.regime == REGIME_TREND_UP && !isBuy) { reason = "Trend UP — no new SELL"; return false; }
+    if(g_State.regime == REGIME_TREND_DOWN && isBuy) { reason = "Trend DOWN — no new BUY"; return false; }
+    
+    // Strong H1 trend against direction
+    if(isBuy && g_State.trendScore <= -2) { reason = "Strong bearish H1 trend"; return false; }
+    if(!isBuy && g_State.trendScore >= 2) { reason = "Strong bullish H1 trend"; return false; }
+    
+    // Macro strongly opposing + H1 mildly opposing
+    if(isBuy && g_State.macroBias <= -2 && g_State.trendScore < 0) { reason = "Macro + H1 against BUY"; return false; }
+    if(!isBuy && g_State.macroBias >= 2 && g_State.trendScore > 0) { reason = "Macro + H1 against SELL"; return false; }
+    
+    // NEUTRAL/COMPRESSION: allow both sides (hedging mode) — but check macro sanity
+    if(g_State.regime == REGIME_NEUTRAL_RANGE || g_State.regime == REGIME_LOW_COMPRESSION)
     {
-        buyHasProfit = false;
-        sellHasProfit = false;
+        if(isBuy && g_State.macroBias <= -2 && g_State.trendScore <= -1)
+        { reason = "Neutral but strong macro+trend against BUY"; return false; }
+        if(!isBuy && g_State.macroBias >= 2 && g_State.trendScore >= 1)
+        { reason = "Neutral but strong macro+trend against SELL"; return false; }
     }
     
-    // Apply pip-based skip
-    if(buyHasProfit && !sellHasProfit)
-        skipSellGrid = true;  // Market UP → skip new SELL orders
-    else if(sellHasProfit && !buyHasProfit)
-        skipBuyGrid = true;   // Market DOWN → skip new BUY orders
+    reason = "OK";
+    return true;
+}
+
+//+------------------------------------------------------------------+
+//| Recovery Safety Check — should we allow new recovery addition?    |
+//+------------------------------------------------------------------+
+bool IsRecoverySafe(bool isBuy, string &reason)
+{
+    // Cooldown
+    datetime lastAdd = isBuy ? g_State.lastRecoveryBuyAdd : g_State.lastRecoverySellAdd;
+    if(TimeCurrent() - lastAdd < RecoveryCooldownSec) { reason = "Recovery cooldown"; return false; }
     
-    // ===== LAYER 2: Equity-Based Skip =====
-    // If one side has heavy floating loss, skip adding MORE orders to that losing side
-    if(EnableEquitySkip)
+    // Spread check (more lenient than normal)
+    if(g_State.spreadPips > MaxSpreadPips * 1.5) { reason = "Spread too high for recovery"; return false; }
+    
+    // Free margin
+    double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+    if(freeMargin < MinFreeMarginUSD * 2) { reason = "Insufficient margin for recovery"; return false; }
+    
+    // Max lots per side
+    double sideLots = GetSideTotalLots(isBuy);
+    if(sideLots >= MaxTotalLotsPerSide) { reason = StringFormat("Side lots %.2f >= max", sideLots); return false; }
+    
+    // HIGH VOLATILITY: pause recovery additions
+    if(g_State.regime == REGIME_HIGH_VOLATILITY) { reason = "High volatility — recovery paused"; return false; }
+    
+    // Strong trend violently against basket with no stabilization
+    if(isBuy && g_State.trendScore <= -2 && g_State.regime == REGIME_TREND_DOWN)
+    { reason = "Strong downtrend — BUY recovery paused"; return false; }
+    if(!isBuy && g_State.trendScore >= 2 && g_State.regime == REGIME_TREND_UP)
+    { reason = "Strong uptrend — SELL recovery paused"; return false; }
+    
+    // NEUTRAL/COMPRESSION: allow recovery (stable conditions)
+    reason = "OK";
+    return true;
+}
+
+//+------------------------------------------------------------------+
+//| Get Dynamic Grid Gap (regime-aware, smoothed ATR, spread-aware)   |
+//+------------------------------------------------------------------+
+double GetDynamicGap(bool isBuy, bool isRecovery)
+{
+    double gapPips = 0.0;
+    double atr = g_State.smoothedATR; // Use smoothed ATR to prevent gap jumping
+    
+    if(EnableATRGap && atr > 0)
     {
-        double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-        double lossThreshold = balance * EquitySkipPercent / 100.0;  // e.g. 5% of $1000 = $50
+        double multiplier = isRecovery ? ATR_Multiplier_Recovery : ATR_Multiplier_Normal;
+        gapPips = atr * multiplier;
         
-        // BUY side losing badly → skip BUY grid (don't add more losing BUYs)
-        // AND let SELL side (which is profiting from the down move) continue
-        if(buyFloatingPnL < 0.0 && MathAbs(buyFloatingPnL) >= lossThreshold)
-        {
-            buyEquitySkipped = true;  // Track equity-skip separately for recovery trigger
-            if(!skipBuyGrid)  // Don't overwrite if pip-based already set it
-            {
-                skipBuyGrid = true;
-                // Also ensure we don't skip SELL (it's the profitable side)
-            }
-        }
+        // Regime-based gap adjustment
+        if(g_State.regime == REGIME_HIGH_VOLATILITY)
+            gapPips *= GapVolatilityBoost;
+        else if(g_State.regime == REGIME_TREND_UP || g_State.regime == REGIME_TREND_DOWN)
+            gapPips *= GapTrendBoost;
         
-        // SELL side losing badly → skip SELL grid
-        if(sellFloatingPnL < 0.0 && MathAbs(sellFloatingPnL) >= lossThreshold)
-        {
-            sellEquitySkipped = true;  // Track equity-skip separately for recovery trigger
-            if(!skipSellGrid)
-            {
-                skipSellGrid = true;
-            }
-        }
+        // Add spread awareness (prevent gap too close to spread)
+        gapPips += g_State.spreadPips * 0.3;
         
-        // Safety: if BOTH sides are losing heavily, skip BOTH (protect equity)
-        // This is different from pip-based where both-profit = no-skip
-        // Both-loss means market is volatile in both directions = pause everything
+        // Clamp
+        double minGap = isRecovery ? MinGapPips_Recovery : MinGapPips_Normal;
+        gapPips = MathMax(gapPips, minGap);
+        gapPips = MathMin(gapPips, MaxGapPips);
     }
-    
-    // Log mode changes (throttled)
-    static bool prevSkipBuy = false;
-    static bool prevSkipSell = false;
-    
-    if(skipBuyGrid && !prevSkipBuy)
+    else
     {
-        string reason = "";
-        if(buyFloatingPnL < 0.0)
-            reason = StringFormat("EQUITY SKIP: BUY loss=%.2f", buyFloatingPnL);
+        // Fallback to fixed gaps
+        if(isRecovery)
+            gapPips = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
         else
-            reason = "TREND SKIP: Market DOWN";
-        AddToLog(reason + " → BUY grid PAUSED", "SKIP");
+            gapPips = isBuy ? BuyGapPips : SellGapPips;
     }
-    else if(!skipBuyGrid && prevSkipBuy)
-        AddToLog("SKIP OFF: BUY grid RESUMED", "SKIP");
     
-    if(skipSellGrid && !prevSkipSell)
+    return gapPips;
+}
+
+//+------------------------------------------------------------------+
+//| MASTER: Update entire market state (call once per tick)           |
+//+------------------------------------------------------------------+
+void UpdateMarketState()
+{
+    // 1. Read ATR values first (needed for normalization)
+    g_State.atrH1  = ReadATR(g_H1_ATR_Handle);
+    g_State.atrM15 = ReadATR(g_M15_ATR_Handle);
+    
+    // Smooth ATR using EMA to prevent gap jumping
+    if(g_State.smoothedATR <= 0)
+        g_State.smoothedATR = g_State.atrH1; // First tick: seed
+    else
+        g_State.smoothedATR = g_State.smoothedATR * (1.0 - ATR_Smoothing_Alpha) + g_State.atrH1 * ATR_Smoothing_Alpha;
+    
+    // Rolling M15 ATR average (for regime detection)
+    if(g_State.atrM15Avg <= 0)
+        g_State.atrM15Avg = g_State.atrM15;
+    else
+        g_State.atrM15Avg = g_State.atrM15Avg * 0.95 + g_State.atrM15 * 0.05;
+    
+    // 2. Current spread
+    g_State.spreadPips = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / pip;
+    
+    // 3. ADX (M15)
+    g_State.adxValue = ReadADX(g_M15_ADX_Handle);
+    
+    // 4. Macro bias (D1 + H4)
+    g_State.macroBias = CalcMacroBias();
+    
+    // 5. H1 Trend Score
+    g_State.trendScore = CalcH1TrendScore();
+    
+    // 6. Market Regime (M15)
+    g_State.regime = DetectMarketRegime();
+    
+    // 7. M5 Entry Trigger
+    g_State.m5Entry = CalcM5EntryTrigger();
+    
+    // 8. Final side decisions
+    string buyReason = "", sellReason = "";
+    g_State.buyAllowed  = AllowNewNormalEntry(true,  buyReason);
+    g_State.sellAllowed = AllowNewNormalEntry(false, sellReason);
+    g_State.buyBlockReason  = buyReason;
+    g_State.sellBlockReason = sellReason;
+}
+
+//+------------------------------------------------------------------+
+//| Delete ALL Pending Orders for a Side (Normal + Recovery)           |
+//| Used to clear opposite-trend pending orders                        |
+//+------------------------------------------------------------------+
+void DeleteAllPendingOrdersForSide(bool isBuy)
+{
+    for(int i = OrdersTotal() - 1; i >= 0; i--)
     {
-        string reason = "";
-        if(sellFloatingPnL < 0.0)
-            reason = StringFormat("EQUITY SKIP: SELL loss=%.2f", sellFloatingPnL);
-        else
-            reason = "TREND SKIP: Market UP";
-        AddToLog(reason + " → SELL grid PAUSED", "SKIP");
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if(isBuy && (type == ORDER_TYPE_BUY_LIMIT || type == ORDER_TYPE_BUY_STOP))
+            trade.OrderDelete(ticket);
+        else if(!isBuy && (type == ORDER_TYPE_SELL_LIMIT || type == ORDER_TYPE_SELL_STOP))
+            trade.OrderDelete(ticket);
     }
-    else if(!skipSellGrid && prevSkipSell)
-        AddToLog("SKIP OFF: SELL grid RESUMED", "SKIP");
-    
-    prevSkipBuy = skipBuyGrid;
-    prevSkipSell = skipSellGrid;
 }
 
 datetime LicenseCacheNow()
@@ -1546,27 +1652,6 @@ void DeleteNormalPendingOrders(bool isBuy)
 }
 
 //+------------------------------------------------------------------+
-//| Delete ALL Pending Orders for a Side (Normal + Recovery)           |
-//| Used by Trend Skip Mode to clear the skipped side completely       |
-//+------------------------------------------------------------------+
-void DeleteAllPendingOrdersForSide(bool isBuy)
-{
-    for(int i = OrdersTotal() - 1; i >= 0; i--)
-    {
-        ulong ticket = OrderGetTicket(i);
-        if(ticket <= 0) continue;
-        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-        
-        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-        if(isBuy && (type == ORDER_TYPE_BUY_LIMIT || type == ORDER_TYPE_BUY_STOP))
-            trade.OrderDelete(ticket);
-        else if(!isBuy && (type == ORDER_TYPE_SELL_LIMIT || type == ORDER_TYPE_SELL_STOP))
-            trade.OrderDelete(ticket);
-    }
-}
-
-//+------------------------------------------------------------------+
 //| Cleanup Invalid/Out-of-Range Orders                               |
 //+------------------------------------------------------------------+
 void CleanupInvalidOrders()
@@ -1877,37 +1962,8 @@ void RecoveryCleanupForSide(bool isBuy)
     // Condition: NO normal positions left AND only recovery positions remain at or below threshold
     if(normalCount == 0 && recoveryCount > 0 && recoveryCount <= RecoveryCleanupThreshold)
     {
-        // Profit-aware cleanup: calculate basket P/L before closing
-        double basketProfit = 0;
-        for(int j = 0; j < PositionsTotal(); j++)
-        {
-            ulong t = PositionGetTicket(j);
-            if(t <= 0) continue;
-            if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-            if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-            ENUM_POSITION_TYPE pt = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-            if((isBuy && pt != POSITION_TYPE_BUY) || (!isBuy && pt != POSITION_TYPE_SELL)) continue;
-            string c = PositionGetString(POSITION_COMMENT);
-            if(StringFind(c, "Recovery") >= 0)
-                basketProfit += PositionGetDouble(POSITION_PROFIT);
-        }
-        
-        // Only close if basket is near breakeven or profitable (loss <= $5 acceptable)
-        // This prevents forced negative cleanup — let trailing/TP handle it instead
-        if(basketProfit < -5.0)
-        {
-            static datetime lastSkipLog = 0;
-            if(TimeCurrent() - lastSkipLog > 30)
-            {
-                AddToLog(StringFormat("%s Recovery Cleanup SKIPPED: Basket P/L=$%.2f (waiting for near-breakeven)", 
-                    isBuy ? "BUY" : "SELL", basketProfit), "CLEANUP");
-                lastSkipLog = TimeCurrent();
-            }
-            return; // Don't close at a loss — wait for price to improve
-        }
-        
-        AddToLog(StringFormat("%s Recovery Cleanup: Normal=%d, Recovery=%d (threshold=%d) BasketPnL=$%.2f - CLOSING to restart normal mode", 
-            isBuy ? "BUY" : "SELL", normalCount, recoveryCount, RecoveryCleanupThreshold, basketProfit), "CLEANUP");
+        AddToLog(StringFormat("%s Recovery Cleanup: Normal=%d, Recovery=%d (threshold=%d) - CLOSING ALL to restart normal mode", 
+            isBuy ? "BUY" : "SELL", normalCount, recoveryCount, RecoveryCleanupThreshold), "CLEANUP");
         
         // First: Delete all recovery pending orders for this side
         for(int i = OrdersTotal() - 1; i >= 0; i--)
@@ -1959,126 +2015,6 @@ void RecoveryCleanupForSide(bool isBuy)
         
         AddToLog(StringFormat("%s Recovery Cleanup COMPLETE - Normal mode will restart with fresh 0.10 lot grid", 
             isBuy ? "BUY" : "SELL"), "CLEANUP");
-    }
-}
-
-//+------------------------------------------------------------------+
-//| IsSideBlocked — single source of truth for skip/filter rules     |
-//| Returns true if this side should have NO pending orders           |
-//| Must mirror the exact same logic as OnTick grid branches          |
-//| outReason is set to the reason for blocking (for logging)         |
-//+------------------------------------------------------------------+
-bool IsSideBlocked(bool isBuy, string &outReason)
-{
-    outReason = "";
-    bool inRecovery = isBuy ? buyInRecovery : sellInRecovery;
-    
-    // Recovery mode bypasses equity skip & pip-based skip
-    // But NOW waits for favorable trend (EMA) before placing new orders
-    if(inRecovery)
-    {
-        if(g_NewEntriesBlocked && g_BlockCancelPending)
-        {
-            outReason = "Recovery hard block (" + g_BlockReason + ")";
-            return true;
-        }
-        // Recovery waits for favorable trend — don't delete existing pendings though
-        // IsSideBlocked is used by SkipEnforcementWorker which deletes pendings
-        // We return false here because we want to KEEP existing recovery pendings alive
-        // (ManageRecoveryGrid just won't place NEW ones during counter-trend)
-        return false;
-    }
-    
-    // Normal mode checks (in priority order, matching OnTick branches)
-    
-    // 1. Master block with cancel pending (hard block)
-    if(g_NewEntriesBlocked && g_BlockCancelPending)
-    {
-        outReason = "Hard block (" + g_BlockReason + ")";
-        return true;
-    }
-    
-    // 2. Master block without cancel (soft block) — pendings stay alive
-    if(g_NewEntriesBlocked)
-        return false; // Soft block = pendings stay
-    
-    // 3. Trend skip (pip-based or equity-based)
-    if(isBuy && skipBuyGrid)
-    {
-        outReason = "BUY skip active (trend/equity)";
-        return true;
-    }
-    if(!isBuy && skipSellGrid)
-    {
-        outReason = "SELL skip active (trend/equity)";
-        return true;
-    }
-    
-    // 4. EMA trend filter (with equity-skip bypass)
-    if(isBuy && IsTrendFiltered(true) && !skipSellGrid)
-    {
-        outReason = "EMA bearish — BUY filtered";
-        return true;
-    }
-    if(!isBuy && IsTrendFiltered(false) && !skipBuyGrid)
-    {
-        outReason = "EMA bullish — SELL filtered";
-        return true;
-    }
-    
-    return false; // Side is clear to trade
-}
-
-//+------------------------------------------------------------------+
-//| Skip Enforcement Worker — safety net for pending order cleanup    |
-//| Runs every tick AFTER all state flags are set.                    |
-//| Deletes any pending orders that violate current skip/EMA/block    |
-//| rules. Acts as a catch-all in case the main grid branches miss    |
-//| a deletion (e.g. race conditions, EA restart, mode transitions).  |
-//+------------------------------------------------------------------+
-void SkipEnforcementWorker()
-{
-    string buyReason = "", sellReason = "";
-    bool buyBlocked = IsSideBlocked(true, buyReason);
-    bool sellBlocked = IsSideBlocked(false, sellReason);
-    
-    // Nothing to enforce if both sides are clear
-    if(!buyBlocked && !sellBlocked) return;
-    
-    int deletedBuy = 0, deletedSell = 0;
-    
-    for(int i = OrdersTotal() - 1; i >= 0; i--)
-    {
-        ulong ticket = OrderGetTicket(i);
-        if(ticket <= 0) continue;
-        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-        
-        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-        
-        // BUY side blocked — delete all BUY pending orders
-        if(buyBlocked && (type == ORDER_TYPE_BUY_LIMIT || type == ORDER_TYPE_BUY_STOP))
-        {
-            if(trade.OrderDelete(ticket))
-                deletedBuy++;
-        }
-        // SELL side blocked — delete all SELL pending orders
-        else if(sellBlocked && (type == ORDER_TYPE_SELL_LIMIT || type == ORDER_TYPE_SELL_STOP))
-        {
-            if(trade.OrderDelete(ticket))
-                deletedSell++;
-        }
-    }
-    
-    // Log enforcement actions (throttled to avoid spam)
-    static datetime lastEnforceLog = 0;
-    if((deletedBuy > 0 || deletedSell > 0) && TimeCurrent() - lastEnforceLog > 5)
-    {
-        lastEnforceLog = TimeCurrent();
-        if(deletedBuy > 0)
-            AddToLog(StringFormat("ENFORCE: Deleted %d BUY pending(s) — %s", deletedBuy, buyReason), "ENFORCE");
-        if(deletedSell > 0)
-            AddToLog(StringFormat("ENFORCE: Deleted %d SELL pending(s) — %s", deletedSell, sellReason), "ENFORCE");
     }
 }
 
@@ -2153,10 +2089,6 @@ void GridHealthCheckNormal(bool isBuy, double currentBid, double currentAsk)
     bool inRecovery = isBuy ? buyInRecovery : sellInRecovery;
     if(inRecovery) return;  // Skip if in recovery mode
     
-    // Don't report missing orders if this side is intentionally blocked
-    string blockReason = "";
-    if(IsSideBlocked(isBuy, blockReason)) return;
-    
     int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
     double rangeHigh = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
     double rangeLow  = isBuy ? MathMin(BuyRangeStart, BuyRangeEnd) : MathMin(SellRangeStart, SellRangeEnd);
@@ -2228,10 +2160,6 @@ void GridHealthCheckRecovery(bool isBuy, double currentBid, double currentAsk)
     bool inRecovery = isBuy ? buyInRecovery : sellInRecovery;
     if(!inRecovery) return;  // Skip if not in recovery mode
     if(!EnableRecovery) return;
-    
-    // Don't report missing recovery orders if hard-blocked
-    string blockReason = "";
-    if(IsSideBlocked(isBuy, blockReason)) return;
     
     // Count recovery pending orders
     int recoveryOrderCount = 0;
@@ -2334,12 +2262,10 @@ void FixMissingRecoveryTP(bool isBuy)
         if(currentTP == 0 || MathAbs(currentTP - breakevenTP) > 1.0 * pip)
         {
             double currentSL = PositionGetDouble(POSITION_SL);
-            double valSL = currentSL, valTP = breakevenTP;
-            ValidateStopsForPosition(isBuy, valSL, valTP);
-            if(valTP > 0 && trade.PositionModify(ticket, valSL, valTP))
+            if(trade.PositionModify(ticket, currentSL, breakevenTP))
             {
                 AddToLog(StringFormat("%s SelfHeal: Fixed TP on position #%I64u | Old TP=%.2f | New TP=%.2f", 
-                    isBuy ? "BUY" : "SELL", ticket, currentTP, valTP), "HEAL");
+                    isBuy ? "BUY" : "SELL", ticket, currentTP, breakevenTP), "HEAL");
             }
         }
     }
@@ -2363,7 +2289,7 @@ void ManageNormalGrid(bool isBuy)
     // Range settings
     double rangeHigh = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
     double rangeLow = isBuy ? MathMin(BuyRangeStart, BuyRangeEnd) : MathMin(SellRangeStart, SellRangeEnd);
-    double gapPips = GetATRGridGap(isBuy); // ATR-based dynamic gap (falls back to static if disabled)
+    double gapPips = GetDynamicGap(isBuy, false); // ATR-based dynamic gap for normal grid
     int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
     double gapPrice = gapPips * pip;
     double minGap = gapPrice * 0.8; // Minimum 80% of gap required between positions/orders
@@ -2725,7 +2651,6 @@ void ManageNormalGrid(bool isBuy)
         {
             tp = (BuyTakeProfitPips > 0) ? NormalizeDouble(targetPrice + (BuyTakeProfitPips * pip), _Digits) : 0;
             sl = (BuyStopLossPips > 0) ? NormalizeDouble(targetPrice - (BuyStopLossPips * pip), _Digits) : 0;
-            ValidateStops(true, targetPrice, sl, tp);
             if(trade.BuyLimit(lotToUse, targetPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
                 AddToLog(StringFormat("BUY LIMIT @ %.2f | Lot: %.2f", targetPrice, lotToUse), "OPEN_BUY");
@@ -2736,7 +2661,6 @@ void ManageNormalGrid(bool isBuy)
         {
             tp = (SellTakeProfitPips > 0) ? NormalizeDouble(targetPrice - (SellTakeProfitPips * pip), _Digits) : 0;
             sl = (SellStopLossPips > 0) ? NormalizeDouble(targetPrice + (SellStopLossPips * pip), _Digits) : 0;
-            ValidateStops(false, targetPrice, sl, tp);
             if(trade.SellLimit(lotToUse, targetPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
                 AddToLog(StringFormat("SELL LIMIT @ %.2f | Lot: %.2f", targetPrice, lotToUse), "OPEN_SELL");
@@ -2826,8 +2750,7 @@ void ManageRecoveryGrid(bool isBuy)
     
     // Calculate expected recovery price based on CLOSEST position
     // Then find first empty slot (skip prices where positions already exist)
-    // Use ATR-based gap for recovery too (wider gap in volatile markets)
-    double gapPips = GetATRGridGap(isBuy);
+    double gapPips = GetDynamicGap(isBuy, true); // ATR-based dynamic gap for recovery grid
     double expectedRecoveryPrice = isBuy ?
         NormalizeDouble(closestPriceForCheck - (gapPips * pip), _Digits) :
         NormalizeDouble(closestPriceForCheck + (gapPips * pip), _Digits);
@@ -2910,7 +2833,7 @@ void ManageRecoveryGrid(bool isBuy)
     
     // Count recovery PENDING orders AND relocate if too far from expected price
     int recoveryPendingCount = 0;
-    double gapPipsForRelocate = GetATRGridGap(isBuy); // ATR-aware relocation threshold
+    double gapPipsForRelocate = GetDynamicGap(isBuy, true); // ATR-based dynamic gap
     double relocateThreshold = gapPipsForRelocate * pip * 0.6; // Keep pending tightly snapped to grid
     
     for(int i = OrdersTotal() - 1; i >= 0; i--)
@@ -2972,8 +2895,6 @@ void ManageRecoveryGrid(bool isBuy)
                     else if(!isBuy && SellStopLossPips > 0)
                         relocSL = NormalizeDouble(newPrice + (SellStopLossPips * pip), _Digits);
                     
-                    ValidateStops(isBuy, newPrice, relocSL, newTP);
-                    
                     if(trade.OrderModify(ticket, newPrice, relocSL, newTP, ORDER_TIME_GTC, 0))
                     {
                         AddToLog(StringFormat("%s Recovery RELOCATED pending order #%I64u: %.2f -> %.2f (was %.1f pips from expected)", 
@@ -3028,12 +2949,10 @@ void ManageRecoveryGrid(bool isBuy)
     }
     
     // Place recovery order if needed (only 1 pending at a time, max total positions = MaxRecoveryOrders)
-    // Added: IsRecoverySafe() checks lots cap, floating loss cap, margin, cooldown
-    string safetyReason = "";
-    if(totalPositionsThisSide < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery && IsRecoverySafe(isBuy, safetyReason))
+    if(totalPositionsThisSide < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery)
     {
         double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-        double gapPips = GetATRGridGap(isBuy); // ATR-based dynamic gap for recovery placement too
+        double gapPips = GetDynamicGap(isBuy, true); // ATR-based dynamic gap for recovery
         
         // ===== NEW LOGIC =====
         // 1. Find TOP DISTANCE LOSS position (highest BUY price / lowest SELL price - most loss)
@@ -3245,9 +3164,6 @@ void ManageRecoveryGrid(bool isBuy)
         else if(!isBuy && SellStopLossPips > 0)
             recoverySL = NormalizeDouble(recoveryPrice + (SellStopLossPips * pip), _Digits);
         
-        // Validate SL/TP before placement
-        ValidateStops(isBuy, recoveryPrice, recoverySL, breakevenTP);
-        
         // Place recovery order
         AddToLog(StringFormat("Attempting to place %s recovery order | Price: %.2f | Lot: %.2f | TP: %.2f | SL: %.2f", 
             isBuy ? "BUY" : "SELL", recoveryPrice, recoveryLot, breakevenTP, recoverySL), "RECOVERY");
@@ -3256,7 +3172,6 @@ void ManageRecoveryGrid(bool isBuy)
         {
             if(trade.BuyLimit(recoveryLot, recoveryPrice, _Symbol, recoverySL, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_BUY"))
             {
-                g_LastBuyRecoveryFill = TimeCurrent(); // Cooldown timer
                 AddToLog(StringFormat("✅ Recovery BUY placed @ %.2f | Lot: %.2f | TP: %.2f | SL: %.2f", recoveryPrice, recoveryLot, breakevenTP, recoverySL), "RECOVERY");
             }
             else
@@ -3269,7 +3184,6 @@ void ManageRecoveryGrid(bool isBuy)
         {
             if(trade.SellLimit(recoveryLot, recoveryPrice, _Symbol, recoverySL, breakevenTP, ORDER_TIME_GTC, 0, "Recovery_SELL"))
             {
-                g_LastSellRecoveryFill = TimeCurrent(); // Cooldown timer
                 AddToLog(StringFormat("✅ Recovery SELL placed @ %.2f | Lot: %.2f | TP: %.2f | SL: %.2f", recoveryPrice, recoveryLot, breakevenTP, recoverySL), "RECOVERY");
             }
             else
@@ -3283,13 +3197,11 @@ void ManageRecoveryGrid(bool isBuy)
     {
         string reason = "";
         if(totalPositionsThisSide >= MaxRecoveryOrders)
-            reason = StringFormat("Max positions (%d/%d)", totalPositionsThisSide, MaxRecoveryOrders);
+            reason = StringFormat("Max positions reached (%d/%d)", totalPositionsThisSide, MaxRecoveryOrders);
         else if(recoveryPendingCount > 0)
-            reason = StringFormat("Pending exists (%d)", recoveryPendingCount);
+            reason = StringFormat("Recovery order already pending (%d)", recoveryPendingCount);
         else if(!EnableRecovery)
             reason = "Recovery disabled";
-        else if(safetyReason != "")
-            reason = safetyReason;
         else
             reason = "Unknown";
             
@@ -3299,8 +3211,8 @@ void ManageRecoveryGrid(bool isBuy)
 
 //+------------------------------------------------------------------+
 //| Ensure Recovery Mode TP - Worker Function                         |
-//| In Recovery Mode, when long-distance + profitable basket hits       |
-//| breakeven, arms trailing instead of closing (specific tickets only). |
+//| Recovery Mode এ long-distance + profitable basket breakeven hit    |
+//| করলে close না করে trailing-এ arm করা হয় (specific tickets only)। |
 //+------------------------------------------------------------------+
 void EnsureRecoveryModeTP()
 {
@@ -3510,9 +3422,7 @@ void CheckAndCloseRecoveryBreakeven(bool isBuy)
                 for(int b = 0; b < bundleSize; b++)
                 {
                     if(!PositionSelectByTicket(bundleTickets[b])) continue;
-                    double posSL = commonSL, posTP = commonTP;
-                    ValidateStopsForPosition(isBuy, posSL, posTP);
-                    trade.PositionModify(bundleTickets[b], posSL, posTP);
+                    trade.PositionModify(bundleTickets[b], commonSL, commonTP);
                 }
                 
                 AddToLog(StringFormat("%s BUNDLE #%d ARMED! %d pos (1 loss + %d profit) | TopLoss@%.2f | Net=%.2f >= Target=%.2f | Avg=%.2f | TP=%.2f | SL=%.2f", 
@@ -3628,13 +3538,8 @@ void ApplyRecoveryBreakevenTrailingForSide(bool isBuy)
                 (isBuy && newSL > currentSL + (0.5 * pip)) ||
                 (!isBuy && newSL < currentSL - (0.5 * pip));
             
-            if(needsUpdate)
-            {
-                double valSL = newSL, valTP = currentTP;
-                ValidateStopsForPosition(isBuy, valSL, valTP);
-                if(valSL > 0 && trade.PositionModify(ticket, valSL, valTP))
-                    updateCount++;
-            }
+            if(needsUpdate && trade.PositionModify(ticket, newSL, currentTP))
+                updateCount++;
         }
         
         if(updateCount > 0)
@@ -3647,19 +3552,19 @@ void ApplyRecoveryBreakevenTrailingForSide(bool isBuy)
 
 //+------------------------------------------------------------------+
 //| Apply Trailing Stop                                               |
-//| Trailing Stop Logic:                                                |
-//| 1. Normal Mode: calculated from each position's open price          |
-//| 2. Recovery Mode: calculated from average price of all positions    |
+//| ট্রেইলিং স্টপ লজিক:                                                  |
+//| 1. Normal Mode: প্রতিটি position এর open price থেকে calculate      |
+//| 2. Recovery Mode: সব positions এর average price থেকে calculate    |
 //|                                                                    |
 //| Formula: newSL = basePrice + InitialSL + (priceMovement × Ratio)  |
-//| where priceMovement = currentProfit - TrailingStart                 |
+//| যেখানে priceMovement = currentProfit - TrailingStart              |
 //+------------------------------------------------------------------+
 void ApplyTrailing()
 {
     CleanupBundles();
 
-    // Calculate average price for recovery mode
-    // Because in recovery mode all positions close together
+    // Recovery mode এ average price calculate করি
+    // কারণ recovery mode এ সব positions একসাথে close হবে
     double buyAvgPrice = 0, sellAvgPrice = 0;
     double buyTotalLots = 0, sellTotalLots = 0;
     
@@ -3716,12 +3621,12 @@ void ApplyTrailing()
         double currentSL = PositionGetDouble(POSITION_SL);
         double currentTP = PositionGetDouble(POSITION_TP);
         
-        // ===== Mode and Settings Selection =====
-        // Recovery mode uses average price, otherwise individual open price
+        // ===== Mode এবং Settings নির্ধারণ =====
+        // Recovery mode হলে average price ব্যবহার হবে, না হলে individual open price
         bool inRecovery = (type == POSITION_TYPE_BUY && buyInRecovery) || (type == POSITION_TYPE_SELL && sellInRecovery);
         double basePrice = inRecovery ? (type == POSITION_TYPE_BUY ? buyAvgPrice : sellAvgPrice) : openPrice;
         
-        // Select settings based on mode
+        // Mode অনুযায়ী settings select করি
         double trailingStart = inRecovery ? RecoveryTrailingStartPips : 
             (type == POSITION_TYPE_BUY ? BuyTrailingStartPips : SellTrailingStartPips);
         double initialSL = inRecovery ? RecoveryInitialSLPips :
@@ -3730,8 +3635,8 @@ void ApplyTrailing()
             (type == POSITION_TYPE_BUY ? BuyTrailingRatio : SellTrailingRatio);
         
         // ===== Profit Calculate =====
-        // BUY: currentPrice - basePrice (profit when price rises)
-        // SELL: basePrice - currentPrice (profit when price falls)
+        // BUY: currentPrice - basePrice (price বাড়লে profit)
+        // SELL: basePrice - currentPrice (price কমলে profit)
         double profitPips = type == POSITION_TYPE_BUY ?
             (currentPrice - basePrice) / pip :
             (basePrice - currentPrice) / pip;
@@ -3749,53 +3654,41 @@ void ApplyTrailing()
             
             if(safetySL > 0)
             {
-                bool isBuyPos = (type == POSITION_TYPE_BUY);
-                double valTP = currentTP;
-                ValidateStopsForPosition(isBuyPos, safetySL, valTP);
-                if(safetySL > 0)
-                {
-                    trade.PositionModify(ticket, safetySL, valTP);
-                    AddToLog(StringFormat("Safety SL set: %s #%I64u | Open: %.2f | SL: %.2f", 
-                        isBuyPos ? "BUY" : "SELL", ticket, openPrice, safetySL), "TRAILING");
-                }
+                trade.PositionModify(ticket, safetySL, currentTP);
+                AddToLog(StringFormat("Safety SL set: %s #%I64u | Open: %.2f | SL: %.2f", 
+                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", ticket, openPrice, safetySL), "TRAILING");
             }
         }
         
         // ===== Trailing Apply =====
-        // Trailing only starts when profit >= trailingStart
+        // শুধুমাত্র profit >= trailingStart হলে trailing শুরু হবে
         if(profitPips >= trailingStart)
         {
-            // priceMovement = how many pips moved beyond threshold
+            // priceMovement = threshold এর পরে কত pip move করেছে
             double priceMovement = profitPips - trailingStart;
             
-            // slMovement = ratio portion of priceMovement applied to SL
-            // e.g. ratio=0.5 means if price moves 2 pips, SL moves 1 pip
+            // slMovement = priceMovement এর ratio অংশ SL move করবে
+            // যেমন: ratio=0.5 মানে price 2 pip move করলে SL 1 pip move করবে
             double slMovement = priceMovement * trailingRatio;
             
             // ===== New SL Calculate =====
-            // BUY: basePrice + initialSL + slMovement (moves up)
-            // SELL: basePrice - initialSL - slMovement (moves down)
+            // BUY: basePrice + initialSL + slMovement (উপরে move)
+            // SELL: basePrice - initialSL - slMovement (নিচে move)
             double newSL = type == POSITION_TYPE_BUY ?
                 NormalizeDouble(basePrice + (initialSL * pip) + (slMovement * pip), _Digits) :
                 NormalizeDouble(basePrice - (initialSL * pip) - (slMovement * pip), _Digits);
             
             // ===== SL Update Check =====
-            // Only update if SL improves (0.5 pip minimum change)
+            // শুধুমাত্র SL improve হলে update করবে (0.5 pip minimum change)
             bool needsUpdate = (currentSL == 0) || 
                 (type == POSITION_TYPE_BUY && newSL > currentSL + (0.5 * pip)) ||
                 (type == POSITION_TYPE_SELL && newSL < currentSL - (0.5 * pip));
             
             if(needsUpdate)
             {
-                bool isBuyPos = (type == POSITION_TYPE_BUY);
-                double valTP = currentTP;
-                ValidateStopsForPosition(isBuyPos, newSL, valTP);
-                if(newSL > 0)
-                {
-                    trade.PositionModify(ticket, newSL, valTP);
-                    AddToLog(StringFormat("Trailing SL: %s | Profit: %.1f pips", 
-                        isBuyPos ? "BUY" : "SELL", profitPips), "TRAILING");
-                }
+                trade.PositionModify(ticket, newSL, currentTP);
+                AddToLog(StringFormat("Trailing SL: %s | Profit: %.1f pips", 
+                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", profitPips), "TRAILING");
             }
         }
     }
@@ -3921,10 +3814,14 @@ void UpdateInfoPanel()
     ObjectDelete(0, "EA_PriceHeader");
     ObjectDelete(0, "EA_PriceInfo");
     ObjectDelete(0, "EA_TotalProfit");
-    ObjectDelete(0, "EA_SkipStatus");
-    ObjectDelete(0, "EA_SkipStatus2");
-    ObjectDelete(0, "EA_FilterStatus");
+    ObjectDelete(0, "EA_MacroBias");
     ObjectDelete(0, "EA_TrendInfo");
+    ObjectDelete(0, "EA_RegimeInfo");
+    ObjectDelete(0, "EA_M5Entry");
+    ObjectDelete(0, "EA_EntrySignal");
+    ObjectDelete(0, "EA_ATRInfo");
+    ObjectDelete(0, "EA_BuyBlock");
+    ObjectDelete(0, "EA_SellBlock");
     // Delete old simplified version objects
     ObjectDelete(0, "EA_Title");
     ObjectDelete(0, "EA_Mode");
@@ -4005,93 +3902,134 @@ void UpdateInfoPanel()
     ObjectSetString(0, "EA_ModeStatus", OBJPROP_FONT, "Arial Bold");
     yPos += 22;
     
-    // ===== SKIP STATUS (Trend + Equity) =====
-    ObjectDelete(0, "EA_SkipStatus");
-    ObjectDelete(0, "EA_SkipStatus2");
-    if(skipBuyGrid || skipSellGrid)
+    // ===== MULTI-TF STATE DISPLAY =====
+    ObjectDelete(0, "EA_MacroBias");
+    ObjectDelete(0, "EA_TrendInfo");
+    ObjectDelete(0, "EA_RegimeInfo");
+    ObjectDelete(0, "EA_M5Entry");
+    ObjectDelete(0, "EA_EntrySignal");
+    ObjectDelete(0, "EA_ATRInfo");
+    ObjectDelete(0, "EA_BuyBlock");
+    ObjectDelete(0, "EA_SellBlock");
+    
+    // D1/H4 Macro Bias
+    string macroBiasNames[] = {"STRONG BEAR", "BEAR", "NEUTRAL", "BULL", "STRONG BULL"};
+    int macroIdx = g_State.macroBias + 2; // map -2..+2 to 0..4
+    if(macroIdx < 0) macroIdx = 0; if(macroIdx > 4) macroIdx = 4;
+    string macroText = StringFormat("D1/H4 Macro: %s (%+d)", macroBiasNames[macroIdx], g_State.macroBias);
+    color macroColor = g_State.macroBias > 0 ? clrLime : g_State.macroBias < 0 ? clrOrangeRed : clrGray;
+    
+    ObjectCreate(0, "EA_MacroBias", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_MacroBias", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_MacroBias", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_MacroBias", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_MacroBias", OBJPROP_TEXT, macroText);
+    ObjectSetInteger(0, "EA_MacroBias", OBJPROP_COLOR, macroColor);
+    ObjectSetInteger(0, "EA_MacroBias", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_MacroBias", OBJPROP_FONT, "Arial Bold");
+    yPos += 16;
+    
+    // H1 Trend Score
+    string trendNames[] = {"STRONG BEAR", "BEAR", "NEUTRAL", "BULL", "STRONG BULL"};
+    int trendIdx = g_State.trendScore + 2;
+    if(trendIdx < 0) trendIdx = 0; if(trendIdx > 4) trendIdx = 4;
+    string trendText = StringFormat("H1 Trend: %s (%+d) | Slope: %.3f", trendNames[trendIdx], g_State.trendScore, g_State.h1SlopeNorm);
+    color trendColor = g_State.trendScore > 0 ? clrLime : g_State.trendScore < 0 ? clrOrangeRed : clrGray;
+    
+    ObjectCreate(0, "EA_TrendInfo", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_TrendInfo", OBJPROP_TEXT, trendText);
+    ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_COLOR, trendColor);
+    ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_TrendInfo", OBJPROP_FONT, "Arial Bold");
+    yPos += 16;
+    
+    // M15 Regime
+    color regimeColor = clrGray;
+    if(g_State.regime == REGIME_TREND_UP || g_State.regime == REGIME_TREND_DOWN) regimeColor = clrDodgerBlue;
+    else if(g_State.regime == REGIME_HIGH_VOLATILITY) regimeColor = clrRed;
+    else if(g_State.regime == REGIME_TRANSITION) regimeColor = clrOrange;
+    else if(g_State.regime == REGIME_LOW_COMPRESSION) regimeColor = clrYellow;
+    else regimeColor = clrGray;
+    
+    string regimeText = StringFormat("M15 Regime: %s | ADX: %.1f", g_State.regimeText, g_State.adxValue);
+    ObjectCreate(0, "EA_RegimeInfo", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_RegimeInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_RegimeInfo", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_RegimeInfo", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_RegimeInfo", OBJPROP_TEXT, regimeText);
+    ObjectSetInteger(0, "EA_RegimeInfo", OBJPROP_COLOR, regimeColor);
+    ObjectSetInteger(0, "EA_RegimeInfo", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_RegimeInfo", OBJPROP_FONT, "Arial Bold");
+    yPos += 16;
+    
+    // M5 Entry Trigger
+    string m5Text = (g_State.m5Entry == 1) ? "M5 Entry: BUY TRIGGER" : 
+                     (g_State.m5Entry == -1) ? "M5 Entry: SELL TRIGGER" : "M5 Entry: NO TRIGGER";
+    color m5Color = g_State.m5Entry > 0 ? clrLime : g_State.m5Entry < 0 ? clrOrangeRed : clrGray;
+    
+    ObjectCreate(0, "EA_M5Entry", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_M5Entry", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_M5Entry", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_M5Entry", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_M5Entry", OBJPROP_TEXT, m5Text);
+    ObjectSetInteger(0, "EA_M5Entry", OBJPROP_COLOR, m5Color);
+    ObjectSetInteger(0, "EA_M5Entry", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_M5Entry", OBJPROP_FONT, "Arial Bold");
+    yPos += 18;
+    
+    // ATR + Gap + Spread Info
+    double normalGap = GetDynamicGap(true, false);
+    double recoveryGap = GetDynamicGap(true, true);
+    string atrText = StringFormat("ATR: %.1f (smooth %.1f) | Gap: %.1f/%.1f | Spread: %.1f",
+        g_State.atrH1, g_State.smoothedATR, normalGap, recoveryGap, g_State.spreadPips);
+    color atrColor = g_State.spreadPips > MaxSpreadPips ? clrRed : clrDodgerBlue;
+    
+    ObjectCreate(0, "EA_ATRInfo", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_ATRInfo", OBJPROP_TEXT, atrText);
+    ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_COLOR, atrColor);
+    ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_ATRInfo", OBJPROP_FONT, "Arial");
+    yPos += 16;
+    
+    // Entry Decision Status
+    string entryStatus = "";
+    color entryColor = clrGray;
+    if(g_State.buyAllowed && g_State.sellAllowed)
     {
-        string skipText = "";
-        if(skipBuyGrid && skipSellGrid)
-        {
-            if(buyInRecovery && sellInRecovery)
-                skipText = ">>> BOTH SIDES: RECOVERY ACTIVE (Averaging to breakeven) <<<";
-            else if(buyInRecovery)
-                skipText = ">>> BUY: RECOVERY | SELL: PAUSED <<<";
-            else if(sellInRecovery)
-                skipText = ">>> BUY: PAUSED | SELL: RECOVERY <<<";
-            else
-                skipText = ">>> BOTH GRIDS PAUSED (Heavy loss both sides) <<<";
-        }
-        else if(skipBuyGrid)
-            skipText = buyInRecovery ? ">>> BUY: RECOVERY ACTIVE <<<" : ">>> BUY GRID PAUSED <<<";
-        else
-            skipText = sellInRecovery ? ">>> SELL: RECOVERY ACTIVE <<<" : ">>> SELL GRID PAUSED <<<";
-        
-        ObjectCreate(0, "EA_SkipStatus", OBJ_LABEL, 0, 0, 0);
-        ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-        ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_XDISTANCE, 10);
-        ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_YDISTANCE, yPos);
-        ObjectSetString(0, "EA_SkipStatus", OBJPROP_TEXT, skipText);
-        ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_COLOR, (skipBuyGrid && skipSellGrid) ? clrOrangeRed : clrYellow);
-        ObjectSetInteger(0, "EA_SkipStatus", OBJPROP_FONTSIZE, 10);
-        ObjectSetString(0, "EA_SkipStatus", OBJPROP_FONT, "Arial Bold");
-        yPos += 22;
-        
-        // Show equity info if equity skip is active
-        if(EnableEquitySkip)
-        {
-            double bal = AccountInfoDouble(ACCOUNT_BALANCE);
-            double eq = AccountInfoDouble(ACCOUNT_EQUITY);
-            double dd = bal - eq;
-            double ddPct = (bal > 0) ? (dd / bal * 100.0) : 0.0;
-            string eqText = StringFormat("Equity: %.2f | DD: %.2f (%.1f%%) | Skip@%.1f%%", eq, dd, ddPct, EquitySkipPercent);
-            
-            ObjectCreate(0, "EA_SkipStatus2", OBJ_LABEL, 0, 0, 0);
-            ObjectSetInteger(0, "EA_SkipStatus2", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-            ObjectSetInteger(0, "EA_SkipStatus2", OBJPROP_XDISTANCE, 10);
-            ObjectSetInteger(0, "EA_SkipStatus2", OBJPROP_YDISTANCE, yPos);
-            ObjectSetString(0, "EA_SkipStatus2", OBJPROP_TEXT, eqText);
-            ObjectSetInteger(0, "EA_SkipStatus2", OBJPROP_COLOR, clrOrange);
-            ObjectSetInteger(0, "EA_SkipStatus2", OBJPROP_FONTSIZE, 9);
-            ObjectSetString(0, "EA_SkipStatus2", OBJPROP_FONT, "Arial");
-            yPos += 18;
-        }
+        entryStatus = "ENTRY: BUY + SELL ALLOWED (Hedging Mode)";
+        entryColor = clrLime;
+    }
+    else if(g_State.buyAllowed)
+    {
+        entryStatus = "ENTRY: BUY ONLY | SELL: " + g_State.sellBlockReason;
+        entryColor = clrDodgerBlue;
+    }
+    else if(g_State.sellAllowed)
+    {
+        entryStatus = "ENTRY: SELL ONLY | BUY: " + g_State.buyBlockReason;
+        entryColor = clrOrangeRed;
+    }
+    else
+    {
+        entryStatus = "ENTRY: ALL BLOCKED | BUY: " + g_State.buyBlockReason;
+        entryColor = clrRed;
     }
     
-    // ===== SMART FILTER STATUS =====
-    ObjectDelete(0, "EA_FilterStatus");
-    ObjectDelete(0, "EA_TrendInfo");
-    if(g_NewEntriesBlocked || g_TrendBias != 0)
-    {
-        if(g_NewEntriesBlocked)
-        {
-            ObjectCreate(0, "EA_FilterStatus", OBJ_LABEL, 0, 0, 0);
-            ObjectSetInteger(0, "EA_FilterStatus", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-            ObjectSetInteger(0, "EA_FilterStatus", OBJPROP_XDISTANCE, 10);
-            ObjectSetInteger(0, "EA_FilterStatus", OBJPROP_YDISTANCE, yPos);
-            ObjectSetString(0, "EA_FilterStatus", OBJPROP_TEXT, "ENTRIES BLOCKED: " + g_BlockReason);
-            ObjectSetInteger(0, "EA_FilterStatus", OBJPROP_COLOR, clrOrangeRed);
-            ObjectSetInteger(0, "EA_FilterStatus", OBJPROP_FONTSIZE, 9);
-            ObjectSetString(0, "EA_FilterStatus", OBJPROP_FONT, "Arial Bold");
-            yPos += 18;
-        }
-        
-        // Show trend + ATR info
-        string trendStr = (g_TrendBias == 1) ? "BULLISH" : (g_TrendBias == -1) ? "BEARISH" : "NEUTRAL";
-        double atrGap = GetATRGridGap(true);
-        string infoText = StringFormat("Trend: %s | ATR Gap: %.1f pip | Spread: %.0f pts", 
-            trendStr, atrGap, (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / _Point);
-        
-        ObjectCreate(0, "EA_TrendInfo", OBJ_LABEL, 0, 0, 0);
-        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_XDISTANCE, 10);
-        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_YDISTANCE, yPos);
-        ObjectSetString(0, "EA_TrendInfo", OBJPROP_TEXT, infoText);
-        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_COLOR, (g_TrendBias == 1) ? clrLime : (g_TrendBias == -1) ? clrOrangeRed : clrGray);
-        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_FONTSIZE, 9);
-        ObjectSetString(0, "EA_TrendInfo", OBJPROP_FONT, "Arial");
-        yPos += 18;
-    }
+    ObjectCreate(0, "EA_EntrySignal", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_EntrySignal", OBJPROP_TEXT, entryStatus);
+    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_COLOR, entryColor);
+    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_EntrySignal", OBJPROP_FONT, "Arial Bold");
+    yPos += 22;
     
     // ===== SELL SECTION (LEFT SIDE) =====
     int sellYPos = yPos;
@@ -4108,9 +4046,7 @@ void UpdateInfoPanel()
     sellYPos += 16;
     
     // SELL Mode
-    string sellModeText = "Normal Grid Mode";
-    if(sellInRecovery)
-        sellModeText = (g_TrendBias <= 0) ? ">> RECOVERY MODE <<" : ">> RECOVERY (Waiting Trend) <<";
+    string sellModeText = sellInRecovery ? ">> RECOVERY MODE <<" : "Normal Grid Mode";
     ObjectCreate(0, "EA_SellMode", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_SellMode", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_SellMode", OBJPROP_XDISTANCE, 10);
@@ -4186,9 +4122,7 @@ void UpdateInfoPanel()
     buyYPos += 16;
     
     // BUY Mode
-    string buyModeText = "Normal Grid Mode";
-    if(buyInRecovery)
-        buyModeText = (g_TrendBias >= 0) ? ">> RECOVERY MODE <<" : ">> RECOVERY (Waiting Trend) <<";
+    string buyModeText = buyInRecovery ? ">> RECOVERY MODE <<" : "Normal Grid Mode";
     ObjectCreate(0, "EA_BuyMode", OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, "EA_BuyMode", OBJPROP_CORNER, CORNER_LEFT_UPPER);
     ObjectSetInteger(0, "EA_BuyMode", OBJPROP_XDISTANCE, rightX);
@@ -4394,35 +4328,11 @@ void SendTradeDataToServer()
     }
     pendingJson += "]";
     
-    // Determine trading mode with full status
+    // Determine trading mode
     string tradingMode = "Normal Mode Running";
     if(buyInRecovery && sellInRecovery) tradingMode = "Buy & Sell Recovery Mode Activated!";
     else if(buyInRecovery) tradingMode = "Buy Recovery Mode Activated!";
     else if(sellInRecovery) tradingMode = "Sell Recovery Mode Activated!";
-    
-    // Build smart filter status for website
-    string trendStr = (g_TrendBias == 1) ? "BULLISH" : (g_TrendBias == -1) ? "BEARISH" : "NEUTRAL";
-    string filterStatus = "";
-    if(g_NewEntriesBlocked)
-        filterStatus = "BLOCKED: " + g_BlockReason;
-    else if(skipBuyGrid && skipSellGrid)
-        filterStatus = "BOTH GRIDS PAUSED (Equity/Trend Skip)";
-    else if(skipBuyGrid)
-        filterStatus = "BUY GRID PAUSED (Trend/Equity Skip)";
-    else if(skipSellGrid)
-        filterStatus = "SELL GRID PAUSED (Trend/Equity Skip)";
-    else if(IsTrendFiltered(true) && IsTrendFiltered(false))
-        filterStatus = "BOTH SIDES TREND FILTERED";
-    else if(IsTrendFiltered(true))
-        filterStatus = "BUY FILTERED (EMA Bearish)";
-    else if(IsTrendFiltered(false))
-        filterStatus = "SELL FILTERED (EMA Bullish)";
-    else
-        filterStatus = "ALL CLEAR";
-    
-    double atrGapBuy = GetATRGridGap(true);
-    double atrGapSell = GetATRGridGap(false);
-    double currentSpread = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / _Point;
     
     // Build closed positions array (last 24 hours)
     string closedJson = "[";
@@ -4512,16 +4422,20 @@ void SendTradeDataToServer()
     jsonRequest += "\"open_positions\":" + positionsJson + ",";
     jsonRequest += "\"pending_orders\":" + pendingJson + ",";
     jsonRequest += "\"closed_positions\":" + closedJson + ",";
-    // Smart filter & trend data for website dashboard
-    jsonRequest += "\"trend_direction\":\"" + trendStr + "\",";
-    jsonRequest += "\"filter_status\":\"" + filterStatus + "\",";
-    jsonRequest += "\"atr_gap_buy\":" + DoubleToString(atrGapBuy, 1) + ",";
-    jsonRequest += "\"atr_gap_sell\":" + DoubleToString(atrGapSell, 1) + ",";
-    jsonRequest += "\"spread\":" + DoubleToString(currentSpread, 0) + ",";
-    jsonRequest += "\"skip_buy\":" + (skipBuyGrid ? "true" : "false") + ",";
-    jsonRequest += "\"skip_sell\":" + (skipSellGrid ? "true" : "false") + ",";
-    jsonRequest += "\"buy_mode\":\"" + (buyInRecovery ? "RECOVERY" : "NORMAL") + "\",";
-    jsonRequest += "\"sell_mode\":\"" + (sellInRecovery ? "RECOVERY" : "NORMAL") + "\"";
+    // Multi-TF state info
+    jsonRequest += "\"ea_details\":{";
+    jsonRequest += "\"version\":\"3.3.0\",";
+    jsonRequest += "\"macro_bias\":" + IntegerToString(g_State.macroBias) + ",";
+    jsonRequest += "\"trend_score\":" + IntegerToString(g_State.trendScore) + ",";
+    jsonRequest += "\"regime\":\"" + g_State.regimeText + "\",";
+    jsonRequest += "\"m5_entry\":" + IntegerToString(g_State.m5Entry) + ",";
+    jsonRequest += "\"atr_h1\":" + DoubleToString(g_State.atrH1, 2) + ",";
+    jsonRequest += "\"spread_pips\":" + DoubleToString(g_State.spreadPips, 1) + ",";
+    jsonRequest += "\"buy_allowed\":" + (g_State.buyAllowed ? "true" : "false") + ",";
+    jsonRequest += "\"sell_allowed\":" + (g_State.sellAllowed ? "true" : "false") + ",";
+    jsonRequest += "\"buy_block\":\"" + g_State.buyBlockReason + "\",";
+    jsonRequest += "\"sell_block\":\"" + g_State.sellBlockReason + "\"";
+    jsonRequest += "}";
     jsonRequest += "}";
     
     // Prepare request
@@ -4557,7 +4471,7 @@ bool CheckMaxDrawdown()
     if(TimeCurrent() - lastDrawdownLog > 5)
     {
         lastDrawdownLog = TimeCurrent();
-        AddToLog(StringFormat("MAX DRAWDOWN HIT: Loss=$%.2f / Limit=$%.2f | Balance=$%.2f | Equity=%.2f — Closing all",
+        AddToLog(StringFormat("MAX DRAWDOWN HIT: Loss=%.2f / Limit=%.2f | Balance=%.2f Equity=%.2f — Closing all positions",
             drawdown, MaxDrawdownAmount, balance, equity), "DRAWDOWN");
     }
 
