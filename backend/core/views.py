@@ -2442,16 +2442,17 @@ def request_free_extension(request):
             'message': 'This license was not obtained through a free Exness claim. Please use the paid extension option.'
         }, status=400)
 
-    # Check for existing pending free extension request for this license
-    existing_pending = LicensePurchaseRequest.objects.filter(
-        extend_license=license_obj,
+    # One-time rule: a user can use free extension only once ever.
+    # After any free extension request (pending/approved/rejected), future extensions must be paid.
+    existing_free_extension = LicensePurchaseRequest.objects.filter(
+        user=user,
         user_note__icontains='[EXNESS_FREE_EXTENSION]',
-        status='pending',
-    ).exists()
-    if existing_pending:
+    ).order_by('-created_at').first()
+    if existing_free_extension:
+        status_label = existing_free_extension.status.capitalize()
         return JsonResponse({
             'success': False,
-            'message': 'You already have a pending free extension request for this license. Please wait for admin verification.'
+            'message': f'You have already used your one-time free extension request ({status_label}). Further extensions require payment.'
         }, status=400)
 
     # Use the user-selected plan, fallback to original claim's plan, then cheapest

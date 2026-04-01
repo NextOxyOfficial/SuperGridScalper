@@ -1217,19 +1217,20 @@ export default function DashboardHome() {
                         const isFreeLicense = (purchaseRequests || []).some(
                           (r: any) => (r.user_note || '').includes('[EXNESS_FREE_CLAIM]') && r.status === 'approved' && r.issued_license_key === selectedLicense.license_key
                         );
-                        const hasPendingFreeExt = (purchaseRequests || []).some(
-                          (r: any) => (r.user_note || '').includes('[EXNESS_FREE_EXTENSION]') && r.status === 'pending' && r.extend_license_key === selectedLicense.license_key
+                        const existingFreeExt = (purchaseRequests || []).find(
+                          (r: any) => (r.user_note || '').includes('[EXNESS_FREE_EXTENSION]')
                         );
+                        const hasUsedFreeExt = !!existingFreeExt;
                         if (isFreeLicense) {
                           return (
                             <button
                               type="button"
                               onClick={() => handleRequestFreeExtension()}
-                              disabled={requestingFreeExtension || hasPendingFreeExt}
-                              className={`px-3 py-2 rounded-lg text-xs font-bold border ${hasPendingFreeExt ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30 cursor-not-allowed opacity-70' : 'bg-green-500/20 hover:bg-green-500/30 text-green-200 border-green-500/40'}`}
+                              disabled={requestingFreeExtension || hasUsedFreeExt}
+                              className={`px-3 py-2 rounded-lg text-xs font-bold border ${hasUsedFreeExt ? 'bg-gray-500/10 text-gray-300 border-gray-500/30 cursor-not-allowed opacity-70' : 'bg-green-500/20 hover:bg-green-500/30 text-green-200 border-green-500/40'}`}
                               style={{ fontFamily: 'Orbitron, sans-serif' }}
                             >
-                              {requestingFreeExtension ? 'Requesting...' : hasPendingFreeExt ? 'Pending...' : 'Request Extension'}
+                              {requestingFreeExtension ? 'Requesting...' : hasUsedFreeExt ? 'Used' : 'Request Extension'}
                             </button>
                           );
                         }
@@ -1383,10 +1384,11 @@ export default function DashboardHome() {
                             const isClaimApproved = existingFreeClaim?.status === 'approved';
                             const isThisLicenseFree = isClaimApproved && existingFreeClaim?.issued_license_key === selectedLicense?.license_key;
                             const freeBoundAccount = isClaimApproved && !isThisLicenseFree ? (existingFreeClaim?.mt5_account || existingFreeClaim?.issued_license_key?.slice(0, 12) || '—') : null;
-                            const hasPendingFreeExt = (purchaseRequests || []).some(
-                              (r: any) => (r.user_note || '').includes('[EXNESS_FREE_EXTENSION]') && r.status === 'pending' && r.extend_license_key === selectedLicense?.license_key
+                            const existingFreeExt = (purchaseRequests || []).find(
+                              (r: any) => (r.user_note || '').includes('[EXNESS_FREE_EXTENSION]')
                             );
-                            const isDisabled = freeBoundAccount ? true : existingFreeClaim ? (!isClaimApproved || hasPendingFreeExt) : false;
+                            const hasUsedFreeExt = !!existingFreeExt;
+                            const isDisabled = freeBoundAccount ? true : existingFreeClaim ? (!isClaimApproved || hasUsedFreeExt) : false;
                             return (
                               <button
                                 onClick={() => {
@@ -1413,8 +1415,8 @@ export default function DashboardHome() {
                                   <span className="text-white font-bold text-xs sm:text-sm whitespace-nowrap" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                                     {requestingFreeExtension ? 'REQUESTING...' : isThisLicenseFree ? 'FREE EXTEND' : 'GET IT FREE'}
                                   </span>
-                                  {hasPendingFreeExt ? (
-                                    <span className="text-[8px] sm:text-[9px] font-bold text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded-full border border-yellow-400/40">PENDING</span>
+                                  {hasUsedFreeExt ? (
+                                    <span className="text-[8px] sm:text-[9px] font-bold text-gray-300 bg-gray-500/20 px-1.5 py-0.5 rounded-full border border-gray-400/40">USED</span>
                                   ) : freeBoundAccount ? (
                                     <span className="text-[8px] sm:text-[9px] font-bold text-gray-400 bg-gray-500/20 px-1.5 py-0.5 rounded-full border border-gray-400/40">BOUND</span>
                                   ) : existingFreeClaim && !isClaimApproved ? (
@@ -1428,8 +1430,8 @@ export default function DashboardHome() {
                                     ? 'Submitting your free extension request...'
                                     : freeBoundAccount
                                       ? `Free license is bound to account ${freeBoundAccount} only.`
-                                      : hasPendingFreeExt
-                                        ? 'You have a pending free extension request. Please wait for admin verification.'
+                                      : hasUsedFreeExt
+                                        ? 'You already used your one-time free extension. Further extensions require payment.'
                                         : isThisLicenseFree
                                           ? 'Request a free extension — admin will verify your Exness referral.'
                                           : existingFreeClaim
