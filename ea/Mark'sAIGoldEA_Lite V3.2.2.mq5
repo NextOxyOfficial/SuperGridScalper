@@ -304,12 +304,23 @@ void OnTick()
     if(g_ControlSettingsLoaded && g_ControlTargetStopped)
     {
         static datetime lastTargetMsg = 0;
+        static datetime lastTargetCleanup = 0;
+        if(TimeCurrent() - lastTargetCleanup > 10)
+        {
+            lastTargetCleanup = TimeCurrent();
+            CloseAllPendingOrders();
+            CloseAllOpenPositions();
+            ArrayFree(buyBundles);
+            ArrayFree(sellBundles);
+            nextBuyBundleId = 1;
+            nextSellBundleId = 1;
+        }
         if(TimeCurrent() - lastTargetMsg > 10)
         {
             lastTargetMsg = TimeCurrent();
-            AddToLog("EA PAUSED: Daily profit target reached. Waiting for cooldown.", "CONTROL");
+            AddToLog("EA PAUSED: Daily profit target reached. Closed all trades and waiting for cooldown.", "CONTROL");
         }
-        Comment("\xF0\x9F\x8E\xAF DAILY TARGET REACHED — EA PAUSED\n\nWaiting for cooldown to expire...\nSet from website EA Control Settings");
+        Comment("\xF0\x9F\x8E\xAF DAILY TARGET REACHED — EA PAUSED\n\nAll positions/orders closed.\nWaiting for cooldown to expire...\nSet from website EA Control Settings");
         return;
     }
     
