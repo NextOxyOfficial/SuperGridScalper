@@ -1081,10 +1081,26 @@ export default function DashboardHome() {
     }
   };
 
+  const updateEaControlField = (field: string, value: string | boolean) => {
+    setEaControl((prev: any) => prev ? { ...prev, [field]: value } : prev);
+  };
+
+  const normalizeEaControlSettings = (settingsData: any) => ({
+    ...settingsData,
+    lot_size: Number.parseFloat(`${settingsData?.lot_size ?? ''}`) || 0.01,
+    daily_balance_target: Number.parseFloat(`${settingsData?.daily_balance_target ?? ''}`) || 0,
+    daily_equity_target: Number.parseFloat(`${settingsData?.daily_equity_target ?? ''}`) || 0,
+    cooldown_minutes: Number.parseInt(`${settingsData?.cooldown_minutes ?? ''}`, 10) || 60,
+    schedule_stop_hour: Number.parseInt(`${settingsData?.schedule_stop_hour ?? ''}`, 10) || 0,
+    schedule_stop_minute: Number.parseInt(`${settingsData?.schedule_stop_minute ?? ''}`, 10) || 0,
+    schedule_stop_duration_minutes: Number.parseInt(`${settingsData?.schedule_stop_duration_minutes ?? ''}`, 10) || 60,
+  });
+
   const saveEaControl = async (settingsData: any) => {
     if (!selectedLicense) return;
     setEaControlSaving(true);
     setEaControlMsg(null);
+    const normalizedSettings = normalizeEaControlSettings(settingsData);
     try {
       const res = await fetch(`${API_URL}/ea-control/save/`, {
         method: 'POST',
@@ -1092,7 +1108,7 @@ export default function DashboardHome() {
         body: JSON.stringify({
           license_key: selectedLicense.license_key,
           email: user?.email || user?.username,
-          settings: settingsData
+          settings: normalizedSettings
         })
       });
       const data = await res.json();
@@ -2319,8 +2335,8 @@ export default function DashboardHome() {
                               type="number"
                               step="0.01"
                               min="0.01"
-                              value={eaControl.lot_size}
-                              onChange={e => setEaControl({ ...eaControl, lot_size: parseFloat(e.target.value) || 0.01 })}
+                              value={eaControl.lot_size ?? ''}
+                              onChange={e => updateEaControlField('lot_size', e.target.value)}
                               className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-xs focus:border-cyan-500/50 focus:outline-none"
                             />
                           </div>
@@ -2344,8 +2360,8 @@ export default function DashboardHome() {
                                     type="number"
                                     step="1"
                                     min="0"
-                                    value={eaControl.daily_balance_target}
-                                    onChange={e => setEaControl({ ...eaControl, daily_balance_target: parseFloat(e.target.value) || 0 })}
+                                    value={eaControl.daily_balance_target ?? ''}
+                                    onChange={e => updateEaControlField('daily_balance_target', e.target.value)}
                                     className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
                                   />
                                 </div>
@@ -2355,8 +2371,8 @@ export default function DashboardHome() {
                                     type="number"
                                     step="1"
                                     min="0"
-                                    value={eaControl.daily_equity_target}
-                                    onChange={e => setEaControl({ ...eaControl, daily_equity_target: parseFloat(e.target.value) || 0 })}
+                                    value={eaControl.daily_equity_target ?? ''}
+                                    onChange={e => updateEaControlField('daily_equity_target', e.target.value)}
                                     className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
                                   />
                                 </div>
@@ -2366,8 +2382,8 @@ export default function DashboardHome() {
                                     type="number"
                                     step="1"
                                     min="1"
-                                    value={eaControl.cooldown_minutes}
-                                    onChange={e => setEaControl({ ...eaControl, cooldown_minutes: parseInt(e.target.value) || 60 })}
+                                    value={eaControl.cooldown_minutes ?? ''}
+                                    onChange={e => updateEaControlField('cooldown_minutes', e.target.value)}
                                     className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
                                   />
                                 </div>
@@ -2399,8 +2415,8 @@ export default function DashboardHome() {
                                     type="number"
                                     min="0"
                                     max="23"
-                                    value={eaControl.schedule_stop_hour}
-                                    onChange={e => setEaControl({ ...eaControl, schedule_stop_hour: parseInt(e.target.value) || 0 })}
+                                    value={eaControl.schedule_stop_hour ?? ''}
+                                    onChange={e => updateEaControlField('schedule_stop_hour', e.target.value)}
                                     className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
                                   />
                                 </div>
@@ -2410,8 +2426,8 @@ export default function DashboardHome() {
                                     type="number"
                                     min="0"
                                     max="59"
-                                    value={eaControl.schedule_stop_minute}
-                                    onChange={e => setEaControl({ ...eaControl, schedule_stop_minute: parseInt(e.target.value) || 0 })}
+                                    value={eaControl.schedule_stop_minute ?? ''}
+                                    onChange={e => updateEaControlField('schedule_stop_minute', e.target.value)}
                                     className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
                                   />
                                 </div>
@@ -2420,8 +2436,8 @@ export default function DashboardHome() {
                                   <input
                                     type="number"
                                     min="1"
-                                    value={eaControl.schedule_stop_duration_minutes}
-                                    onChange={e => setEaControl({ ...eaControl, schedule_stop_duration_minutes: parseInt(e.target.value) || 60 })}
+                                    value={eaControl.schedule_stop_duration_minutes ?? ''}
+                                    onChange={e => updateEaControlField('schedule_stop_duration_minutes', e.target.value)}
                                     className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
                                   />
                                 </div>
