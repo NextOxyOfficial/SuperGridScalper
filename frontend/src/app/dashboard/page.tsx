@@ -1053,6 +1053,7 @@ export default function DashboardHome() {
   const fetchEaControl = async (licenseKey: string) => {
     setEaControlLoading(true);
     setEaControlMsg(null);
+    setEaControl(null);
     try {
       const res = await fetch(`${API_URL}/ea-control/`, {
         method: 'POST',
@@ -1060,7 +1061,10 @@ export default function DashboardHome() {
         body: JSON.stringify({ license_key: licenseKey, email: user?.email || user?.username })
       });
       if (!res.ok) {
-        setEaControlMsg({ type: 'error', text: `Server error (${res.status}). Run migrations on server.` });
+        const text = res.status === 404
+          ? 'Live server route missing. Run git pull on VPS, then restart PM2 backend.'
+          : `Server error (${res.status}). Check VPS deploy and backend logs.`;
+        setEaControlMsg({ type: 'error', text });
         return;
       }
       const data = await res.json();
