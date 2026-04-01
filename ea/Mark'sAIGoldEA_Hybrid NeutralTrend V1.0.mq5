@@ -39,83 +39,65 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 #define BuyRecoveryGapPips   6
 #define SellRecoveryGapPips  6
 
-// ===== MULTI-TIMEFRAME DECISION ENGINE SETTINGS =====
-// Hierarchy: D1/H4 = macro bias, H1 = primary trend, M15 = regime, M5 = entry trigger
+// ===== DYNAMIC RANGE / GAP SETTINGS =====
+// Static range/gap ke ATR, session liquidity, and intraday regime diye adapt kora hoy.
+#define EnableDynamicRangeGap  true
+#define DynamicATRPeriod       14
+#define DynamicATRTimeframe    PERIOD_M15
+#define DynamicATRSlowLookback 24
+#define NormalGapATRMultiplier 0.65
+#define RecoveryGapATRMultiplier 0.95
+#define MinNormalGapPips       4.0
+#define MaxNormalGapPips       12.0
+#define MinRecoveryGapPips     5.0
+#define MaxRecoveryGapPips     18.0
+#define NormalRangeATRMultiplier 10.0
+#define MinNormalRangePips     45.0
+#define MaxNormalRangePips     220.0
 
-// EMA Periods per timeframe
-#define D1_EMA_Period           20
-#define H4_EMA_Period           20
-#define H1_EMA_Period           20
-#define M15_EMA_Period          20
-#define M5_EMA_Period           14
+// ===== HYBRID TREND / NEUTRAL ENGINE =====
+// Neutral market e Lite-style dual-side grid cholbe.
+// Trend confirm hole opposite side off thakbe, trend-side Pro-style momentum filter follow korbe.
+#define EnableHybridTrendMode  true
+#define EnableM5Momentum       true
+#define M5_EMA_Period          20
+#define M5_RSI_Period          14
+#define M5_RSI_Overbought      70
+#define M5_RSI_Oversold        30
+#define M5_MinCandleBodyPips   1.5
+#define M5_MomentumBars        3
+#define EnableTrendFilter      true
+#define H1_EMA_Period          20
+#define H1_EMA_Timeframe       PERIOD_H1
+#define H1_EMA_SlopeMinPips    1.5
+#define H1_ADX_Period          14
+#define H1_ADX_MinTrendStrength 22.0
+#define H1_EMA_MinDistancePips 2.0
+#define H1_EMA_MinDistanceATRFactor 0.20
+#define TrendSignalUpdateSeconds 30
 
-// Slope bars (how many bars to measure EMA slope)
-#define D1_SlopeBars            5
-#define H4_SlopeBars            5
-#define H1_SlopeBars            5
-#define M15_SlopeBars           5
-#define M5_SlopeBars            3
+// ===== TRAILING STOP SETTINGS (Normal Mode) =====
+// Formula: newSL = openPrice + InitialSL + ((profit - TrailingStart) × TrailingRatio)
+// 
+// Example (BUY @ 2650, Current = 2656, Profit = 6 pips):
+//   priceMovement = 6 - 3 = 3 pips
+//   slMovement = 3 × 0.5 = 1.5 pips  
+//   newSL = 2650 + 2 + 1.5 = 2653.50 (3.5 pips profit locked)
+//
+// | Profit | SL Position | Calculation |
+// |--------|-------------|-------------|
+// | 3 pip  | +2.0 pip    | Initial SL set |
+// | 5 pip  | +3.0 pip    | 2 + (2 × 0.5) |
+// | 10 pip | +5.5 pip    | 2 + (7 × 0.5) |
+// | 20 pip | +10.5 pip   | 2 + (17 × 0.5) |
 
-// ATR Settings
-#define ATR_Period              14
-#define ATR_Smoothing_Alpha     0.15            // EMA smoothing for ATR gap stability (lower = smoother)
+#define BuyTrailingStartPips    5.0   // কত pip profit হলে trailing শুরু হবে (Trailing activation threshold)
+#define BuyInitialSLPips        4.0   // প্রথমে SL কত pip profit এ set হবে (Initial SL when trailing starts)
+#define BuyTrailingRatio        0.5   // প্রতি 1 pip trail এ SL কত pip move করবে (0.5 = 50% of price movement)
 
-// ADX Settings (M15 regime detection)
-#define M15_ADX_Period          14
-#define ADX_TrendThreshold      25.0            // ADX >= 25 = trending
-#define ADX_StrongThreshold     35.0            // ADX >= 35 = strong trend
-
-// RSI Settings (M5 entry trigger)
-#define M5_RSI_Period           14
-#define M5_RSI_Overbought       70
-#define M5_RSI_Oversold         30
-#define M5_MinCandleBodyPips    1.0             // Min candle body for M5 momentum signal
-
-// Trend Score Thresholds (ATR-normalized slopes)
-#define H1_SlopeStrong          0.30            // H1 slope / H1_ATR >= 0.30 = strong trend
-#define H1_SlopeWeak            0.10            // H1 slope / H1_ATR >= 0.10 = weak trend
-#define MacroSlopeThreshold     0.08            // D1/H4 slope / ATR threshold for bias
-
-// Regime Detection Thresholds
-#define ATR_HighVolMultiple     1.6             // ATR > 1.6× avg = high volatility
-#define ATR_LowVolMultiple      0.5             // ATR < 0.5× avg = compression
-#define RegimeOverlapBars       6               // Candle overlap check bars for M15
-#define RegimeDirectionalMin    0.55            // Min directional efficiency for trend regime
-
-// Safety Limits
-#define MaxSpreadPips           4.0             // Max spread to allow new entries
-#define MaxFloatingLossPercent  30.0            // Max floating loss % per side before pause
-#define MaxTotalLotsPerSide     5.0             // Max total lots per side
-#define MinFreeMarginUSD        50.0            // Min free margin to open new trades
-#define RecoveryCooldownSec     30              // Seconds between recovery order additions
-
-// ===== TRAILING STOP SETTINGS =====
-// Staged trailing: mode chosen by regime/trend strength
-// Strong trend = looser trail, Neutral = tighter trail, Recovery = protect basket
-
-// Normal mode trailing
-#define BuyTrailingStartPips    3.0
-#define BuyInitialSLPips        2.0
-#define BuyTrailingRatio        0.65
-
-#define SellTrailingStartPips   3.0
-#define SellInitialSLPips       2.0
-#define SellTrailingRatio       0.65
-
-// Regime-adjusted trailing multipliers
-#define TrailRatioStrongTrend   0.50            // Looser in strong trend (let it run)
-#define TrailRatioWeakTrend     0.65            // Normal in weak trend
-#define TrailRatioNeutral       0.80            // Tighter in neutral (lock profits fast)
-
-// ===== ATR DYNAMIC GAP SETTINGS =====
-#define EnableATRGap            true
-#define ATR_Multiplier_Normal   0.6
-#define ATR_Multiplier_Recovery 1.0
-#define MinGapPips_Normal       5.0
-#define MinGapPips_Recovery     8.0
-#define MaxGapPips              25.0            // Higher ceiling for volatile H1 moves
-#define GapVolatilityBoost      1.4             // Gap multiplier in high-vol regime
-#define GapTrendBoost           1.2             // Gap multiplier in trending regime
+#define SellTrailingStartPips   5.0   // SELL এর জন্য trailing শুরু threshold
+#define SellInitialSLPips       4.0   // SELL এর জন্য initial SL
+#define SellTrailingRatio       0.5   // SELL এর জন্য trailing ratio
 
 // ===== RECOVERY MODE SETTINGS =====
 // Recovery mode এ average price থেকে calculate হয়, individual position থেকে না
@@ -130,7 +112,7 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 #define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
 #define MaxRecoveryLotSize      0.25    // Recovery mode এ সর্বোচ্চ lot size (এর বেশি হবে না)
 #define MaxRecoveryOrders       200
-#define RecoveryCleanupThreshold 4  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
+#define RecoveryCleanupThreshold 3  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
 
 #define LotSize         0.10
 #define MagicNumber     999888
@@ -140,50 +122,6 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 //--- Server URL (Hidden from user)
 string    LicenseServer     = "https://markstrades.com";
 
-// ===== MARKET REGIME ENUM =====
-enum ENUM_MARKET_REGIME
-{
-    REGIME_TREND_UP,            // Strong directional up — BUY only
-    REGIME_TREND_DOWN,          // Strong directional down — SELL only
-    REGIME_NEUTRAL_RANGE,       // Low velocity range — both-side hedging OK
-    REGIME_HIGH_VOLATILITY,     // Chaos / spike — reduce entries, widen gaps
-    REGIME_LOW_COMPRESSION,     // Squeeze — both sides OK with caution
-    REGIME_TRANSITION           // Conflict / unclear — defensive, minimal entries
-};
-
-// ===== TRAILING MODE ENUM =====
-enum ENUM_TRAIL_MODE
-{
-    TRAIL_NONE,                 // No trailing active yet
-    TRAIL_SAFETY_SL,            // Safety SL set (from open price)
-    TRAIL_BREAKEVEN,            // Breakeven lock
-    TRAIL_SOFT,                 // Soft trailing (low ratio)
-    TRAIL_AGGRESSIVE            // Aggressive trailing (high ratio)
-};
-
-// ===== MARKET STATE — single source of truth for all decisions =====
-struct MarketState
-{
-    int               macroBias;         // D1/H4: -2=strong bear, -1=bear, 0=neutral, +1=bull, +2=strong bull
-    int               trendScore;        // H1: -2=strong bear, -1=bear, 0=neutral, +1=bull, +2=strong bull
-    ENUM_MARKET_REGIME regime;           // M15 regime classification
-    int               m5Entry;           // M5: -1=sell trigger, 0=no trigger, +1=buy trigger
-    double            atrH1;             // H1 ATR in pips (raw)
-    double            atrM15;            // M15 ATR in pips (raw)
-    double            smoothedATR;       // EMA-smoothed H1 ATR for gap stability
-    double            atrM15Avg;         // Rolling average M15 ATR for regime detection
-    double            spreadPips;        // Current spread in pips
-    double            adxValue;          // M15 ADX value
-    bool              buyAllowed;        // Final decision: can open new BUY?
-    bool              sellAllowed;       // Final decision: can open new SELL?
-    string            buyBlockReason;    // Why BUY blocked (for panel/log)
-    string            sellBlockReason;   // Why SELL blocked (for panel/log)
-    string            regimeText;        // Human-readable regime name
-    double            h1SlopeNorm;       // H1 slope normalized by ATR (for diagnostics)
-    datetime          lastRecoveryBuyAdd;  // Last time recovery BUY order added
-    datetime          lastRecoverySellAdd; // Last time recovery SELL order added
-};
-
 //--- Global Variables
 double pip = 1.0;
 int currentBuyPositions = 0;      // Filled positions only (for recovery mode)
@@ -192,25 +130,18 @@ int totalBuyOrders = 0;           // Positions + Pending (for grid limit)
 int totalSellOrders = 0;          // Positions + Pending (for grid limit)
 bool buyInRecovery = false;
 bool sellInRecovery = false;
-
-// Multi-TF Indicator Handles
-int g_D1_EMA_Handle  = INVALID_HANDLE;
-int g_H4_EMA_Handle  = INVALID_HANDLE;
-int g_H1_EMA_Handle  = INVALID_HANDLE;
-int g_M15_EMA_Handle = INVALID_HANDLE;
-int g_M5_EMA_Handle  = INVALID_HANDLE;
-int g_H1_ATR_Handle  = INVALID_HANDLE;
-int g_M15_ATR_Handle = INVALID_HANDLE;
-int g_M15_ADX_Handle = INVALID_HANDLE;
-int g_M5_RSI_Handle  = INVALID_HANDLE;
-
-// Market State (updated every tick by UpdateMarketState)
-MarketState g_State;
-
-// Legacy compat aliases (used by existing grid/panel code)
-#define g_TrendBias      g_State.trendScore
-#define g_MomentumSignal g_State.m5Entry
-#define g_CurrentATR     g_State.atrH1
+int g_H1_EMAHandle = INVALID_HANDLE;
+int g_H1_ADXHandle = INVALID_HANDLE;
+int g_TrendBias = 0;
+double g_TrendADXValue = 0.0;
+double g_TrendSlopePips = 0.0;
+double g_TrendDistancePips = 0.0;
+int g_M5_EMAHandle = INVALID_HANDLE;
+int g_M5_RSIHandle = INVALID_HANDLE;
+int g_MomentumSignal = 0;
+int g_ATRHandle = INVALID_HANDLE;
+double g_CurrentATRPips = 0.0;
+double g_AverageATRPips = 0.0;
 // Multi-bundle system: each bundle has unique ID and tracks its own positions
 struct BundleEntry
 {
@@ -250,44 +181,39 @@ int OnInit()
 {
     pip = 1.0; // For XAUUSD
     trade.SetExpertMagicNumber(MagicNumber);
-    
-    // ===== Initialize Multi-TF Indicator Handles =====
-    // EMA handles (all timeframes)
-    g_D1_EMA_Handle  = iMA(_Symbol, PERIOD_D1,  D1_EMA_Period,  0, MODE_EMA, PRICE_CLOSE);
-    g_H4_EMA_Handle  = iMA(_Symbol, PERIOD_H4,  H4_EMA_Period,  0, MODE_EMA, PRICE_CLOSE);
-    g_H1_EMA_Handle  = iMA(_Symbol, PERIOD_H1,  H1_EMA_Period,  0, MODE_EMA, PRICE_CLOSE);
-    g_M15_EMA_Handle = iMA(_Symbol, PERIOD_M15, M15_EMA_Period, 0, MODE_EMA, PRICE_CLOSE);
-    g_M5_EMA_Handle  = iMA(_Symbol, PERIOD_M5,  M5_EMA_Period,  0, MODE_EMA, PRICE_CLOSE);
-    
-    // ATR handles (H1 for gap sizing, M15 for regime detection)
-    g_H1_ATR_Handle  = iATR(_Symbol, PERIOD_H1,  ATR_Period);
-    g_M15_ATR_Handle = iATR(_Symbol, PERIOD_M15, ATR_Period);
-    
-    // ADX handle (M15 for regime detection)
-    g_M15_ADX_Handle = iADX(_Symbol, PERIOD_M15, M15_ADX_Period);
-    
-    // RSI handle (M5 for entry trigger)
-    g_M5_RSI_Handle  = iRSI(_Symbol, PERIOD_M5, M5_RSI_Period, PRICE_CLOSE);
-    
-    // Validate all handles
-    if(g_D1_EMA_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create D1 EMA handle");
-    if(g_H4_EMA_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create H4 EMA handle");
-    if(g_H1_EMA_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create H1 EMA handle");
-    if(g_M15_EMA_Handle == INVALID_HANDLE) Print("WARNING: Failed to create M15 EMA handle");
-    if(g_M5_EMA_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create M5 EMA handle");
-    if(g_H1_ATR_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create H1 ATR handle");
-    if(g_M15_ATR_Handle == INVALID_HANDLE) Print("WARNING: Failed to create M15 ATR handle");
-    if(g_M15_ADX_Handle == INVALID_HANDLE) Print("WARNING: Failed to create M15 ADX handle");
-    if(g_M5_RSI_Handle == INVALID_HANDLE)  Print("WARNING: Failed to create M5 RSI handle");
-    
-    // Initialize state
-    ZeroMemory(g_State);
-    g_State.regime = REGIME_NEUTRAL_RANGE;
-    g_State.buyAllowed = true;
-    g_State.sellAllowed = true;
-    g_State.buyBlockReason = "OK";
-    g_State.sellBlockReason = "OK";
-    g_State.regimeText = "INITIALIZING";
+
+    if(EnableHybridTrendMode && EnableTrendFilter)
+    {
+        g_H1_EMAHandle = iMA(_Symbol, H1_EMA_Timeframe, H1_EMA_Period, 0, MODE_EMA, PRICE_CLOSE);
+        if(g_H1_EMAHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create H1 EMA handle for hybrid trend engine");
+
+        g_H1_ADXHandle = iADX(_Symbol, H1_EMA_Timeframe, H1_ADX_Period);
+        if(g_H1_ADXHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create H1 ADX handle for hybrid trend engine");
+    }
+
+    if(EnableHybridTrendMode && EnableM5Momentum)
+    {
+        g_M5_EMAHandle = iMA(_Symbol, PERIOD_M5, M5_EMA_Period, 0, MODE_EMA, PRICE_CLOSE);
+        if(g_M5_EMAHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create M5 EMA handle for hybrid trend engine");
+
+        g_M5_RSIHandle = iRSI(_Symbol, PERIOD_M5, M5_RSI_Period, PRICE_CLOSE);
+        if(g_M5_RSIHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create M5 RSI handle for hybrid trend engine");
+    }
+
+    if(EnableDynamicRangeGap)
+    {
+        g_ATRHandle = iATR(_Symbol, DynamicATRTimeframe, DynamicATRPeriod);
+        if(g_ATRHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create ATR handle for dynamic range/gap");
+        else
+            UpdateDynamicMarketState();
+    }
+
+    CleanupPanelObjects();
     
     // FORCE license to invalid until verified
     g_LicenseValid = false;
@@ -334,49 +260,37 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-    // Release all multi-TF indicator handles
-    if(g_D1_EMA_Handle  != INVALID_HANDLE) IndicatorRelease(g_D1_EMA_Handle);
-    if(g_H4_EMA_Handle  != INVALID_HANDLE) IndicatorRelease(g_H4_EMA_Handle);
-    if(g_H1_EMA_Handle  != INVALID_HANDLE) IndicatorRelease(g_H1_EMA_Handle);
-    if(g_M15_EMA_Handle != INVALID_HANDLE) IndicatorRelease(g_M15_EMA_Handle);
-    if(g_M5_EMA_Handle  != INVALID_HANDLE) IndicatorRelease(g_M5_EMA_Handle);
-    if(g_H1_ATR_Handle  != INVALID_HANDLE) IndicatorRelease(g_H1_ATR_Handle);
-    if(g_M15_ATR_Handle != INVALID_HANDLE) IndicatorRelease(g_M15_ATR_Handle);
-    if(g_M15_ADX_Handle != INVALID_HANDLE) IndicatorRelease(g_M15_ADX_Handle);
-    if(g_M5_RSI_Handle  != INVALID_HANDLE) IndicatorRelease(g_M5_RSI_Handle);
-    
-    // Delete all chart objects
-    ObjectDelete(0, "EA_ModeStatus");
-    ObjectDelete(0, "EA_SellHeader");
-    ObjectDelete(0, "EA_SellMode");
-    ObjectDelete(0, "EA_SellCount");
-    ObjectDelete(0, "EA_SellAvg");
-    ObjectDelete(0, "EA_SellBE");
-    ObjectDelete(0, "EA_SellProfit");
-    ObjectDelete(0, "EA_BuyHeader");
-    ObjectDelete(0, "EA_BuyMode");
-    ObjectDelete(0, "EA_BuyCount");
-    ObjectDelete(0, "EA_BuyAvg");
-    ObjectDelete(0, "EA_BuyBE");
-    ObjectDelete(0, "EA_BuyProfit");
-    ObjectDelete(0, "EA_PriceHeader");
-    ObjectDelete(0, "EA_PriceInfo");
-    ObjectDelete(0, "EA_TotalProfit");
-    ObjectDelete(0, "EA_LicenseTitle");
-    ObjectDelete(0, "EA_LicenseURL");
-    ObjectDelete(0, "EA_LicensePlan");
-    ObjectDelete(0, "EA_LicenseExpiry");
-    ObjectDelete(0, "EA_LicenseDays");
-    ObjectDelete(0, "EA_LicenseStatus");
-    ObjectDelete(0, "EA_LicenseWarning");
-    ObjectDelete(0, "EA_MacroBias");
-    ObjectDelete(0, "EA_TrendInfo");
-    ObjectDelete(0, "EA_RegimeInfo");
-    ObjectDelete(0, "EA_M5Entry");
-    ObjectDelete(0, "EA_EntrySignal");
-    ObjectDelete(0, "EA_ATRInfo");
-    ObjectDelete(0, "EA_BuyBlock");
-    ObjectDelete(0, "EA_SellBlock");
+    CleanupPanelObjects();
+
+    if(g_H1_EMAHandle != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_H1_EMAHandle);
+        g_H1_EMAHandle = INVALID_HANDLE;
+    }
+
+    if(g_H1_ADXHandle != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_H1_ADXHandle);
+        g_H1_ADXHandle = INVALID_HANDLE;
+    }
+
+    if(g_M5_EMAHandle != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_M5_EMAHandle);
+        g_M5_EMAHandle = INVALID_HANDLE;
+    }
+
+    if(g_M5_RSIHandle != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_M5_RSIHandle);
+        g_M5_RSIHandle = INVALID_HANDLE;
+    }
+
+    if(g_ATRHandle != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_ATRHandle);
+        g_ATRHandle = INVALID_HANDLE;
+    }
     
     // Only delete pending orders when EA is actually removed
     if(reason == REASON_REMOVE || reason == REASON_CHARTCLOSE || reason == REASON_PROGRAM)
@@ -403,20 +317,20 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
 {
+    datetime now = TimeCurrent();
+
     // Re-verify license every 30 seconds (to catch suspensions/deletions & FM commands)
     static datetime lastLicenseCheck = 0;
-    if(!IsTesterMode() && TimeCurrent() - lastLicenseCheck > 30) // 30 seconds
+    if(!IsTesterMode() && EveryNSeconds(lastLicenseCheck, 30, now))
     {
-        lastLicenseCheck = TimeCurrent();
         VerifyLicense();
         UpdateLicensePanel(); // Update panel only after verification
     }
     
     // Poll for pending trade commands every 10 seconds (FM close position, close all buy/sell, etc.)
     static datetime lastCommandPoll = 0;
-    if(!IsTesterMode() && g_LicenseValid && TimeCurrent() - lastCommandPoll > 10)
+    if(!IsTesterMode() && g_LicenseValid && EveryNSeconds(lastCommandPoll, 10, now))
     {
-        lastCommandPoll = TimeCurrent();
         PollAndExecuteCommands();
     }
     
@@ -425,9 +339,8 @@ void OnTick()
     {
         // Close all pending orders and open positions when license is invalid
         static datetime lastCleanup = 0;
-        if(TimeCurrent() - lastCleanup > 10) // Only cleanup every 10 seconds
+        if(EveryNSeconds(lastCleanup, 10, now))
         {
-            lastCleanup = TimeCurrent();
             CloseAllPendingOrders();
             CloseAllOpenPositions();
         }
@@ -444,15 +357,58 @@ void OnTick()
     
     // Clear comment when license is valid
     Comment("");
+
+    static datetime lastDynamicStateUpdate = 0;
+    if(EnableDynamicRangeGap && EveryNSeconds(lastDynamicStateUpdate, 5, now))
+    {
+        UpdateDynamicMarketState();
+    }
+
+    static datetime lastTrendSignalUpdate = 0;
+    if(EnableHybridTrendMode && EveryNSeconds(lastTrendSignalUpdate, TrendSignalUpdateSeconds, now))
+    {
+        UpdateH1TrendConfirmation();
+        UpdateM5Momentum();
+    }
     
     // Max Drawdown Protection — close all if loss exceeds limit
     if(CheckMaxDrawdown()) return;
     
-    // ===== MULTI-TF STATE UPDATE (single call updates everything) =====
-    UpdateMarketState();
-    
     // Count current positions
     CountPositions();
+    
+    // Debug: Log current state every 30 seconds
+    static datetime lastDebugLog = 0;
+    if(EveryNSeconds(lastDebugLog, 30, now))
+    {
+        double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+        string regimeText = (g_TrendBias == 0) ? "NEUTRAL" : (g_TrendBias > 0 ? "BULL_TREND" : "BEAR_TREND");
+        AddToLog(StringFormat("DEBUG | Price: %.2f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d | ATR: %.2f | Regime: %s | Momentum: %d | ADX: %.1f | Slope: %.2f | Dist: %.2f", 
+            currentBid,
+            buyInRecovery ? "RECOVERY" : "NORMAL",
+            sellInRecovery ? "RECOVERY" : "NORMAL",
+            currentBuyPositions,
+            currentSellPositions,
+            g_CurrentATRPips,
+            regimeText,
+            g_MomentumSignal,
+            g_TrendADXValue,
+            g_TrendSlopePips,
+            g_TrendDistancePips), "DEBUG");
+    }
+
+    static int previousTrendBias = 99;
+    if(previousTrendBias != g_TrendBias)
+    {
+        if(g_TrendBias == 0)
+            AddToLog("HYBRID REGIME: Neutral market detected, Lite dual-side grid active", "REGIME");
+        else if(g_TrendBias > 0)
+            AddToLog("HYBRID REGIME: Bull trend confirmed, sell-side alternative entries disabled", "REGIME");
+        else
+            AddToLog("HYBRID REGIME: Bear trend confirmed, buy-side alternative entries disabled", "REGIME");
+
+        previousTrendBias = g_TrendBias;
+    }
     
     // Track previous mode for logging mode changes
     static bool prevBuyInRecovery = false;
@@ -499,62 +455,37 @@ void OnTick()
     // Recovery Cleanup Worker - close remaining recovery positions when normal positions gone
     // and recovery count <= threshold, allowing fresh normal mode restart
     RecoveryCleanupWorker();
-    
-    // ===== STATE-DRIVEN GRID MANAGEMENT =====
-    // Uses AllowNewNormalEntry() results from UpdateMarketState()
-    // Behavior adapts: directional in trend, both-side in neutral, defensive in conflict
-    
-    // === BUY SIDE ===
+
+    bool neutralMarket = IsNeutralMarketRegime();
+    bool buyNormalAllowed = CanOpenNewTrendOrder(true);
+    bool sellNormalAllowed = CanOpenNewTrendOrder(false);
+
     if(!buyInRecovery)
     {
-        if(g_State.buyAllowed)
-            ManageNormalGrid(true);
-        else
-            DeleteAllPendingOrdersForSide(true); // Block BUY — clear pending
+        if(buyNormalAllowed)
+            ManageNormalGrid(true);  // BUY Normal Mode
+        else if(!neutralMarket)
+            DeleteAllPendingOrdersForSide(true);
     }
     else
     {
-        // BUY Recovery Mode — apply safety check before allowing new recovery orders
+        // BUY Recovery Mode - delete normal pending orders first
         DeleteNormalPendingOrders(true);
-        string recReason = "";
-        if(IsRecoverySafe(true, recReason))
-            ManageRecoveryGrid(true);
-        else
-        {
-            // Recovery paused — keep existing positions, just don't add new ones
-            static datetime lastBuyRecLog = 0;
-            if(TimeCurrent() - lastBuyRecLog > 15)
-            {
-                AddToLog(StringFormat("BUY Recovery PAUSED: %s", recReason), "RECOVERY");
-                lastBuyRecLog = TimeCurrent();
-            }
-        }
+        ManageRecoveryGrid(true); // BUY Recovery
     }
-    
-    // === SELL SIDE ===
+        
     if(!sellInRecovery)
     {
-        if(g_State.sellAllowed)
-            ManageNormalGrid(false);
-        else
-            DeleteAllPendingOrdersForSide(false); // Block SELL — clear pending
+        if(sellNormalAllowed)
+            ManageNormalGrid(false); // SELL Normal Mode
+        else if(!neutralMarket)
+            DeleteAllPendingOrdersForSide(false);
     }
     else
     {
-        // SELL Recovery Mode — apply safety check
+        // SELL Recovery Mode - delete normal pending orders first
         DeleteNormalPendingOrders(false);
-        string recReason = "";
-        if(IsRecoverySafe(false, recReason))
-            ManageRecoveryGrid(false);
-        else
-        {
-            static datetime lastSellRecLog = 0;
-            if(TimeCurrent() - lastSellRecLog > 15)
-            {
-                AddToLog(StringFormat("SELL Recovery PAUSED: %s", recReason), "RECOVERY");
-                lastSellRecLog = TimeCurrent();
-            }
-        }
+        ManageRecoveryGrid(false); // SELL Recovery
     }
     
     // CRITICAL: Recovery Mode TP Worker - runs every tick to ensure TP is at breakeven
@@ -565,17 +496,15 @@ void OnTick()
     
     // Update info panel on chart (every 1 second to reduce load)
     static datetime lastPanelUpdate = 0;
-    if(TimeCurrent() - lastPanelUpdate >= 1)
+    if(EveryNSeconds(lastPanelUpdate, 1, now))
     {
-        lastPanelUpdate = TimeCurrent();
         UpdateInfoPanel();
     }
     
     // Send data to API (every 10 seconds)
     static datetime lastAPIUpdate = 0;
-    if(TimeCurrent() - lastAPIUpdate >= 10)
+    if(EveryNSeconds(lastAPIUpdate, 10, now))
     {
-        lastAPIUpdate = TimeCurrent();
         SendTradeDataToServer();
     }
 }
@@ -748,557 +677,183 @@ bool IsTesterMode()
     return (TesterMode && (MQLInfoInteger(MQL_TESTER) != 0));
 }
 
-// =====================================================================
-// MULTI-TIMEFRAME DECISION ENGINE
-// D1/H4 = macro bias | H1 = trend score | M15 = regime | M5 = entry
-// =====================================================================
-
-//+------------------------------------------------------------------+
-//| Helper: Read EMA slope in pips over N bars for given handle       |
-//+------------------------------------------------------------------+
-double ReadEMASlope(int handle, int bars)
+double ClampDouble(double value, double minValue, double maxValue)
 {
-    if(handle == INVALID_HANDLE) return 0.0;
-    double buf[];
-    ArraySetAsSeries(buf, true);
-    if(CopyBuffer(handle, 0, 0, bars + 1, buf) < bars + 1) return 0.0;
-    return (buf[0] - buf[bars]) / pip;
+    return MathMax(minValue, MathMin(maxValue, value));
 }
 
-//+------------------------------------------------------------------+
-//| Helper: Read single ATR value in pips for given handle            |
-//+------------------------------------------------------------------+
-double ReadATR(int handle)
+bool EveryNSeconds(datetime &lastRun, int seconds, datetime now)
 {
-    if(handle == INVALID_HANDLE) return 0.0;
-    double buf[];
-    ArraySetAsSeries(buf, true);
-    if(CopyBuffer(handle, 0, 0, 1, buf) < 1) return 0.0;
-    return buf[0] / pip;
+    if(now - lastRun < seconds) return false;
+    lastRun = now;
+    return true;
 }
 
-//+------------------------------------------------------------------+
-//| Helper: Read ADX main value for given handle                      |
-//+------------------------------------------------------------------+
-double ReadADX(int handle)
+int GetCurrentServerHour()
 {
-    if(handle == INVALID_HANDLE) return 0.0;
-    double buf[];
-    ArraySetAsSeries(buf, true);
-    if(CopyBuffer(handle, 0, 0, 1, buf) < 1) return 0.0; // buffer 0 = main ADX
-    return buf[0];
+    MqlDateTime dt;
+    TimeToStruct(TimeCurrent(), dt);
+    return dt.hour;
 }
 
-//+------------------------------------------------------------------+
-//| Helper: Read RSI value                                            |
-//+------------------------------------------------------------------+
-double ReadRSI(int handle)
+void CleanupPanelObjects()
 {
-    if(handle == INVALID_HANDLE) return 50.0;
-    double buf[];
-    ArraySetAsSeries(buf, true);
-    if(CopyBuffer(handle, 0, 0, 1, buf) < 1) return 50.0;
-    return buf[0];
+    ObjectDelete(0, "EA_ModeStatus");
+    ObjectDelete(0, "EA_RegimeInfo");
+    ObjectDelete(0, "EA_MomentumInfo");
+    ObjectDelete(0, "EA_TrendInfo");
+    ObjectDelete(0, "EA_EntrySignal");
+    ObjectDelete(0, "EA_SellHeader");
+    ObjectDelete(0, "EA_SellMode");
+    ObjectDelete(0, "EA_SellCount");
+    ObjectDelete(0, "EA_SellAvg");
+    ObjectDelete(0, "EA_SellBE");
+    ObjectDelete(0, "EA_SellProfit");
+    ObjectDelete(0, "EA_BuyHeader");
+    ObjectDelete(0, "EA_BuyMode");
+    ObjectDelete(0, "EA_BuyCount");
+    ObjectDelete(0, "EA_BuyAvg");
+    ObjectDelete(0, "EA_BuyBE");
+    ObjectDelete(0, "EA_BuyProfit");
+    ObjectDelete(0, "EA_PriceHeader");
+    ObjectDelete(0, "EA_PriceInfo");
+    ObjectDelete(0, "EA_TotalProfit");
+    ObjectDelete(0, "EA_LicenseTitle");
+    ObjectDelete(0, "EA_LicenseURL");
+    ObjectDelete(0, "EA_LicensePlan");
+    ObjectDelete(0, "EA_LicenseExpiry");
+    ObjectDelete(0, "EA_LicenseDays");
+    ObjectDelete(0, "EA_LicenseStatus");
+    ObjectDelete(0, "EA_LicenseWarning");
+    ObjectDelete(0, "EA_Title");
+    ObjectDelete(0, "EA_Mode");
+    ObjectDelete(0, "EA_BuyInfo");
+    ObjectDelete(0, "EA_SellInfo");
+    ObjectDelete(0, "EA_Profit");
+    ObjectDelete(0, "EA_Status");
 }
 
-//+------------------------------------------------------------------+
-//| Helper: Read EMA value (latest bar)                               |
-//+------------------------------------------------------------------+
-double ReadEMA(int handle)
+void DrawLabel(string name, int corner, int x, int y, string text, color labelColor, int fontSize, string fontName)
 {
-    if(handle == INVALID_HANDLE) return 0.0;
-    double buf[];
-    ArraySetAsSeries(buf, true);
-    if(CopyBuffer(handle, 0, 0, 1, buf) < 1) return 0.0;
-    return buf[0];
+    if(ObjectFind(0, name) < 0)
+        ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+
+    ObjectSetInteger(0, name, OBJPROP_CORNER, corner);
+    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+    ObjectSetString(0, name, OBJPROP_TEXT, text);
+    ObjectSetInteger(0, name, OBJPROP_COLOR, labelColor);
+    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, fontSize);
+    ObjectSetString(0, name, OBJPROP_FONT, fontName);
 }
 
-//+------------------------------------------------------------------+
-//| Calculate M15 directional efficiency (% of net move vs total)     |
-//| High efficiency = trending, Low = choppy/overlapping              |
-//+------------------------------------------------------------------+
-double CalcDirectionalEfficiency(ENUM_TIMEFRAMES tf, int bars)
+bool IsNeutralMarketRegime()
 {
+    return (!EnableHybridTrendMode || !EnableTrendFilter || g_TrendBias == 0 || g_TrendADXValue < H1_ADX_MinTrendStrength);
+}
+
+bool CanOpenNewTrendOrder(bool isBuy)
+{
+    if(IsNeutralMarketRegime())
+        return true;
+
+    if(isBuy && g_TrendBias != 1)
+        return false;
+    if(!isBuy && g_TrendBias != -1)
+        return false;
+
+    if(!EnableM5Momentum)
+        return true;
+
+    return g_MomentumSignal == (isBuy ? 1 : -1);
+}
+
+void UpdateH1TrendConfirmation()
+{
+    g_TrendBias = 0;
+    g_TrendADXValue = 0.0;
+    g_TrendSlopePips = 0.0;
+    g_TrendDistancePips = 0.0;
+    if(!EnableHybridTrendMode || !EnableTrendFilter || g_H1_EMAHandle == INVALID_HANDLE || g_H1_ADXHandle == INVALID_HANDLE) return;
+
+    double emaBuffer[];
+    double adxBuffer[];
+    double closeBuffer[];
+    ArraySetAsSeries(emaBuffer, true);
+    ArraySetAsSeries(adxBuffer, true);
+    ArraySetAsSeries(closeBuffer, true);
+    if(CopyBuffer(g_H1_EMAHandle, 0, 1, 6, emaBuffer) < 6) return;
+    if(CopyBuffer(g_H1_ADXHandle, 0, 1, 3, adxBuffer) < 3) return;
+    if(CopyClose(_Symbol, H1_EMA_Timeframe, 1, 3, closeBuffer) < 3) return;
+
+    g_TrendSlopePips = (emaBuffer[0] - emaBuffer[5]) / pip;
+    g_TrendADXValue = adxBuffer[0];
+    g_TrendDistancePips = MathAbs(closeBuffer[0] - emaBuffer[0]) / pip;
+
+    double minDistancePips = MathMax(H1_EMA_MinDistancePips, g_CurrentATRPips * H1_EMA_MinDistanceATRFactor);
+    bool closesAboveEMA = (closeBuffer[0] > emaBuffer[0] && closeBuffer[1] > emaBuffer[1]);
+    bool closesBelowEMA = (closeBuffer[0] < emaBuffer[0] && closeBuffer[1] < emaBuffer[1]);
+
+    if(g_TrendADXValue < H1_ADX_MinTrendStrength) return;
+    if(g_TrendDistancePips < minDistancePips) return;
+
+    if(g_TrendSlopePips >= H1_EMA_SlopeMinPips && closesAboveEMA)
+        g_TrendBias = 1;
+    else if(g_TrendSlopePips <= -H1_EMA_SlopeMinPips && closesBelowEMA)
+        g_TrendBias = -1;
+}
+
+void UpdateM5Momentum()
+{
+    g_MomentumSignal = 0;
+    if(!EnableHybridTrendMode || !EnableM5Momentum || g_M5_EMAHandle == INVALID_HANDLE || g_M5_RSIHandle == INVALID_HANDLE) return;
+
+    double emaBuffer[];
+    ArraySetAsSeries(emaBuffer, true);
+    if(CopyBuffer(g_M5_EMAHandle, 0, 0, 1, emaBuffer) < 1) return;
+
+    double rsiBuffer[];
+    ArraySetAsSeries(rsiBuffer, true);
+    if(CopyBuffer(g_M5_RSIHandle, 0, 0, 1, rsiBuffer) < 1) return;
+
     double closes[];
-    ArraySetAsSeries(closes, true);
-    if(CopyClose(_Symbol, tf, 1, bars, closes) < bars) return 0.5;
-    
-    double netMove = MathAbs(closes[0] - closes[bars - 1]);
-    double totalMove = 0.0;
-    for(int i = 0; i < bars - 1; i++)
-        totalMove += MathAbs(closes[i] - closes[i + 1]);
-    
-    if(totalMove <= 0.0) return 0.5;
-    return netMove / totalMove; // 0.0=pure chop, 1.0=pure trend
-}
-
-//+------------------------------------------------------------------+
-//| H1 Market Structure: detect HH/HL (bullish) or LH/LL (bearish)   |
-//| Returns: +1 bullish structure, -1 bearish, 0 unclear              |
-//+------------------------------------------------------------------+
-int DetectH1Structure()
-{
-    double highs[], lows[];
-    ArraySetAsSeries(highs, true);
-    ArraySetAsSeries(lows, true);
-    if(CopyHigh(_Symbol, PERIOD_H1, 1, 10, highs) < 10) return 0;
-    if(CopyLow(_Symbol, PERIOD_H1, 1, 10, lows) < 10) return 0;
-    
-    // Find swing points (simplified: compare bar with neighbors)
-    double swingHighs[3], swingLows[3];
-    int shCount = 0, slCount = 0;
-    
-    for(int i = 1; i < 9 && (shCount < 3 || slCount < 3); i++)
-    {
-        if(shCount < 3 && highs[i] > highs[i-1] && highs[i] > highs[i+1])
-        {
-            swingHighs[shCount] = highs[i];
-            shCount++;
-        }
-        if(slCount < 3 && lows[i] < lows[i-1] && lows[i] < lows[i+1])
-        {
-            swingLows[slCount] = lows[i];
-            slCount++;
-        }
-    }
-    
-    if(shCount < 2 || slCount < 2) return 0;
-    
-    // HH + HL = bullish (swing[0] is newest)
-    bool higherHigh = swingHighs[0] > swingHighs[1];
-    bool higherLow  = swingLows[0] > swingLows[1];
-    bool lowerHigh  = swingHighs[0] < swingHighs[1];
-    bool lowerLow   = swingLows[0] < swingLows[1];
-    
-    if(higherHigh && higherLow) return 1;   // Bullish structure
-    if(lowerHigh && lowerLow)   return -1;  // Bearish structure
-    return 0;
-}
-
-//+------------------------------------------------------------------+
-//| Calculate Macro Bias from D1 + H4 (filter only)                   |
-//| Returns: -2 strong bear, -1 bear, 0 neutral, +1 bull, +2 strong  |
-//+------------------------------------------------------------------+
-int CalcMacroBias()
-{
-    double d1Slope = ReadEMASlope(g_D1_EMA_Handle, D1_SlopeBars);
-    double h4Slope = ReadEMASlope(g_H4_EMA_Handle, H4_SlopeBars);
-    double atrH1   = g_State.atrH1;
-    if(atrH1 <= 0) atrH1 = 10.0; // safety fallback
-    
-    // Normalize slopes by ATR
-    double d1Norm = d1Slope / atrH1;
-    double h4Norm = h4Slope / atrH1;
-    
-    int d1Bias = 0, h4Bias = 0;
-    if(d1Norm >  MacroSlopeThreshold) d1Bias =  1;
-    if(d1Norm < -MacroSlopeThreshold) d1Bias = -1;
-    if(d1Norm >  MacroSlopeThreshold * 2.5) d1Bias =  2;
-    if(d1Norm < -MacroSlopeThreshold * 2.5) d1Bias = -2;
-    
-    if(h4Norm >  MacroSlopeThreshold) h4Bias =  1;
-    if(h4Norm < -MacroSlopeThreshold) h4Bias = -1;
-    if(h4Norm >  MacroSlopeThreshold * 2.5) h4Bias =  2;
-    if(h4Norm < -MacroSlopeThreshold * 2.5) h4Bias = -2;
-    
-    // Weighted average: H4 has more weight than D1 (more responsive)
-    double composite = d1Bias * 0.35 + h4Bias * 0.65;
-    
-    if(composite >=  1.3) return  2;
-    if(composite >=  0.4) return  1;
-    if(composite <= -1.3) return -2;
-    if(composite <= -0.4) return -1;
-    return 0;
-}
-
-//+------------------------------------------------------------------+
-//| Calculate H1 Trend Score using EMA slope + structure + macro      |
-//| Returns: -2 strong bear, -1 bear, 0 neutral, +1 bull, +2 strong  |
-//+------------------------------------------------------------------+
-int CalcH1TrendScore()
-{
-    double h1Slope = ReadEMASlope(g_H1_EMA_Handle, H1_SlopeBars);
-    double atrH1   = g_State.atrH1;
-    if(atrH1 <= 0) atrH1 = 10.0;
-    
-    // ATR-normalized slope
-    double normSlope = h1Slope / atrH1;
-    g_State.h1SlopeNorm = normSlope;
-    
-    // Base score from slope
-    int slopeScore = 0;
-    if(normSlope >=  H1_SlopeStrong) slopeScore =  2;
-    else if(normSlope >=  H1_SlopeWeak) slopeScore =  1;
-    else if(normSlope <= -H1_SlopeStrong) slopeScore = -2;
-    else if(normSlope <= -H1_SlopeWeak) slopeScore = -1;
-    
-    // Structure confirmation
-    int structure = DetectH1Structure();
-    
-    // Price vs H1 EMA
-    double h1EMA = ReadEMA(g_H1_EMA_Handle);
-    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-    int priceVsEMA = 0;
-    if(h1EMA > 0)
-    {
-        double distPips = (bid - h1EMA) / pip;
-        if(distPips > 2.0) priceVsEMA = 1;
-        if(distPips < -2.0) priceVsEMA = -1;
-    }
-    
-    // Composite: slope is primary, structure and price confirm
-    double raw = slopeScore * 0.55 + structure * 0.25 + priceVsEMA * 0.20;
-    
-    // Macro alignment bonus: if macro agrees, strengthen score
-    if(g_State.macroBias != 0 && ((g_State.macroBias > 0 && raw > 0) || (g_State.macroBias < 0 && raw < 0)))
-        raw *= 1.15;
-    
-    // Macro conflict penalty: if macro strongly opposes, weaken score
-    if((g_State.macroBias >= 2 && raw < -0.3) || (g_State.macroBias <= -2 && raw > 0.3))
-        raw *= 0.6;
-    
-    if(raw >=  1.2) return  2;
-    if(raw >=  0.35) return  1;
-    if(raw <= -1.2) return -2;
-    if(raw <= -0.35) return -1;
-    return 0;
-}
-
-//+------------------------------------------------------------------+
-//| Detect Market Regime from M15 data                                |
-//| Uses: ATR ratio, ADX, directional efficiency, H1 trend           |
-//+------------------------------------------------------------------+
-ENUM_MARKET_REGIME DetectMarketRegime()
-{
-    double m15ATR = g_State.atrM15;
-    double m15Avg = g_State.atrM15Avg;
-    double adx    = g_State.adxValue;
-    int    trend  = g_State.trendScore;
-    
-    // Calculate directional efficiency on M15
-    double dirEff = CalcDirectionalEfficiency(PERIOD_M15, RegimeOverlapBars);
-    
-    // ATR ratio for volatility classification
-    double atrRatio = (m15Avg > 0) ? (m15ATR / m15Avg) : 1.0;
-    
-    // HIGH VOLATILITY: ATR spike + low directional efficiency
-    if(atrRatio > ATR_HighVolMultiple && dirEff < 0.4)
-    {
-        g_State.regimeText = "HIGH VOLATILITY";
-        return REGIME_HIGH_VOLATILITY;
-    }
-    
-    // STRONG TREND: good directional efficiency + ADX trending + H1 confirms
-    if(dirEff >= RegimeDirectionalMin && adx >= ADX_TrendThreshold)
-    {
-        if(trend >= 1)
-        {
-            g_State.regimeText = "TREND UP";
-            return REGIME_TREND_UP;
-        }
-        if(trend <= -1)
-        {
-            g_State.regimeText = "TREND DOWN";
-            return REGIME_TREND_DOWN;
-        }
-    }
-    
-    // LOW COMPRESSION: ATR very low
-    if(atrRatio < ATR_LowVolMultiple)
-    {
-        g_State.regimeText = "COMPRESSION";
-        return REGIME_LOW_COMPRESSION;
-    }
-    
-    // TRANSITION: H1 trend conflicts with macro, or ADX fading
-    if((g_State.macroBias > 0 && trend < 0) || (g_State.macroBias < 0 && trend > 0))
-    {
-        g_State.regimeText = "TRANSITION";
-        return REGIME_TRANSITION;
-    }
-    if(adx < 15.0 && MathAbs(trend) >= 1)
-    {
-        g_State.regimeText = "TRANSITION";
-        return REGIME_TRANSITION;
-    }
-    
-    // DEFAULT: Neutral range — both-side hedging allowed
-    g_State.regimeText = "NEUTRAL RANGE";
-    return REGIME_NEUTRAL_RANGE;
-}
-
-//+------------------------------------------------------------------+
-//| M5 Entry Trigger — fast timing signal                             |
-//| Returns: +1=buy trigger, -1=sell trigger, 0=no trigger            |
-//+------------------------------------------------------------------+
-int CalcM5EntryTrigger()
-{
-    double rsi = ReadRSI(g_M5_RSI_Handle);
-    double m5EMA = ReadEMA(g_M5_EMA_Handle);
-    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-    if(m5EMA <= 0) return 0;
-    
-    // M5 candle body check (last 3 closed candles)
-    double closes[], opens[];
+    double opens[];
+    double highs[];
+    double lows[];
     ArraySetAsSeries(closes, true);
     ArraySetAsSeries(opens, true);
-    if(CopyClose(_Symbol, PERIOD_M5, 1, 3, closes) < 3) return 0;
-    if(CopyOpen(_Symbol, PERIOD_M5, 1, 3, opens) < 3) return 0;
-    
-    int bullCount = 0, bearCount = 0;
-    for(int i = 0; i < 3; i++)
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+
+    if(CopyClose(_Symbol, PERIOD_M5, 1, M5_MomentumBars, closes) < M5_MomentumBars) return;
+    if(CopyOpen(_Symbol, PERIOD_M5, 1, M5_MomentumBars, opens) < M5_MomentumBars) return;
+    if(CopyHigh(_Symbol, PERIOD_M5, 1, M5_MomentumBars, highs) < M5_MomentumBars) return;
+    if(CopyLow(_Symbol, PERIOD_M5, 1, M5_MomentumBars, lows) < M5_MomentumBars) return;
+
+    int bullishCount = 0;
+    int bearishCount = 0;
+    for(int i = 0; i < M5_MomentumBars; i++)
     {
-        double body = MathAbs(closes[i] - opens[i]) / pip;
-        if(body >= M5_MinCandleBodyPips)
-        {
-            if(closes[i] > opens[i]) bullCount++;
-            else bearCount++;
-        }
+        double bodyPips = MathAbs(closes[i] - opens[i]) / pip;
+        if(bodyPips < M5_MinCandleBodyPips) continue;
+
+        if(closes[i] > opens[i])
+            bullishCount++;
+        else if(closes[i] < opens[i])
+            bearishCount++;
     }
-    
-    bool priceAboveEMA = (bid > m5EMA);
-    bool priceBelowEMA = (bid < m5EMA);
-    
-    // Bullish trigger: bullish candles + above EMA + RSI not overbought
-    if(bullCount >= 2 && priceAboveEMA && rsi < M5_RSI_Overbought)
-        return 1;
-    
-    // Bearish trigger: bearish candles + below EMA + RSI not oversold
-    if(bearCount >= 2 && priceBelowEMA && rsi > M5_RSI_Oversold)
-        return -1;
-    
-    return 0;
+
+    double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    bool priceAboveEMA = (currentBid > emaBuffer[0]);
+    bool priceBelowEMA = (currentBid < emaBuffer[0]);
+    double rsi = rsiBuffer[0];
+
+    if(bullishCount >= 2 && priceAboveEMA && rsi < M5_RSI_Overbought)
+        g_MomentumSignal = 1;
+    else if(bearishCount >= 2 && priceBelowEMA && rsi > M5_RSI_Oversold)
+        g_MomentumSignal = -1;
 }
 
-//+------------------------------------------------------------------+
-//| Calculate floating loss for one side as % of balance              |
-//+------------------------------------------------------------------+
-double GetSideFloatingLossPercent(bool isBuy)
-{
-    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-    if(balance <= 0) return 0.0;
-    
-    double sideLoss = 0.0;
-    for(int i = 0; i < PositionsTotal(); i++)
-    {
-        ulong ticket = PositionGetTicket(i);
-        if(ticket <= 0) continue;
-        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-        
-        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
-        
-        double profit = PositionGetDouble(POSITION_PROFIT);
-        if(profit < 0) sideLoss += MathAbs(profit);
-    }
-    
-    return (sideLoss / balance) * 100.0;
-}
-
-//+------------------------------------------------------------------+
-//| Get total lots for one side                                       |
-//+------------------------------------------------------------------+
-double GetSideTotalLots(bool isBuy)
-{
-    double total = 0.0;
-    for(int i = 0; i < PositionsTotal(); i++)
-    {
-        ulong ticket = PositionGetTicket(i);
-        if(ticket <= 0) continue;
-        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-        
-        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-        if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
-            total += PositionGetDouble(POSITION_VOLUME);
-    }
-    return total;
-}
-
-//+------------------------------------------------------------------+
-//| AllowNewNormalEntry — comprehensive pre-entry validation          |
-//| Returns true if a new normal grid order can be placed             |
-//+------------------------------------------------------------------+
-bool AllowNewNormalEntry(bool isBuy, string &reason)
-{
-    // License
-    if(!g_LicenseValid) { reason = "License invalid"; return false; }
-    
-    // Spread check
-    if(g_State.spreadPips > MaxSpreadPips) { reason = StringFormat("Spread %.1f > max %.1f", g_State.spreadPips, MaxSpreadPips); return false; }
-    
-    // Free margin check
-    double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
-    if(freeMargin < MinFreeMarginUSD) { reason = StringFormat("FreeMargin $%.0f < $%.0f", freeMargin, MinFreeMarginUSD); return false; }
-    
-    // Max floating loss per side
-    double sideLoss = GetSideFloatingLossPercent(isBuy);
-    if(sideLoss > MaxFloatingLossPercent) { reason = StringFormat("Side loss %.1f%% > %.1f%%", sideLoss, MaxFloatingLossPercent); return false; }
-    
-    // Max total lots per side
-    double sideLots = GetSideTotalLots(isBuy);
-    if(sideLots >= MaxTotalLotsPerSide) { reason = StringFormat("Side lots %.2f >= %.2f", sideLots, MaxTotalLotsPerSide); return false; }
-    
-    // HIGH VOLATILITY CHAOS: block all new entries
-    if(g_State.regime == REGIME_HIGH_VOLATILITY) { reason = "High volatility chaos"; return false; }
-    
-    // TRANSITION: reduce new entries — block if no M5 trigger
-    if(g_State.regime == REGIME_TRANSITION)
-    {
-        if(isBuy && g_State.m5Entry != 1) { reason = "Transition + no M5 buy trigger"; return false; }
-        if(!isBuy && g_State.m5Entry != -1) { reason = "Transition + no M5 sell trigger"; return false; }
-    }
-    
-    // TREND REGIME: directional filtering
-    if(g_State.regime == REGIME_TREND_UP && !isBuy) { reason = "Trend UP — no new SELL"; return false; }
-    if(g_State.regime == REGIME_TREND_DOWN && isBuy) { reason = "Trend DOWN — no new BUY"; return false; }
-    
-    // Strong H1 trend against direction
-    if(isBuy && g_State.trendScore <= -2) { reason = "Strong bearish H1 trend"; return false; }
-    if(!isBuy && g_State.trendScore >= 2) { reason = "Strong bullish H1 trend"; return false; }
-    
-    // Macro strongly opposing + H1 mildly opposing
-    if(isBuy && g_State.macroBias <= -2 && g_State.trendScore < 0) { reason = "Macro + H1 against BUY"; return false; }
-    if(!isBuy && g_State.macroBias >= 2 && g_State.trendScore > 0) { reason = "Macro + H1 against SELL"; return false; }
-    
-    // NEUTRAL/COMPRESSION: allow both sides (hedging mode) — but check macro sanity
-    if(g_State.regime == REGIME_NEUTRAL_RANGE || g_State.regime == REGIME_LOW_COMPRESSION)
-    {
-        if(isBuy && g_State.macroBias <= -2 && g_State.trendScore <= -1)
-        { reason = "Neutral but strong macro+trend against BUY"; return false; }
-        if(!isBuy && g_State.macroBias >= 2 && g_State.trendScore >= 1)
-        { reason = "Neutral but strong macro+trend against SELL"; return false; }
-    }
-    
-    reason = "OK";
-    return true;
-}
-
-//+------------------------------------------------------------------+
-//| Recovery Safety Check — should we allow new recovery addition?    |
-//+------------------------------------------------------------------+
-bool IsRecoverySafe(bool isBuy, string &reason)
-{
-    // Cooldown
-    datetime lastAdd = isBuy ? g_State.lastRecoveryBuyAdd : g_State.lastRecoverySellAdd;
-    if(TimeCurrent() - lastAdd < RecoveryCooldownSec) { reason = "Recovery cooldown"; return false; }
-    
-    // Spread check (more lenient than normal)
-    if(g_State.spreadPips > MaxSpreadPips * 1.5) { reason = "Spread too high for recovery"; return false; }
-    
-    // Free margin
-    double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
-    if(freeMargin < MinFreeMarginUSD * 2) { reason = "Insufficient margin for recovery"; return false; }
-    
-    // Max lots per side
-    double sideLots = GetSideTotalLots(isBuy);
-    if(sideLots >= MaxTotalLotsPerSide) { reason = StringFormat("Side lots %.2f >= max", sideLots); return false; }
-    
-    // HIGH VOLATILITY: pause recovery additions
-    if(g_State.regime == REGIME_HIGH_VOLATILITY) { reason = "High volatility — recovery paused"; return false; }
-    
-    // Strong trend violently against basket with no stabilization
-    if(isBuy && g_State.trendScore <= -2 && g_State.regime == REGIME_TREND_DOWN)
-    { reason = "Strong downtrend — BUY recovery paused"; return false; }
-    if(!isBuy && g_State.trendScore >= 2 && g_State.regime == REGIME_TREND_UP)
-    { reason = "Strong uptrend — SELL recovery paused"; return false; }
-    
-    // NEUTRAL/COMPRESSION: allow recovery (stable conditions)
-    reason = "OK";
-    return true;
-}
-
-//+------------------------------------------------------------------+
-//| Get Dynamic Grid Gap (regime-aware, smoothed ATR, spread-aware)   |
-//+------------------------------------------------------------------+
-double GetDynamicGap(bool isBuy, bool isRecovery)
-{
-    double gapPips = 0.0;
-    double atr = g_State.smoothedATR; // Use smoothed ATR to prevent gap jumping
-    
-    if(EnableATRGap && atr > 0)
-    {
-        double multiplier = isRecovery ? ATR_Multiplier_Recovery : ATR_Multiplier_Normal;
-        gapPips = atr * multiplier;
-        
-        // Regime-based gap adjustment
-        if(g_State.regime == REGIME_HIGH_VOLATILITY)
-            gapPips *= GapVolatilityBoost;
-        else if(g_State.regime == REGIME_TREND_UP || g_State.regime == REGIME_TREND_DOWN)
-            gapPips *= GapTrendBoost;
-        
-        // Add spread awareness (prevent gap too close to spread)
-        gapPips += g_State.spreadPips * 0.3;
-        
-        // Clamp
-        double minGap = isRecovery ? MinGapPips_Recovery : MinGapPips_Normal;
-        gapPips = MathMax(gapPips, minGap);
-        gapPips = MathMin(gapPips, MaxGapPips);
-    }
-    else
-    {
-        // Fallback to fixed gaps
-        if(isRecovery)
-            gapPips = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
-        else
-            gapPips = isBuy ? BuyGapPips : SellGapPips;
-    }
-    
-    return gapPips;
-}
-
-//+------------------------------------------------------------------+
-//| MASTER: Update entire market state (call once per tick)           |
-//+------------------------------------------------------------------+
-void UpdateMarketState()
-{
-    // 1. Read ATR values first (needed for normalization)
-    g_State.atrH1  = ReadATR(g_H1_ATR_Handle);
-    g_State.atrM15 = ReadATR(g_M15_ATR_Handle);
-    
-    // Smooth ATR using EMA to prevent gap jumping
-    if(g_State.smoothedATR <= 0)
-        g_State.smoothedATR = g_State.atrH1; // First tick: seed
-    else
-        g_State.smoothedATR = g_State.smoothedATR * (1.0 - ATR_Smoothing_Alpha) + g_State.atrH1 * ATR_Smoothing_Alpha;
-    
-    // Rolling M15 ATR average (for regime detection)
-    if(g_State.atrM15Avg <= 0)
-        g_State.atrM15Avg = g_State.atrM15;
-    else
-        g_State.atrM15Avg = g_State.atrM15Avg * 0.95 + g_State.atrM15 * 0.05;
-    
-    // 2. Current spread
-    g_State.spreadPips = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / pip;
-    
-    // 3. ADX (M15)
-    g_State.adxValue = ReadADX(g_M15_ADX_Handle);
-    
-    // 4. Macro bias (D1 + H4)
-    g_State.macroBias = CalcMacroBias();
-    
-    // 5. H1 Trend Score
-    g_State.trendScore = CalcH1TrendScore();
-    
-    // 6. Market Regime (M15)
-    g_State.regime = DetectMarketRegime();
-    
-    // 7. M5 Entry Trigger
-    g_State.m5Entry = CalcM5EntryTrigger();
-    
-    // 8. Final side decisions
-    string buyReason = "", sellReason = "";
-    g_State.buyAllowed  = AllowNewNormalEntry(true,  buyReason);
-    g_State.sellAllowed = AllowNewNormalEntry(false, sellReason);
-    g_State.buyBlockReason  = buyReason;
-    g_State.sellBlockReason = sellReason;
-}
-
-//+------------------------------------------------------------------+
-//| Delete ALL Pending Orders for a Side (Normal + Recovery)           |
-//| Used to clear opposite-trend pending orders                        |
-//+------------------------------------------------------------------+
 void DeleteAllPendingOrdersForSide(bool isBuy)
 {
     for(int i = OrdersTotal() - 1; i >= 0; i--)
@@ -1307,12 +862,131 @@ void DeleteAllPendingOrdersForSide(bool isBuy)
         if(ticket <= 0) continue;
         if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
         if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
-        
-        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-        if(isBuy && (type == ORDER_TYPE_BUY_LIMIT || type == ORDER_TYPE_BUY_STOP))
+
+        ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if(isBuy && (orderType == ORDER_TYPE_BUY_LIMIT || orderType == ORDER_TYPE_BUY_STOP))
             trade.OrderDelete(ticket);
-        else if(!isBuy && (type == ORDER_TYPE_SELL_LIMIT || type == ORDER_TYPE_SELL_STOP))
+        else if(!isBuy && (orderType == ORDER_TYPE_SELL_LIMIT || orderType == ORDER_TYPE_SELL_STOP))
             trade.OrderDelete(ticket);
+    }
+}
+
+void UpdateDynamicMarketState()
+{
+    g_CurrentATRPips = 0.0;
+    g_AverageATRPips = 0.0;
+
+    if(!EnableDynamicRangeGap || g_ATRHandle == INVALID_HANDLE) return;
+
+    double atrBuffer[];
+    int barsNeeded = DynamicATRSlowLookback + 1;
+    ArraySetAsSeries(atrBuffer, true);
+    if(CopyBuffer(g_ATRHandle, 0, 0, barsNeeded, atrBuffer) < barsNeeded) return;
+
+    g_CurrentATRPips = atrBuffer[0] / pip;
+
+    double atrSum = 0.0;
+    for(int i = 0; i < DynamicATRSlowLookback; i++)
+        atrSum += atrBuffer[i] / pip;
+
+    g_AverageATRPips = atrSum / DynamicATRSlowLookback;
+}
+
+double GetSessionGapFactor()
+{
+    int hour = GetCurrentServerHour();
+    if(hour >= 12 && hour < 17) return 0.90;  // London / NY overlap
+    if(hour >= 7 && hour < 12) return 1.00;   // London open
+    if(hour >= 17 && hour < 21) return 1.05;  // Late NY
+    return 1.15;                              // Asia / off-hours
+}
+
+double GetSessionRangeFactor()
+{
+    int hour = GetCurrentServerHour();
+    if(hour >= 12 && hour < 17) return 1.20;
+    if(hour >= 7 && hour < 12) return 1.10;
+    if(hour >= 17 && hour < 21) return 0.95;
+    return 0.80;
+}
+
+double GetVolatilityRegimeFactor()
+{
+    if(g_CurrentATRPips <= 0.0 || g_AverageATRPips <= 0.0) return 1.0;
+    return ClampDouble(g_CurrentATRPips / g_AverageATRPips, 0.70, 1.50);
+}
+
+double GetSessionDirectionalBiasPips(double currentPrice)
+{
+    if(!EnableDynamicRangeGap || g_CurrentATRPips <= 0.0) return 0.0;
+
+    double dailyOpen = iOpen(_Symbol, PERIOD_D1, 0);
+    if(dailyOpen <= 0.0) return 0.0;
+
+    double driftPips = (currentPrice - dailyOpen) / pip;
+    double weight = 0.25;
+    int hour = GetCurrentServerHour();
+
+    if(hour >= 12 && hour < 17) weight = 0.35;
+    else if(hour >= 7 && hour < 12) weight = 0.30;
+    else if(hour >= 17 && hour < 21) weight = 0.20;
+
+    return ClampDouble(driftPips * weight, -g_CurrentATRPips * 0.75, g_CurrentATRPips * 0.75);
+}
+
+double GetDynamicGapPips(bool isBuy, bool isRecovery)
+{
+    double fallbackGap = isRecovery ? (isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips)
+                                    : (isBuy ? BuyGapPips : SellGapPips);
+
+    if(!EnableDynamicRangeGap || g_CurrentATRPips <= 0.0)
+        return fallbackGap;
+
+    double atrMultiplier = isRecovery ? RecoveryGapATRMultiplier : NormalGapATRMultiplier;
+    double minGap = isRecovery ? MinRecoveryGapPips : MinNormalGapPips;
+    double maxGap = isRecovery ? MaxRecoveryGapPips : MaxNormalGapPips;
+    double dynamicGap = g_CurrentATRPips * atrMultiplier * GetSessionGapFactor() * GetVolatilityRegimeFactor();
+
+    // Blend ATR value with original fallback to avoid violent per-session jumps.
+    dynamicGap = (dynamicGap * 0.70) + (fallbackGap * 0.30);
+    return ClampDouble(dynamicGap, minGap, maxGap);
+}
+
+void GetDynamicRange(bool isBuy, double currentPrice, double &rangeLow, double &rangeHigh)
+{
+    double fallbackLow = isBuy ? MathMin(BuyRangeStart, BuyRangeEnd) : MathMin(SellRangeStart, SellRangeEnd);
+    double fallbackHigh = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
+
+    if(!EnableDynamicRangeGap || g_CurrentATRPips <= 0.0)
+    {
+        rangeLow = fallbackLow;
+        rangeHigh = fallbackHigh;
+        return;
+    }
+
+    double gapPips = GetDynamicGapPips(isBuy, false);
+    double rangeSpanPips = g_CurrentATRPips * NormalRangeATRMultiplier * GetSessionRangeFactor() * GetVolatilityRegimeFactor();
+    double directionalBiasPips = GetSessionDirectionalBiasPips(currentPrice);
+    double anchorPrice = currentPrice + (directionalBiasPips * pip);
+
+    rangeSpanPips = ClampDouble(rangeSpanPips, MinNormalRangePips, MaxNormalRangePips);
+
+    if(isBuy)
+    {
+        rangeHigh = NormalizeDouble(anchorPrice - (gapPips * 0.75 * pip), _Digits);
+        rangeLow = NormalizeDouble(rangeHigh - (rangeSpanPips * pip), _Digits);
+    }
+    else
+    {
+        rangeLow = NormalizeDouble(anchorPrice + (gapPips * 0.75 * pip), _Digits);
+        rangeHigh = NormalizeDouble(rangeLow + (rangeSpanPips * pip), _Digits);
+    }
+
+    if(rangeHigh < rangeLow)
+    {
+        double tmp = rangeLow;
+        rangeLow = rangeHigh;
+        rangeHigh = tmp;
     }
 }
 
@@ -1660,10 +1334,10 @@ void CleanupInvalidOrders()
     double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     
     // Range settings
-    double buyRangeHigh = MathMax(BuyRangeStart, BuyRangeEnd);
-    double buyRangeLow = MathMin(BuyRangeStart, BuyRangeEnd);
-    double sellRangeHigh = MathMax(SellRangeStart, SellRangeEnd);
-    double sellRangeLow = MathMin(SellRangeStart, SellRangeEnd);
+    double buyRangeLow = 0, buyRangeHigh = 0;
+    double sellRangeLow = 0, sellRangeHigh = 0;
+    GetDynamicRange(true, currentAsk, buyRangeLow, buyRangeHigh);
+    GetDynamicRange(false, currentBid, sellRangeLow, sellRangeHigh);
     
     int deletedCount = 0;
     
@@ -2090,9 +1764,9 @@ void GridHealthCheckNormal(bool isBuy, double currentBid, double currentAsk)
     if(inRecovery) return;  // Skip if in recovery mode
     
     int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
-    double rangeHigh = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
-    double rangeLow  = isBuy ? MathMin(BuyRangeStart, BuyRangeEnd) : MathMin(SellRangeStart, SellRangeEnd);
     double checkPrice = isBuy ? currentAsk : currentBid;
+    double rangeLow = 0, rangeHigh = 0;
+    GetDynamicRange(isBuy, checkPrice, rangeLow, rangeHigh);
     
     if(checkPrice < rangeLow || checkPrice > rangeHigh) return; // Outside range
     
@@ -2287,9 +1961,9 @@ void ManageNormalGrid(bool isBuy)
     double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
     
     // Range settings
-    double rangeHigh = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
-    double rangeLow = isBuy ? MathMin(BuyRangeStart, BuyRangeEnd) : MathMin(SellRangeStart, SellRangeEnd);
-    double gapPips = GetDynamicGap(isBuy, false); // ATR-based dynamic gap for normal grid
+    double rangeLow = 0, rangeHigh = 0;
+    GetDynamicRange(isBuy, currentPrice, rangeLow, rangeHigh);
+    double gapPips = GetDynamicGapPips(isBuy, false);
     int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
     double gapPrice = gapPips * pip;
     double minGap = gapPrice * 0.8; // Minimum 80% of gap required between positions/orders
@@ -2750,7 +2424,7 @@ void ManageRecoveryGrid(bool isBuy)
     
     // Calculate expected recovery price based on CLOSEST position
     // Then find first empty slot (skip prices where positions already exist)
-    double gapPips = GetDynamicGap(isBuy, true); // ATR-based dynamic gap for recovery grid
+    double gapPips = GetDynamicGapPips(isBuy, true);
     double expectedRecoveryPrice = isBuy ?
         NormalizeDouble(closestPriceForCheck - (gapPips * pip), _Digits) :
         NormalizeDouble(closestPriceForCheck + (gapPips * pip), _Digits);
@@ -2833,7 +2507,7 @@ void ManageRecoveryGrid(bool isBuy)
     
     // Count recovery PENDING orders AND relocate if too far from expected price
     int recoveryPendingCount = 0;
-    double gapPipsForRelocate = GetDynamicGap(isBuy, true); // ATR-based dynamic gap
+    double gapPipsForRelocate = GetDynamicGapPips(isBuy, true);
     double relocateThreshold = gapPipsForRelocate * pip * 0.6; // Keep pending tightly snapped to grid
     
     for(int i = OrdersTotal() - 1; i >= 0; i--)
@@ -2952,7 +2626,7 @@ void ManageRecoveryGrid(bool isBuy)
     if(totalPositionsThisSide < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery)
     {
         double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-        double gapPips = GetDynamicGap(isBuy, true); // ATR-based dynamic gap for recovery
+        double gapPips = GetDynamicGapPips(isBuy, true);
         
         // ===== NEW LOGIC =====
         // 1. Find TOP DISTANCE LOSS position (highest BUY price / lowest SELL price - most loss)
@@ -3736,12 +3410,51 @@ struct PendingLog {
 PendingLog pendingLogs[];
 int pendingLogCount = 0;
 
+string JsonEscape(string value)
+{
+    StringReplace(value, "\\", "\\\\");
+    StringReplace(value, "\"", "\\\"");
+    StringReplace(value, "\r", "\\r");
+    StringReplace(value, "\n", "\\n");
+    StringReplace(value, "\t", "\\t");
+    return value;
+}
+
+int PostJson(string url, string jsonRequest, int timeout, string &responseStr)
+{
+    char postData[];
+    char result[];
+    string resultHeaders;
+
+    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
+    ResetLastError();
+    int response = WebRequest("POST", url, "Content-Type: application/json\r\n", timeout, postData, result, resultHeaders);
+    responseStr = CharArrayToString(result);
+    return response;
+}
+
+void DropSentPendingLogs(int sentCount)
+{
+    if(sentCount <= 0 || sentCount > pendingLogCount) return;
+
+    for(int i = 0; i < pendingLogCount - sentCount; i++)
+        pendingLogs[i] = pendingLogs[i + sentCount];
+
+    pendingLogCount -= sentCount;
+    ArrayResize(pendingLogs, pendingLogCount);
+}
+
 void SendLogToServer(string message, string type)
 {
     // Skip if no license key
     if(StringLen(LicenseKey) == 0) return;
 
     if(IsTesterMode()) return;
+
+    if(pendingLogCount >= 50)
+    {
+        DropSentPendingLogs(1);
+    }
     
     // Add to pending batch
     ArrayResize(pendingLogs, pendingLogCount + 1);
@@ -3753,43 +3466,33 @@ void SendLogToServer(string message, string type)
     static datetime lastBatchSend = 0;
     if(TimeCurrent() - lastBatchSend < 10) return;
     
-    lastBatchSend = TimeCurrent();
-    
-    // Send only last 3 logs to minimize data
-    int logsToSend = MathMin(pendingLogCount, 3);
+    // Send oldest logs first so ordering stays stable if a request fails.
+    int logsToSend = MathMin(pendingLogCount, 5);
     if(logsToSend == 0) return;
     
     // Build batch JSON
     string jsonRequest = "{";
-    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
+    jsonRequest += "\"license_key\":\"" + JsonEscape(LicenseKey) + "\",";
     jsonRequest += "\"logs\":[";
     
-    for(int i = pendingLogCount - logsToSend; i < pendingLogCount; i++)
+    for(int i = 0; i < logsToSend; i++)
     {
-        if(i > pendingLogCount - logsToSend) jsonRequest += ",";
+        if(i > 0) jsonRequest += ",";
         jsonRequest += "{";
-        jsonRequest += "\"log_type\":\"" + pendingLogs[i].type + "\",";
-        jsonRequest += "\"message\":\"" + pendingLogs[i].message + "\"";
+        jsonRequest += "\"log_type\":\"" + JsonEscape(pendingLogs[i].type) + "\",";
+        jsonRequest += "\"message\":\"" + JsonEscape(pendingLogs[i].message) + "\"";
         jsonRequest += "}";
     }
     
     jsonRequest += "]}";
-    
-    // Clear batch
-    ArrayResize(pendingLogs, 0);
-    pendingLogCount = 0;
-    
-    // Send request
+
     string url = LicenseServer + "/api/action-log/";
-    string headers = "Content-Type: application/json\r\n";
-    char postData[];
-    char result[];
-    string resultHeaders;
-    
-    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
-    
-    int timeout = 2000;
-    int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
+    string responseStr = "";
+
+    lastBatchSend = TimeCurrent();
+    int response = PostJson(url, jsonRequest, 2000, responseStr);
+    if(response == 200)
+        DropSentPendingLogs(logsToSend);
 }
 
 //+------------------------------------------------------------------+
@@ -3797,39 +3500,6 @@ void SendLogToServer(string message, string type)
 //+------------------------------------------------------------------+
 void UpdateInfoPanel()
 {
-    // Delete old objects (including old simplified version objects)
-    ObjectDelete(0, "EA_ModeStatus");
-    ObjectDelete(0, "EA_SellHeader");
-    ObjectDelete(0, "EA_SellMode");
-    ObjectDelete(0, "EA_SellCount");
-    ObjectDelete(0, "EA_SellAvg");
-    ObjectDelete(0, "EA_SellBE");
-    ObjectDelete(0, "EA_SellProfit");
-    ObjectDelete(0, "EA_BuyHeader");
-    ObjectDelete(0, "EA_BuyMode");
-    ObjectDelete(0, "EA_BuyCount");
-    ObjectDelete(0, "EA_BuyAvg");
-    ObjectDelete(0, "EA_BuyBE");
-    ObjectDelete(0, "EA_BuyProfit");
-    ObjectDelete(0, "EA_PriceHeader");
-    ObjectDelete(0, "EA_PriceInfo");
-    ObjectDelete(0, "EA_TotalProfit");
-    ObjectDelete(0, "EA_MacroBias");
-    ObjectDelete(0, "EA_TrendInfo");
-    ObjectDelete(0, "EA_RegimeInfo");
-    ObjectDelete(0, "EA_M5Entry");
-    ObjectDelete(0, "EA_EntrySignal");
-    ObjectDelete(0, "EA_ATRInfo");
-    ObjectDelete(0, "EA_BuyBlock");
-    ObjectDelete(0, "EA_SellBlock");
-    // Delete old simplified version objects
-    ObjectDelete(0, "EA_Title");
-    ObjectDelete(0, "EA_Mode");
-    ObjectDelete(0, "EA_BuyInfo");
-    ObjectDelete(0, "EA_SellInfo");
-    ObjectDelete(0, "EA_Profit");
-    ObjectDelete(0, "EA_Status");
-    
     int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
     
     // Calculate statistics - count ALL positions for display
@@ -3891,309 +3561,128 @@ void UpdateInfoPanel()
         modeText = "=== MARK'S AI 3.0 PILOT RUNNING ... ===";
         modeColor = clrLime;
     }
-    
-    ObjectCreate(0, "EA_ModeStatus", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_ModeStatus", OBJPROP_TEXT, modeText);
-    ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_COLOR, modeColor);
-    ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_FONTSIZE, 10);
-    ObjectSetString(0, "EA_ModeStatus", OBJPROP_FONT, "Arial Bold");
+
+    DrawLabel("EA_ModeStatus", CORNER_LEFT_UPPER, 10, yPos, modeText, modeColor, 10, "Arial Bold");
     yPos += 22;
-    
-    // ===== MULTI-TF STATE DISPLAY =====
-    ObjectDelete(0, "EA_MacroBias");
-    ObjectDelete(0, "EA_TrendInfo");
-    ObjectDelete(0, "EA_RegimeInfo");
-    ObjectDelete(0, "EA_M5Entry");
-    ObjectDelete(0, "EA_EntrySignal");
-    ObjectDelete(0, "EA_ATRInfo");
-    ObjectDelete(0, "EA_BuyBlock");
-    ObjectDelete(0, "EA_SellBlock");
-    
-    // D1/H4 Macro Bias
-    string macroBiasNames[] = {"STRONG BEAR", "BEAR", "NEUTRAL", "BULL", "STRONG BULL"};
-    int macroIdx = g_State.macroBias + 2; // map -2..+2 to 0..4
-    if(macroIdx < 0) macroIdx = 0; if(macroIdx > 4) macroIdx = 4;
-    string macroText = StringFormat("D1/H4 Macro: %s (%+d)", macroBiasNames[macroIdx], g_State.macroBias);
-    color macroColor = g_State.macroBias > 0 ? clrLime : g_State.macroBias < 0 ? clrOrangeRed : clrGray;
-    
-    ObjectCreate(0, "EA_MacroBias", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_MacroBias", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_MacroBias", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_MacroBias", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_MacroBias", OBJPROP_TEXT, macroText);
-    ObjectSetInteger(0, "EA_MacroBias", OBJPROP_COLOR, macroColor);
-    ObjectSetInteger(0, "EA_MacroBias", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_MacroBias", OBJPROP_FONT, "Arial Bold");
-    yPos += 16;
-    
-    // H1 Trend Score
-    string trendNames[] = {"STRONG BEAR", "BEAR", "NEUTRAL", "BULL", "STRONG BULL"};
-    int trendIdx = g_State.trendScore + 2;
-    if(trendIdx < 0) trendIdx = 0; if(trendIdx > 4) trendIdx = 4;
-    string trendText = StringFormat("H1 Trend: %s (%+d) | Slope: %.3f", trendNames[trendIdx], g_State.trendScore, g_State.h1SlopeNorm);
-    color trendColor = g_State.trendScore > 0 ? clrLime : g_State.trendScore < 0 ? clrOrangeRed : clrGray;
-    
-    ObjectCreate(0, "EA_TrendInfo", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_TrendInfo", OBJPROP_TEXT, trendText);
-    ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_COLOR, trendColor);
-    ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_TrendInfo", OBJPROP_FONT, "Arial Bold");
-    yPos += 16;
-    
-    // M15 Regime
-    color regimeColor = clrGray;
-    if(g_State.regime == REGIME_TREND_UP || g_State.regime == REGIME_TREND_DOWN) regimeColor = clrDodgerBlue;
-    else if(g_State.regime == REGIME_HIGH_VOLATILITY) regimeColor = clrRed;
-    else if(g_State.regime == REGIME_TRANSITION) regimeColor = clrOrange;
-    else if(g_State.regime == REGIME_LOW_COMPRESSION) regimeColor = clrYellow;
-    else regimeColor = clrGray;
-    
-    string regimeText = StringFormat("M15 Regime: %s | ADX: %.1f", g_State.regimeText, g_State.adxValue);
-    ObjectCreate(0, "EA_RegimeInfo", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_RegimeInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_RegimeInfo", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_RegimeInfo", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_RegimeInfo", OBJPROP_TEXT, regimeText);
-    ObjectSetInteger(0, "EA_RegimeInfo", OBJPROP_COLOR, regimeColor);
-    ObjectSetInteger(0, "EA_RegimeInfo", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_RegimeInfo", OBJPROP_FONT, "Arial Bold");
-    yPos += 16;
-    
-    // M5 Entry Trigger
-    string m5Text = (g_State.m5Entry == 1) ? "M5 Entry: BUY TRIGGER" : 
-                     (g_State.m5Entry == -1) ? "M5 Entry: SELL TRIGGER" : "M5 Entry: NO TRIGGER";
-    color m5Color = g_State.m5Entry > 0 ? clrLime : g_State.m5Entry < 0 ? clrOrangeRed : clrGray;
-    
-    ObjectCreate(0, "EA_M5Entry", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_M5Entry", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_M5Entry", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_M5Entry", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_M5Entry", OBJPROP_TEXT, m5Text);
-    ObjectSetInteger(0, "EA_M5Entry", OBJPROP_COLOR, m5Color);
-    ObjectSetInteger(0, "EA_M5Entry", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_M5Entry", OBJPROP_FONT, "Arial Bold");
+
+    string regimeText = IsNeutralMarketRegime() ? "Regime: Neutral market -> Lite dual-side grid"
+                                                 : (g_TrendBias > 0 ? "Regime: Bull trend -> Buy-only Pro filter"
+                                                                    : "Regime: Bear trend -> Sell-only Pro filter");
+    color regimeColor = IsNeutralMarketRegime() ? clrDeepSkyBlue : (g_TrendBias > 0 ? clrLime : clrOrangeRed);
+    DrawLabel("EA_RegimeInfo", CORNER_LEFT_UPPER, 10, yPos, regimeText, regimeColor, 9, "Arial Bold");
     yPos += 18;
-    
-    // ATR + Gap + Spread Info
-    double normalGap = GetDynamicGap(true, false);
-    double recoveryGap = GetDynamicGap(true, true);
-    string atrText = StringFormat("ATR: %.1f (smooth %.1f) | Gap: %.1f/%.1f | Spread: %.1f",
-        g_State.atrH1, g_State.smoothedATR, normalGap, recoveryGap, g_State.spreadPips);
-    color atrColor = g_State.spreadPips > MaxSpreadPips ? clrRed : clrDodgerBlue;
-    
-    ObjectCreate(0, "EA_ATRInfo", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_ATRInfo", OBJPROP_TEXT, atrText);
-    ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_COLOR, atrColor);
-    ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_ATRInfo", OBJPROP_FONT, "Arial");
+
+    string momentumText = EnableM5Momentum ? ((g_MomentumSignal == 1) ? "M5 Momentum: Bullish"
+                                                            : (g_MomentumSignal == -1) ? "M5 Momentum: Bearish"
+                                                                                       : "M5 Momentum: Neutral")
+                                          : "M5 Momentum: Disabled";
+    color momentumColor = (g_MomentumSignal == 1) ? clrLime : ((g_MomentumSignal == -1) ? clrOrangeRed : clrSilver);
+    DrawLabel("EA_MomentumInfo", CORNER_LEFT_UPPER, 10, yPos, momentumText, momentumColor, 9, "Arial");
     yPos += 16;
-    
-    // Entry Decision Status
-    string entryStatus = "";
-    color entryColor = clrGray;
-    if(g_State.buyAllowed && g_State.sellAllowed)
+
+    string trendText = EnableTrendFilter ? ((g_TrendBias == 1) ? StringFormat("H1 Trend: Bullish | ADX %.1f | Slope %.2f", g_TrendADXValue, g_TrendSlopePips)
+                                                       : (g_TrendBias == -1) ? StringFormat("H1 Trend: Bearish | ADX %.1f | Slope %.2f", g_TrendADXValue, g_TrendSlopePips)
+                                                                             : StringFormat("H1 Trend: Neutral | ADX %.1f | Dist %.2f", g_TrendADXValue, g_TrendDistancePips))
+                                        : "H1 Trend: Disabled";
+    color trendColor = (g_TrendBias == 1) ? clrLime : ((g_TrendBias == -1) ? clrOrangeRed : clrSilver);
+    DrawLabel("EA_TrendInfo", CORNER_LEFT_UPPER, 10, yPos, trendText, trendColor, 9, "Arial");
+    yPos += 16;
+
+    string entryText = "Entry Engine: Lite neutral mode active";
+    color entryColor = clrDeepSkyBlue;
+    if(!IsNeutralMarketRegime())
     {
-        entryStatus = "ENTRY: BUY + SELL ALLOWED (Hedging Mode)";
-        entryColor = clrLime;
+        if(CanOpenNewTrendOrder(true))
+        {
+            entryText = "Entry Engine: Buy-only trend entries active";
+            entryColor = clrLime;
+        }
+        else if(CanOpenNewTrendOrder(false))
+        {
+            entryText = "Entry Engine: Sell-only trend entries active";
+            entryColor = clrOrangeRed;
+        }
+        else
+        {
+            entryText = "Entry Engine: Trend confirmed, waiting for M5 alignment";
+            entryColor = clrGold;
+        }
     }
-    else if(g_State.buyAllowed)
-    {
-        entryStatus = "ENTRY: BUY ONLY | SELL: " + g_State.sellBlockReason;
-        entryColor = clrDodgerBlue;
-    }
-    else if(g_State.sellAllowed)
-    {
-        entryStatus = "ENTRY: SELL ONLY | BUY: " + g_State.buyBlockReason;
-        entryColor = clrOrangeRed;
-    }
-    else
-    {
-        entryStatus = "ENTRY: ALL BLOCKED | BUY: " + g_State.buyBlockReason;
-        entryColor = clrRed;
-    }
-    
-    ObjectCreate(0, "EA_EntrySignal", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_EntrySignal", OBJPROP_TEXT, entryStatus);
-    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_COLOR, entryColor);
-    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_EntrySignal", OBJPROP_FONT, "Arial Bold");
-    yPos += 22;
+    DrawLabel("EA_EntrySignal", CORNER_LEFT_UPPER, 10, yPos, entryText, entryColor, 9, "Arial Bold");
+    yPos += 20;
     
     // ===== SELL SECTION (LEFT SIDE) =====
     int sellYPos = yPos;
     
     // SELL Header
-    ObjectCreate(0, "EA_SellHeader", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellHeader", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellHeader", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellHeader", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellHeader", OBJPROP_TEXT, "======= SELL ORDERS =======");
-    ObjectSetInteger(0, "EA_SellHeader", OBJPROP_COLOR, clrOrangeRed);
-    ObjectSetInteger(0, "EA_SellHeader", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellHeader", OBJPROP_FONT, "Arial Bold");
+    DrawLabel("EA_SellHeader", CORNER_LEFT_UPPER, 10, sellYPos, "======= SELL ORDERS =======", clrOrangeRed, 9, "Arial Bold");
     sellYPos += 16;
     
     // SELL Mode
     string sellModeText = sellInRecovery ? ">> RECOVERY MODE <<" : "Normal Grid Mode";
-    ObjectCreate(0, "EA_SellMode", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellMode", OBJPROP_TEXT, sellModeText);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_COLOR, sellInRecovery ? clrOrangeRed : clrLime);
-    ObjectSetInteger(0, "EA_SellMode", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellMode", OBJPROP_FONT, "Arial Bold");
+    DrawLabel("EA_SellMode", CORNER_LEFT_UPPER, 10, sellYPos, sellModeText, sellInRecovery ? clrOrangeRed : clrLime, 9, "Arial Bold");
     sellYPos += 16;
     
     // SELL Count & Lots (show actual count, not recovery-adjusted count)
     string sellCountInfo = StringFormat("Positions: %d | Lots: %.2f", actualSellCount, sellTotalLots);
-    ObjectCreate(0, "EA_SellCount", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellCount", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellCount", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellCount", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellCount", OBJPROP_TEXT, sellCountInfo);
-    ObjectSetInteger(0, "EA_SellCount", OBJPROP_COLOR, clrWhite);
-    ObjectSetInteger(0, "EA_SellCount", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellCount", OBJPROP_FONT, "Arial");
+    DrawLabel("EA_SellCount", CORNER_LEFT_UPPER, 10, sellYPos, sellCountInfo, clrWhite, 9, "Arial");
     sellYPos += 14;
     
     // SELL Average Price
     string sellAvgInfo = StringFormat("Avg Entry: %s", sellAvgPrice > 0 ? DoubleToString(sellAvgPrice, digits) : "No positions");
-    ObjectCreate(0, "EA_SellAvg", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellAvg", OBJPROP_TEXT, sellAvgInfo);
-    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_COLOR, clrWhite);
-    ObjectSetInteger(0, "EA_SellAvg", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellAvg", OBJPROP_FONT, "Arial");
+    DrawLabel("EA_SellAvg", CORNER_LEFT_UPPER, 10, sellYPos, sellAvgInfo, clrWhite, 9, "Arial");
     sellYPos += 14;
     
     // SELL Recovery TP Target
     double sellBE_TP = (sellAvgPrice > 0) ? sellAvgPrice - (RecoveryTakeProfitPips * pip) : 0;
     string sellBEInfo = StringFormat("Recovery TP: %s (-%.0f pips)", 
         sellBE_TP > 0 ? DoubleToString(sellBE_TP, digits) : "N/A", RecoveryTakeProfitPips);
-    ObjectCreate(0, "EA_SellBE", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellBE", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellBE", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellBE", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellBE", OBJPROP_TEXT, sellBEInfo);
-    ObjectSetInteger(0, "EA_SellBE", OBJPROP_COLOR, sellInRecovery ? clrLime : clrGray);
-    ObjectSetInteger(0, "EA_SellBE", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellBE", OBJPROP_FONT, "Arial");
+    DrawLabel("EA_SellBE", CORNER_LEFT_UPPER, 10, sellYPos, sellBEInfo, sellInRecovery ? clrLime : clrGray, 9, "Arial");
     sellYPos += 14;
     
     // SELL Profit
     string sellProfitInfo = StringFormat("Profit: %.2f", sellTotalProfit);
-    ObjectCreate(0, "EA_SellProfit", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_SellProfit", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_SellProfit", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_SellProfit", OBJPROP_YDISTANCE, sellYPos);
-    ObjectSetString(0, "EA_SellProfit", OBJPROP_TEXT, sellProfitInfo);
-    ObjectSetInteger(0, "EA_SellProfit", OBJPROP_COLOR, sellTotalProfit >= 0 ? clrLime : clrRed);
-    ObjectSetInteger(0, "EA_SellProfit", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_SellProfit", OBJPROP_FONT, "Arial");
+    DrawLabel("EA_SellProfit", CORNER_LEFT_UPPER, 10, sellYPos, sellProfitInfo, sellTotalProfit >= 0 ? clrLime : clrRed, 9, "Arial");
     
     // ===== BUY SECTION (RIGHT SIDE) =====
     int buyYPos = yPos;
     int rightX = 220;
     
     // BUY Header
-    ObjectCreate(0, "EA_BuyHeader", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyHeader", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyHeader", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyHeader", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyHeader", OBJPROP_TEXT, "======= BUY ORDERS =======");
-    ObjectSetInteger(0, "EA_BuyHeader", OBJPROP_COLOR, clrDodgerBlue);
-    ObjectSetInteger(0, "EA_BuyHeader", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyHeader", OBJPROP_FONT, "Arial Bold");
+    DrawLabel("EA_BuyHeader", CORNER_LEFT_UPPER, rightX, buyYPos, "======= BUY ORDERS =======", clrDodgerBlue, 9, "Arial Bold");
     buyYPos += 16;
     
     // BUY Mode
     string buyModeText = buyInRecovery ? ">> RECOVERY MODE <<" : "Normal Grid Mode";
-    ObjectCreate(0, "EA_BuyMode", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyMode", OBJPROP_TEXT, buyModeText);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_COLOR, buyInRecovery ? clrOrangeRed : clrLime);
-    ObjectSetInteger(0, "EA_BuyMode", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyMode", OBJPROP_FONT, "Arial Bold");
+    DrawLabel("EA_BuyMode", CORNER_LEFT_UPPER, rightX, buyYPos, buyModeText, buyInRecovery ? clrOrangeRed : clrLime, 9, "Arial Bold");
     buyYPos += 16;
     
     // BUY Count & Lots (show actual count, not recovery-adjusted count)
     string buyCountInfo = StringFormat("Positions: %d | Lots: %.2f", actualBuyCount, buyTotalLots);
-    ObjectCreate(0, "EA_BuyCount", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyCount", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyCount", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyCount", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyCount", OBJPROP_TEXT, buyCountInfo);
-    ObjectSetInteger(0, "EA_BuyCount", OBJPROP_COLOR, clrWhite);
-    ObjectSetInteger(0, "EA_BuyCount", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyCount", OBJPROP_FONT, "Arial");
+    DrawLabel("EA_BuyCount", CORNER_LEFT_UPPER, rightX, buyYPos, buyCountInfo, clrWhite, 9, "Arial");
     buyYPos += 14;
     
     // BUY Average Price
     string buyAvgInfo = StringFormat("Avg Entry: %s", buyAvgPrice > 0 ? DoubleToString(buyAvgPrice, digits) : "No positions");
-    ObjectCreate(0, "EA_BuyAvg", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyAvg", OBJPROP_TEXT, buyAvgInfo);
-    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_COLOR, clrWhite);
-    ObjectSetInteger(0, "EA_BuyAvg", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyAvg", OBJPROP_FONT, "Arial");
+    DrawLabel("EA_BuyAvg", CORNER_LEFT_UPPER, rightX, buyYPos, buyAvgInfo, clrWhite, 9, "Arial");
     buyYPos += 14;
     
     // BUY Recovery TP Target
     double buyBE_TP = (buyAvgPrice > 0) ? buyAvgPrice + (RecoveryTakeProfitPips * pip) : 0;
     string buyBEInfo = StringFormat("Recovery TP: %s (+%.0f pips)", 
         buyBE_TP > 0 ? DoubleToString(buyBE_TP, digits) : "N/A", RecoveryTakeProfitPips);
-    ObjectCreate(0, "EA_BuyBE", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyBE", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyBE", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyBE", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyBE", OBJPROP_TEXT, buyBEInfo);
-    ObjectSetInteger(0, "EA_BuyBE", OBJPROP_COLOR, buyInRecovery ? clrLime : clrGray);
-    ObjectSetInteger(0, "EA_BuyBE", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyBE", OBJPROP_FONT, "Arial");
+    DrawLabel("EA_BuyBE", CORNER_LEFT_UPPER, rightX, buyYPos, buyBEInfo, buyInRecovery ? clrLime : clrGray, 9, "Arial");
     buyYPos += 14;
     
     // BUY Profit
     string buyProfitInfo = StringFormat("Profit: %.2f", buyTotalProfit);
-    ObjectCreate(0, "EA_BuyProfit", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_BuyProfit", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_BuyProfit", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_BuyProfit", OBJPROP_YDISTANCE, buyYPos);
-    ObjectSetString(0, "EA_BuyProfit", OBJPROP_TEXT, buyProfitInfo);
-    ObjectSetInteger(0, "EA_BuyProfit", OBJPROP_COLOR, buyTotalProfit >= 0 ? clrLime : clrRed);
-    ObjectSetInteger(0, "EA_BuyProfit", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_BuyProfit", OBJPROP_FONT, "Arial");
+    DrawLabel("EA_BuyProfit", CORNER_LEFT_UPPER, rightX, buyYPos, buyProfitInfo, buyTotalProfit >= 0 ? clrLime : clrRed, 9, "Arial");
     buyYPos += 20;
     
     // ===== PRICE INFO =====
     yPos = buyYPos + 10;
     
-    ObjectCreate(0, "EA_PriceHeader", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_PriceHeader", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_PriceHeader", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_PriceHeader", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_PriceHeader", OBJPROP_TEXT, "======= PRICE INFO =======");
-    ObjectSetInteger(0, "EA_PriceHeader", OBJPROP_COLOR, clrGold);
-    ObjectSetInteger(0, "EA_PriceHeader", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_PriceHeader", OBJPROP_FONT, "Arial Bold");
+    DrawLabel("EA_PriceHeader", CORNER_LEFT_UPPER, 10, yPos, "======= PRICE INFO =======", clrGold, 9, "Arial Bold");
     yPos += 16;
     
     string priceInfo = StringFormat("Bid: %.2f | Ask: %.2f | Spread: %.1f",
@@ -4201,27 +3690,13 @@ void UpdateInfoPanel()
         SymbolInfoDouble(_Symbol, SYMBOL_ASK),
         (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / pip);
     
-    ObjectCreate(0, "EA_PriceInfo", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_PriceInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_PriceInfo", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_PriceInfo", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_PriceInfo", OBJPROP_TEXT, priceInfo);
-    ObjectSetInteger(0, "EA_PriceInfo", OBJPROP_COLOR, clrYellow);
-    ObjectSetInteger(0, "EA_PriceInfo", OBJPROP_FONTSIZE, 10);
-    ObjectSetString(0, "EA_PriceInfo", OBJPROP_FONT, "Arial Bold");
+    DrawLabel("EA_PriceInfo", CORNER_LEFT_UPPER, 10, yPos, priceInfo, clrYellow, 10, "Arial Bold");
     yPos += 18;
     
     // Total Profit
     double totalProfit = buyTotalProfit + sellTotalProfit;
     string totalProfitInfo = StringFormat("TOTAL PROFIT: %.2f", totalProfit);
-    ObjectCreate(0, "EA_TotalProfit", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_TotalProfit", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, "EA_TotalProfit", OBJPROP_XDISTANCE, 10);
-    ObjectSetInteger(0, "EA_TotalProfit", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_TotalProfit", OBJPROP_TEXT, totalProfitInfo);
-    ObjectSetInteger(0, "EA_TotalProfit", OBJPROP_COLOR, totalProfit >= 0 ? clrLime : clrRed);
-    ObjectSetInteger(0, "EA_TotalProfit", OBJPROP_FONTSIZE, 10);
-    ObjectSetString(0, "EA_TotalProfit", OBJPROP_FONT, "Arial Bold");
+    DrawLabel("EA_TotalProfit", CORNER_LEFT_UPPER, 10, yPos, totalProfitInfo, totalProfit >= 0 ? clrLime : clrRed, 10, "Arial Bold");
 }
 
 //+------------------------------------------------------------------+
@@ -4403,7 +3878,7 @@ void SendTradeDataToServer()
     
     // Build main JSON request
     string jsonRequest = "{";
-    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
+    jsonRequest += "\"license_key\":\"" + JsonEscape(LicenseKey) + "\",";
     jsonRequest += "\"account_balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + ",";
     jsonRequest += "\"account_equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + ",";
     jsonRequest += "\"account_profit\":" + DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2) + ",";
@@ -4416,39 +3891,18 @@ void SendTradeDataToServer()
     jsonRequest += "\"total_buy_profit\":" + DoubleToString(totalBuyProfit, 2) + ",";
     jsonRequest += "\"total_sell_profit\":" + DoubleToString(totalSellProfit, 2) + ",";
     jsonRequest += "\"total_pending_orders\":" + IntegerToString(pendingCount) + ",";
-    jsonRequest += "\"trading_mode\":\"" + tradingMode + "\",";
-    jsonRequest += "\"symbol\":\"" + _Symbol + "\",";
+    jsonRequest += "\"trading_mode\":\"" + JsonEscape(tradingMode) + "\",";
+    jsonRequest += "\"symbol\":\"" + JsonEscape(_Symbol) + "\",";
     jsonRequest += "\"current_price\":" + DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_BID), digits) + ",";
     jsonRequest += "\"open_positions\":" + positionsJson + ",";
     jsonRequest += "\"pending_orders\":" + pendingJson + ",";
-    jsonRequest += "\"closed_positions\":" + closedJson + ",";
-    // Multi-TF state info
-    jsonRequest += "\"ea_details\":{";
-    jsonRequest += "\"version\":\"3.3.0\",";
-    jsonRequest += "\"macro_bias\":" + IntegerToString(g_State.macroBias) + ",";
-    jsonRequest += "\"trend_score\":" + IntegerToString(g_State.trendScore) + ",";
-    jsonRequest += "\"regime\":\"" + g_State.regimeText + "\",";
-    jsonRequest += "\"m5_entry\":" + IntegerToString(g_State.m5Entry) + ",";
-    jsonRequest += "\"atr_h1\":" + DoubleToString(g_State.atrH1, 2) + ",";
-    jsonRequest += "\"spread_pips\":" + DoubleToString(g_State.spreadPips, 1) + ",";
-    jsonRequest += "\"buy_allowed\":" + (g_State.buyAllowed ? "true" : "false") + ",";
-    jsonRequest += "\"sell_allowed\":" + (g_State.sellAllowed ? "true" : "false") + ",";
-    jsonRequest += "\"buy_block\":\"" + g_State.buyBlockReason + "\",";
-    jsonRequest += "\"sell_block\":\"" + g_State.sellBlockReason + "\"";
-    jsonRequest += "}";
+    jsonRequest += "\"closed_positions\":" + closedJson;
     jsonRequest += "}";
     
     // Prepare request
     string url = LicenseServer + "/api/trade-data/update/";
-    string headers = "Content-Type: application/json\r\n";
-    char postData[];
-    char result[];
-    string resultHeaders;
-    
-    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
-    
-    int timeout = 2000;
-    int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
+    string responseStr = "";
+    PostJson(url, jsonRequest, 2000, responseStr);
     
 }
 
@@ -4556,21 +4010,11 @@ void PollAndExecuteCommands()
     if(StringLen(LicenseKey) == 0) return;
     
     string url = LicenseServer + "/api/trade-commands/pending/";
-    string headers = "Content-Type: application/json\r\n";
-    string jsonRequest = "{\"license_key\":\"" + LicenseKey + "\"}";
-    
-    char postData[];
-    char result[];
-    string resultHeaders;
-    
-    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
-    
-    ResetLastError();
-    int response = WebRequest("POST", url, headers, 3000, postData, result, resultHeaders);
+    string jsonRequest = "{\"license_key\":\"" + JsonEscape(LicenseKey) + "\"}";
+    string responseStr = "";
+    int response = PostJson(url, jsonRequest, 3000, responseStr);
     
     if(response == -1 || response != 200) return;
-    
-    string responseStr = CharArrayToString(result);
     
     // Check success
     if(StringFind(responseStr, "\"success\": true") < 0 && StringFind(responseStr, "\"success\":true") < 0) return;
@@ -4740,24 +4184,19 @@ bool ExecuteCloseAll(string &resultMsg)
 void ReportCommandStatus(int cmdId, string status, string resultMessage)
 {
     string url = LicenseServer + "/api/trade-commands/update-status/";
-    string headers = "Content-Type: application/json\r\n";
     
     // Escape quotes in result message
-    StringReplace(resultMessage, "\"", "'");
+    resultMessage = JsonEscape(resultMessage);
     
     string jsonRequest = "{";
-    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
+    jsonRequest += "\"license_key\":\"" + JsonEscape(LicenseKey) + "\",";
     jsonRequest += "\"command_id\":" + IntegerToString(cmdId) + ",";
-    jsonRequest += "\"status\":\"" + status + "\",";
+    jsonRequest += "\"status\":\"" + JsonEscape(status) + "\",";
     jsonRequest += "\"result_message\":\"" + resultMessage + "\"";
     jsonRequest += "}";
-    
-    char postData[];
-    char result[];
-    string resultHeaders;
-    
-    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
-    WebRequest("POST", url, headers, 3000, postData, result, resultHeaders);
+
+    string responseStr = "";
+    PostJson(url, jsonRequest, 3000, responseStr);
 }
 
 string ExtractJsonString(string json, string key)
@@ -4842,24 +4281,18 @@ bool VerifyLicense()
     
     // Build JSON request
     string jsonRequest = "{";
-    jsonRequest += "\"license_key\":\"" + LicenseKey + "\",";
-    jsonRequest += "\"mt5_account\":\"" + mt5Account + "\",";
-    jsonRequest += "\"hardware_id\":\"" + TerminalInfoString(TERMINAL_CPU_NAME) + "\"";
+    jsonRequest += "\"license_key\":\"" + JsonEscape(LicenseKey) + "\",";
+    jsonRequest += "\"mt5_account\":\"" + JsonEscape(mt5Account) + "\",";
+    jsonRequest += "\"hardware_id\":\"" + JsonEscape(TerminalInfoString(TERMINAL_CPU_NAME)) + "\"";
     jsonRequest += "}";
     
     // Prepare request
     string url = LicenseServer + "/api/verify/";
-    string headers = "Content-Type: application/json\r\n";
-    char postData[];
-    char result[];
-    string resultHeaders;
-    
-    StringToCharArray(jsonRequest, postData, 0, StringLen(jsonRequest));
+    string responseStr = "";
     
     // Make HTTP request
-    ResetLastError();
     int timeout = 5000;
-    int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
+    int response = PostJson(url, jsonRequest, timeout, responseStr);
     
     // Connection failed
     if(response == -1)
@@ -4889,9 +4322,21 @@ bool VerifyLicense()
         g_LastVerification = TimeCurrent();
         return false;
     }
-    
-    // Parse response
-    string responseStr = CharArrayToString(result);
+    else if(response != 200)
+    {
+        g_LicenseMessage = "LICENSE SERVER ERROR (HTTP " + IntegerToString(response) + ")";
+
+        if(TryLoadCachedLicense(mt5Account))
+            return true;
+        if(TryLoadCachedLicenseCommon(mt5Account))
+            return true;
+
+        g_LicenseValid = false;
+        g_PlanName = "";
+        g_DaysRemaining = 0;
+        g_LastVerification = TimeCurrent();
+        return false;
+    }
     
     // Convert response to lowercase for easier checking
     string lowerResp = responseStr;
@@ -4965,54 +4410,24 @@ bool VerifyLicense()
 //+------------------------------------------------------------------+
 void UpdateLicensePanel()
 {
-    // Delete old objects
-    ObjectDelete(0, "EA_LicenseTitle");
-    ObjectDelete(0, "EA_LicenseURL");
-    ObjectDelete(0, "EA_LicensePlan");
-    ObjectDelete(0, "EA_LicenseExpiry");
-    ObjectDelete(0, "EA_LicenseDays");
-    ObjectDelete(0, "EA_LicenseStatus");
-    ObjectDelete(0, "EA_LicenseWarning");
-    
     int yPos = 20;
     int rightX = 200; // Distance from right edge (enough padding for long URL)
     
     // Website URL
-    ObjectCreate(0, "EA_LicenseURL", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_LicenseURL", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-    ObjectSetInteger(0, "EA_LicenseURL", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_LicenseURL", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_LicenseURL", OBJPROP_TEXT, "https://www.markstrades.com");
-    ObjectSetInteger(0, "EA_LicenseURL", OBJPROP_COLOR, clrGold);
-    ObjectSetInteger(0, "EA_LicenseURL", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_LicenseURL", OBJPROP_FONT, "Arial Bold");
+    DrawLabel("EA_LicenseURL", CORNER_RIGHT_UPPER, rightX, yPos, "https://www.markstrades.com", clrGold, 9, "Arial Bold");
     yPos += 16;
     
     // License Status
     string statusText = g_LicenseValid ? "LICENSE: ACTIVE" : "LICENSE: INVALID";
     color statusColor = g_LicenseValid ? clrLime : clrRed;
     
-    ObjectCreate(0, "EA_LicenseStatus", OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-    ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_XDISTANCE, rightX);
-    ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_YDISTANCE, yPos);
-    ObjectSetString(0, "EA_LicenseStatus", OBJPROP_TEXT, statusText);
-    ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_COLOR, statusColor);
-    ObjectSetInteger(0, "EA_LicenseStatus", OBJPROP_FONTSIZE, 9);
-    ObjectSetString(0, "EA_LicenseStatus", OBJPROP_FONT, "Arial Bold");
+    DrawLabel("EA_LicenseStatus", CORNER_RIGHT_UPPER, rightX, yPos, statusText, statusColor, 9, "Arial Bold");
     yPos += 16;
     
     if(g_LicenseValid)
     {
         // Plan Name
-        ObjectCreate(0, "EA_LicensePlan", OBJ_LABEL, 0, 0, 0);
-        ObjectSetInteger(0, "EA_LicensePlan", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-        ObjectSetInteger(0, "EA_LicensePlan", OBJPROP_XDISTANCE, rightX);
-        ObjectSetInteger(0, "EA_LicensePlan", OBJPROP_YDISTANCE, yPos);
-        ObjectSetString(0, "EA_LicensePlan", OBJPROP_TEXT, "Plan: " + g_PlanName);
-        ObjectSetInteger(0, "EA_LicensePlan", OBJPROP_COLOR, clrWhite);
-        ObjectSetInteger(0, "EA_LicensePlan", OBJPROP_FONTSIZE, 9);
-        ObjectSetString(0, "EA_LicensePlan", OBJPROP_FONT, "Arial");
+        DrawLabel("EA_LicensePlan", CORNER_RIGHT_UPPER, rightX, yPos, "Plan: " + g_PlanName, clrWhite, 9, "Arial");
         yPos += 14;
         
         // Days Remaining (from backend)
@@ -5021,41 +4436,24 @@ void UpdateLicensePanel()
         if(g_DaysRemaining <= 7) daysColor = clrOrange;
         if(g_DaysRemaining <= 3) daysColor = clrRed;
         
-        ObjectCreate(0, "EA_LicenseDays", OBJ_LABEL, 0, 0, 0);
-        ObjectSetInteger(0, "EA_LicenseDays", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-        ObjectSetInteger(0, "EA_LicenseDays", OBJPROP_XDISTANCE, rightX);
-        ObjectSetInteger(0, "EA_LicenseDays", OBJPROP_YDISTANCE, yPos);
-        ObjectSetString(0, "EA_LicenseDays", OBJPROP_TEXT, daysText);
-        ObjectSetInteger(0, "EA_LicenseDays", OBJPROP_COLOR, daysColor);
-        ObjectSetInteger(0, "EA_LicenseDays", OBJPROP_FONTSIZE, 9);
-        ObjectSetString(0, "EA_LicenseDays", OBJPROP_FONT, "Arial Bold");
+        DrawLabel("EA_LicenseDays", CORNER_RIGHT_UPPER, rightX, yPos, daysText, daysColor, 9, "Arial Bold");
         yPos += 14;
         
         // Warning if expiring soon
         if(g_DaysRemaining <= 7)
         {
             string warningText = g_DaysRemaining <= 3 ? "!! RENEW NOW !!" : "! Renew Soon !";
-            ObjectCreate(0, "EA_LicenseWarning", OBJ_LABEL, 0, 0, 0);
-            ObjectSetInteger(0, "EA_LicenseWarning", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-            ObjectSetInteger(0, "EA_LicenseWarning", OBJPROP_XDISTANCE, rightX);
-            ObjectSetInteger(0, "EA_LicenseWarning", OBJPROP_YDISTANCE, yPos);
-            ObjectSetString(0, "EA_LicenseWarning", OBJPROP_TEXT, warningText);
-            ObjectSetInteger(0, "EA_LicenseWarning", OBJPROP_COLOR, g_DaysRemaining <= 3 ? clrRed : clrOrange);
-            ObjectSetInteger(0, "EA_LicenseWarning", OBJPROP_FONTSIZE, 10);
-            ObjectSetString(0, "EA_LicenseWarning", OBJPROP_FONT, "Arial Bold");
+            DrawLabel("EA_LicenseWarning", CORNER_RIGHT_UPPER, rightX, yPos, warningText, g_DaysRemaining <= 3 ? clrRed : clrOrange, 10, "Arial Bold");
+        }
+        else
+        {
+            ObjectDelete(0, "EA_LicenseWarning");
         }
     }
     else
     {
         // Show error message
-        ObjectCreate(0, "EA_LicenseWarning", OBJ_LABEL, 0, 0, 0);
-        ObjectSetInteger(0, "EA_LicenseWarning", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-        ObjectSetInteger(0, "EA_LicenseWarning", OBJPROP_XDISTANCE, rightX);
-        ObjectSetInteger(0, "EA_LicenseWarning", OBJPROP_YDISTANCE, yPos);
-        ObjectSetString(0, "EA_LicenseWarning", OBJPROP_TEXT, "TRADING DISABLED");
-        ObjectSetInteger(0, "EA_LicenseWarning", OBJPROP_COLOR, clrRed);
-        ObjectSetInteger(0, "EA_LicenseWarning", OBJPROP_FONTSIZE, 10);
-        ObjectSetString(0, "EA_LicenseWarning", OBJPROP_FONT, "Arial Bold");
+        DrawLabel("EA_LicenseWarning", CORNER_RIGHT_UPPER, rightX, yPos, "TRADING DISABLED", clrRed, 10, "Arial Bold");
     }
 }
 

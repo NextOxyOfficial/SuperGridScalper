@@ -27,44 +27,70 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 #define BuyRangeStart       2001.0
 #define BuyRangeEnd         8801.0
 #define BuyGapPips          5.0
-#define MaxBuyOrders        5
+#define MaxBuyOrders        6
 #define BuyTakeProfitPips   45
 
 #define SellRangeStart      8802.0
 #define SellRangeEnd        2002.0
 #define SellGapPips         6.0
-#define MaxSellOrders       5
+#define MaxSellOrders       6
 #define SellTakeProfitPips  45
 
 #define BuyRecoveryGapPips   6
 #define SellRecoveryGapPips  6
-#define RecoveryATRTimeframe PERIOD_M5
-#define RecoveryATRPeriod    14
-#define RecoveryATRMinPips   6.0
-#define RecoveryATRMaxPips   25.0
 
 // ===== TRAILING STOP SETTINGS (Normal Mode) =====
 // Formula: newSL = openPrice + InitialSL + ((profit - TrailingStart) × TrailingRatio)
 // 
-// Example (BUY @ 2650, Current = 2656, Profit = 6 pips):
-//   priceMovement = 6 - 3 = 3 pips
-//   slMovement = 3 × 0.5 = 1.5 pips  
-//   newSL = 2650 + 2 + 1.5 = 2653.50 (3.5 pips profit locked)
+// Example (BUY @ 2650, Current = 2660, Profit = 10 pips):
+//   priceMovement = 10 - 8 = 2 pips
+//   slMovement = 2 × 0.30 = 0.6 pips  
+//   newSL = 2650 + 3.0 + 0.6 = 2653.60 (3.6 pips profit locked)
 //
 // | Profit | SL Position | Calculation |
 // |--------|-------------|-------------|
-// | 3 pip  | +2.0 pip    | Initial SL set |
-// | 5 pip  | +3.0 pip    | 2 + (2 × 0.5) |
-// | 10 pip | +5.5 pip    | 2 + (7 × 0.5) |
-// | 20 pip | +10.5 pip   | 2 + (17 × 0.5) |
+// | 8 pip  | +4.0 pip    | Initial SL set (trail activates late) |
+// | 10 pip | +4.7 pip    | 4 + (2 × 0.35) |
+// | 15 pip | +6.45 pip   | 4 + (7 × 0.35) |
+// | 25 pip | +9.95 pip   | 4 + (17 × 0.35) |
 
 #define BuyTrailingStartPips    8.0   // Let profit breathe: trailing later so winners get more room
-#define BuyInitialSLPips        3.0   // Lock smaller profit first, then trail gradually
-#define BuyTrailingRatio        0.30  // Slower trail so strong moves are not cut too early
+#define BuyInitialSLPips        4.0   // Lock more profit when trail activates
+#define BuyTrailingRatio        0.35  // Tighter trail to protect high-profit trades from pullbacks
 
 #define SellTrailingStartPips   8.0   // Let profit breathe: trailing later so winners get more room
-#define SellInitialSLPips       3.0   // Lock smaller profit first, then trail gradually
-#define SellTrailingRatio       0.30  // Slower trail so strong moves are not cut too early
+#define SellInitialSLPips       4.0   // Lock more profit when trail activates
+#define SellTrailingRatio       0.35  // Tighter trail to protect high-profit trades from pullbacks
+
+// ===== ATR DYNAMIC GAP SETTINGS =====
+// ATR onujayi gap automatically adjust hobe — volatile market e boro gap, calm market e chhoto gap
+#define EnableATRGap            true            // ATR-based dynamic gap ON/OFF
+#define ATR_Period              14              // ATR period
+#define ATR_Timeframe           PERIOD_H1       // H1 (1 hour) chart for ATR calculation
+#define ATR_Multiplier_Normal   0.6             // Normal grid gap = ATR × 0.6 (tighter for normal grid)
+#define ATR_Multiplier_Recovery 1.0             // Recovery gap = ATR × 1.0 (wider for recovery)
+#define MinGapPips_Normal       5.0             // Minimum gap for normal grid (5 pips floor)
+#define MinGapPips_Recovery     8.0             // Minimum gap for recovery grid (8 pips floor)
+#define MaxGapPips              20.0            // Maximum gap (safety ceiling)
+
+// ===== DUAL TIMEFRAME SYSTEM =====
+// M5: Fast momentum detection (druto signal)
+// H1: Trend confirmation (confirm hoye trade open)
+
+// M5 Momentum Detection Settings
+#define EnableM5Momentum        true            // M5 momentum detection ON/OFF
+#define M5_EMA_Period           20              // M5 EMA for momentum
+#define M5_RSI_Period           14              // M5 RSI for momentum
+#define M5_RSI_Overbought       70              // RSI overbought level
+#define M5_RSI_Oversold         30              // RSI oversold level
+#define M5_MinCandleBodyPips    1.5             // Minimum candle body size for momentum signal
+#define M5_MomentumBars         3               // Check last 3 M5 candles for momentum
+
+// H1 Trend Confirmation Settings
+#define EnableTrendFilter       true            // H1 trend confirmation ON/OFF
+#define H1_EMA_Period           20              // H1 EMA for trend confirmation
+#define H1_EMA_Timeframe        PERIOD_H1       // H1 chart for trend confirmation
+#define H1_EMA_SlopeMinPips     1.5             // Minimum H1 slope to confirm trend
 
 // ===== RECOVERY MODE SETTINGS =====
 // Recovery mode এ average price থেকে calculate হয়, individual position থেকে না
@@ -74,15 +100,15 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 #define RecoveryTakeProfitPips  32.0  // Slightly wider emergency TP before basket trailing takes control
 #define RecoveryBreakevenPips   3.5  // Breakeven close এ profit pips (long-distance + profitable positions)
 #define RecoveryTrailingStartPips 5.0  // Start trailing later to avoid cutting recovery too early
-#define RecoveryInitialSLPips   2.5    // Keep more breathing room around recovery basket average
-#define RecoveryTrailingRatio   0.35   // Slower basket trail for stronger extensions
+#define RecoveryInitialSLPips   3.0    // Lock more profit on recovery basket
+#define RecoveryTrailingRatio   0.40   // Tighter basket trail to protect recovery profits
 #define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
 #define MaxRecoveryLotSize      0.25    // Recovery mode এ সর্বোচ্চ lot size (এর বেশি হবে না)
 #define MaxRecoveryOrders       200
 #define RecoveryCleanupThreshold 4  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
 #define ReleaseNormalTPOnTrail  true
 
-#define LotSize         0.10
+#define LotSize         0.30
 #define MagicNumber     999888
 #define OrderComment    "CleanGrid"
 #define ManageAllTrades false
@@ -98,6 +124,13 @@ int totalBuyOrders = 0;           // Positions + Pending (for grid limit)
 int totalSellOrders = 0;          // Positions + Pending (for grid limit)
 bool buyInRecovery = false;
 bool sellInRecovery = false;
+int g_H1_EMAHandle = INVALID_HANDLE;  // H1 EMA indicator handle for trend confirmation
+int g_TrendBias = 0;                  // -1=bearish (SELL only), 0=neutral, +1=bullish (BUY only)
+int g_ATRHandle = INVALID_HANDLE;     // ATR indicator handle for dynamic gap
+double g_CurrentATR = 0.0;            // Current ATR value in pips
+int g_M5_EMAHandle = INVALID_HANDLE;  // M5 EMA indicator handle for momentum
+int g_M5_RSIHandle = INVALID_HANDLE;  // M5 RSI indicator handle for momentum
+int g_MomentumSignal = 0;             // -1=bearish momentum, 0=no momentum, +1=bullish momentum
 // Multi-bundle system: each bundle has unique ID and tracks its own positions
 struct BundleEntry
 {
@@ -121,13 +154,6 @@ int logMaxSize = 1;
 
 // API Communication
 datetime g_LastTradeDataUpdate = 0;
-int g_RecoveryATRHandle = INVALID_HANDLE;
-
-// EA Control Settings (fetched from server)
-double   g_ControlLotSize       = 0;      // 0 = use hardcoded LotSize
-bool     g_ControlTargetStopped = false;  // Server says target hit, stop trading
-bool     g_ControlScheduleStopped = false; // Server says schedule stop active
-bool     g_ControlSettingsLoaded = false;  // At least one successful fetch
 
 // License Verification
 bool g_LicenseValid = false;
@@ -144,9 +170,34 @@ int OnInit()
 {
     pip = 1.0; // For XAUUSD
     trade.SetExpertMagicNumber(MagicNumber);
-    g_RecoveryATRHandle = iATR(_Symbol, RecoveryATRTimeframe, RecoveryATRPeriod);
-    if(g_RecoveryATRHandle == INVALID_HANDLE)
-        Print("Recovery ATR handle initialization failed. Static recovery gap fallback will be used.");
+    
+    // Initialize H1 EMA indicator for trend confirmation
+    if(EnableTrendFilter)
+    {
+        g_H1_EMAHandle = iMA(_Symbol, H1_EMA_Timeframe, H1_EMA_Period, 0, MODE_EMA, PRICE_CLOSE);
+        if(g_H1_EMAHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create H1 EMA indicator handle");
+    }
+    
+    // Initialize M5 momentum indicators
+    if(EnableM5Momentum)
+    {
+        g_M5_EMAHandle = iMA(_Symbol, PERIOD_M5, M5_EMA_Period, 0, MODE_EMA, PRICE_CLOSE);
+        if(g_M5_EMAHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create M5 EMA indicator handle");
+        
+        g_M5_RSIHandle = iRSI(_Symbol, PERIOD_M5, M5_RSI_Period, PRICE_CLOSE);
+        if(g_M5_RSIHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create M5 RSI indicator handle");
+    }
+    
+    // Initialize ATR indicator for dynamic gap sizing
+    if(EnableATRGap)
+    {
+        g_ATRHandle = iATR(_Symbol, ATR_Timeframe, ATR_Period);
+        if(g_ATRHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create ATR indicator handle");
+    }
     
     // FORCE license to invalid until verified
     g_LicenseValid = false;
@@ -193,12 +244,12 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-    if(g_RecoveryATRHandle != INVALID_HANDLE)
-    {
-        IndicatorRelease(g_RecoveryATRHandle);
-        g_RecoveryATRHandle = INVALID_HANDLE;
-    }
-
+    // Release indicator handles
+    if(g_H1_EMAHandle != INVALID_HANDLE) IndicatorRelease(g_H1_EMAHandle);
+    if(g_M5_EMAHandle != INVALID_HANDLE) IndicatorRelease(g_M5_EMAHandle);
+    if(g_M5_RSIHandle != INVALID_HANDLE) IndicatorRelease(g_M5_RSIHandle);
+    if(g_ATRHandle != INVALID_HANDLE) IndicatorRelease(g_ATRHandle);
+    
     // Delete all chart objects
     ObjectDelete(0, "EA_ModeStatus");
     ObjectDelete(0, "EA_SellHeader");
@@ -223,6 +274,10 @@ void OnDeinit(const int reason)
     ObjectDelete(0, "EA_LicenseDays");
     ObjectDelete(0, "EA_LicenseStatus");
     ObjectDelete(0, "EA_LicenseWarning");
+    ObjectDelete(0, "EA_MomentumInfo");
+    ObjectDelete(0, "EA_TrendInfo");
+    ObjectDelete(0, "EA_EntrySignal");
+    ObjectDelete(0, "EA_ATRInfo");
     
     // Only delete pending orders when EA is actually removed
     if(reason == REASON_REMOVE || reason == REASON_CHARTCLOSE || reason == REASON_PROGRAM)
@@ -291,43 +346,17 @@ void OnTick()
     // Clear comment when license is valid
     Comment("");
     
-    // Send data to API early so control settings stay fresh even when paused
-    // (must run before target/schedule checks so cooldown expiry is detected)
-    static datetime lastControlSync = 0;
-    if(!IsTesterMode() && TimeCurrent() - lastControlSync >= 10)
-    {
-        lastControlSync = TimeCurrent();
-        SendTradeDataToServer();
-    }
-    
-    // EA Control: Daily Target Stop — server flagged target hit
-    if(g_ControlSettingsLoaded && g_ControlTargetStopped)
-    {
-        static datetime lastTargetMsg = 0;
-        if(TimeCurrent() - lastTargetMsg > 10)
-        {
-            lastTargetMsg = TimeCurrent();
-            AddToLog("EA PAUSED: Daily profit target reached. Waiting for cooldown.", "CONTROL");
-        }
-        Comment("\xF0\x9F\x8E\xAF DAILY TARGET REACHED — EA PAUSED\n\nWaiting for cooldown to expire...\nSet from website EA Control Settings");
-        return;
-    }
-    
-    // EA Control: Schedule Stop — server flagged schedule window active
-    if(g_ControlSettingsLoaded && g_ControlScheduleStopped)
-    {
-        static datetime lastSchedMsg = 0;
-        if(TimeCurrent() - lastSchedMsg > 10)
-        {
-            lastSchedMsg = TimeCurrent();
-            AddToLog("EA PAUSED: Scheduled stop window active.", "CONTROL");
-        }
-        Comment("\xE2\x8F\xB8 SCHEDULED STOP — EA PAUSED\n\nWill resume after stop window ends...\nSet from website EA Control Settings");
-        return;
-    }
-    
     // Max Drawdown Protection — close all if loss exceeds limit
     if(CheckMaxDrawdown()) return;
+    
+    // Update M5 momentum detection (fast signal - druto)
+    UpdateM5Momentum();
+    
+    // Update H1 trend confirmation (confirm hoye trade open)
+    UpdateH1TrendConfirmation();
+    
+    // Update ATR for dynamic gap calculation
+    UpdateATR();
     
     // Count current positions
     CountPositions();
@@ -337,12 +366,14 @@ void OnTick()
     if(TimeCurrent() - lastDebugLog > 30)
     {
         double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-        AddToLog(StringFormat("DEBUG | Price: %.2f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d", 
+        string trendStr = (g_TrendBias == 1) ? "UP" : (g_TrendBias == -1) ? "DOWN" : "FLAT";
+        AddToLog(StringFormat("DEBUG | Price: %.2f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d | Trend: %s", 
             currentBid,
             buyInRecovery ? "RECOVERY" : "NORMAL",
             sellInRecovery ? "RECOVERY" : "NORMAL",
             currentBuyPositions,
-            currentSellPositions), "DEBUG");
+            currentSellPositions,
+            trendStr), "DEBUG");
         lastDebugLog = TimeCurrent();
     }
     
@@ -392,8 +423,28 @@ void OnTick()
     // and recovery count <= threshold, allowing fresh normal mode restart
     RecoveryCleanupWorker();
     
-    // Manage grids based on mode
-    if(!buyInRecovery)
+    // Manage grids based on DUAL TIMEFRAME SYSTEM:
+    // M5 Momentum (druto signal) + H1 Trend Confirmation (confirm hoye trade open)
+    // 
+    // BUY Entry Requires:
+    //   - M5 bullish momentum (g_MomentumSignal = +1) 
+    //   - H1 bullish trend confirmed (g_TrendBias = +1) OR neutral (g_TrendBias = 0)
+    //
+    // SELL Entry Requires:
+    //   - M5 bearish momentum (g_MomentumSignal = -1)
+    //   - H1 bearish trend confirmed (g_TrendBias = -1) OR neutral (g_TrendBias = 0)
+    
+    // === BUY SIDE ===
+    bool buyMomentumOK = (!EnableM5Momentum || g_MomentumSignal == 1);  // M5 bullish momentum
+    bool buyTrendOK = (!EnableTrendFilter || g_TrendBias >= 0);         // H1 bullish or neutral
+    bool buyAllowed = buyMomentumOK && buyTrendOK;
+    
+    if(!buyAllowed)
+    {
+        // No M5 momentum or H1 trend against BUY — delete all BUY pending orders
+        DeleteAllPendingOrdersForSide(true);
+    }
+    else if(!buyInRecovery)
     {
         ManageNormalGrid(true);  // BUY Normal Mode
     }
@@ -404,7 +455,17 @@ void OnTick()
         ManageRecoveryGrid(true); // BUY Recovery
     }
         
-    if(!sellInRecovery)
+    // === SELL SIDE ===
+    bool sellMomentumOK = (!EnableM5Momentum || g_MomentumSignal == -1); // M5 bearish momentum
+    bool sellTrendOK = (!EnableTrendFilter || g_TrendBias <= 0);         // H1 bearish or neutral
+    bool sellAllowed = sellMomentumOK && sellTrendOK;
+    
+    if(!sellAllowed)
+    {
+        // No M5 momentum or H1 trend against SELL — delete all SELL pending orders
+        DeleteAllPendingOrdersForSide(false);
+    }
+    else if(!sellInRecovery)
     {
         ManageNormalGrid(false); // SELL Normal Mode
     }
@@ -429,7 +490,13 @@ void OnTick()
         UpdateInfoPanel();
     }
     
-    // (API sync already runs early in OnTick for control settings freshness)
+    // Send data to API (every 10 seconds)
+    static datetime lastAPIUpdate = 0;
+    if(TimeCurrent() - lastAPIUpdate >= 10)
+    {
+        lastAPIUpdate = TimeCurrent();
+        SendTradeDataToServer();
+    }
 }
 
 // ===== Multi-Bundle Helper Functions =====
@@ -600,30 +667,167 @@ bool IsTesterMode()
     return (TesterMode && (MQLInfoInteger(MQL_TESTER) != 0));
 }
 
-double GetRecoveryATRGapPips()
+//+------------------------------------------------------------------+
+//| H1 EMA Trend Confirmation                                          |
+//| g_TrendBias: +1 = Bullish confirmed, -1 = Bearish confirmed      |
+//|              0 = Neutral (no clear H1 trend)                      |
+//+------------------------------------------------------------------+
+void UpdateH1TrendConfirmation()
 {
-    double fallbackGap = MathMax((double)BuyRecoveryGapPips, (double)SellRecoveryGapPips);
-
-    if(g_RecoveryATRHandle == INVALID_HANDLE || pip <= 0)
-        return fallbackGap;
-
-    double atrBuffer[];
-    ArraySetAsSeries(atrBuffer, true);
-    if(CopyBuffer(g_RecoveryATRHandle, 0, 0, 1, atrBuffer) <= 0)
-        return fallbackGap;
-
-    double atrPips = atrBuffer[0] / pip;
-    if(atrPips <= 0)
-        return fallbackGap;
-
-    return MathMax(RecoveryATRMinPips, MathMin(RecoveryATRMaxPips, atrPips));
+    g_TrendBias = 0;
+    if(!EnableTrendFilter || g_H1_EMAHandle == INVALID_HANDLE) return;
+    
+    double emaBuffer[];
+    ArraySetAsSeries(emaBuffer, true); // [0]=newest bar
+    if(CopyBuffer(g_H1_EMAHandle, 0, 0, 6, emaBuffer) < 6) return;
+    
+    // H1 Slope = EMA change over last 5 bars (in pips)
+    double slope = (emaBuffer[0] - emaBuffer[5]) / pip;
+    
+    if(slope >= H1_EMA_SlopeMinPips)
+        g_TrendBias = 1;    // Bullish confirmed — BUY allowed, SELL blocked
+    else if(slope <= -H1_EMA_SlopeMinPips)
+        g_TrendBias = -1;   // Bearish confirmed — SELL allowed, BUY blocked
+    // else: 0 = Neutral — both sides allowed (no blocking in neutral)
 }
 
-double GetProgressiveRecoveryGapPips(int totalPositionsThisSide, int maxNormalOrders)
+//+------------------------------------------------------------------+
+//| M5 Momentum Detection (Fast Signal)                               |
+//| Checks: RSI, candle body strength, price vs M5 EMA                |
+//| g_MomentumSignal: +1 = bullish momentum, -1 = bearish, 0 = none  |
+//+------------------------------------------------------------------+
+void UpdateM5Momentum()
 {
-    double baseGapPips = GetRecoveryATRGapPips();
-    int extraGapSteps = MathMax(0, totalPositionsThisSide - maxNormalOrders + 1);
-    return baseGapPips + extraGapSteps;
+    g_MomentumSignal = 0;
+    if(!EnableM5Momentum || g_M5_EMAHandle == INVALID_HANDLE || g_M5_RSIHandle == INVALID_HANDLE) return;
+    
+    // Get M5 EMA
+    double m5_emaBuffer[];
+    ArraySetAsSeries(m5_emaBuffer, true);
+    if(CopyBuffer(g_M5_EMAHandle, 0, 0, 1, m5_emaBuffer) < 1) return;
+    double m5_ema = m5_emaBuffer[0];
+    
+    // Get M5 RSI
+    double rsiBuffer[];
+    ArraySetAsSeries(rsiBuffer, true);
+    if(CopyBuffer(g_M5_RSIHandle, 0, 0, 1, rsiBuffer) < 1) return;
+    double rsi = rsiBuffer[0];
+    
+    // Get last M5_MomentumBars candles (closed candles only)
+    double closes[], opens[], highs[], lows[];
+    ArraySetAsSeries(closes, true);
+    ArraySetAsSeries(opens, true);
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+    
+    if(CopyClose(_Symbol, PERIOD_M5, 1, M5_MomentumBars, closes) < M5_MomentumBars) return;
+    if(CopyOpen(_Symbol, PERIOD_M5, 1, M5_MomentumBars, opens) < M5_MomentumBars) return;
+    if(CopyHigh(_Symbol, PERIOD_M5, 1, M5_MomentumBars, highs) < M5_MomentumBars) return;
+    if(CopyLow(_Symbol, PERIOD_M5, 1, M5_MomentumBars, lows) < M5_MomentumBars) return;
+    
+    // Count bullish and bearish momentum candles
+    int bullishCount = 0;
+    int bearishCount = 0;
+    
+    for(int i = 0; i < M5_MomentumBars; i++)
+    {
+        double body = MathAbs(closes[i] - opens[i]);
+        double bodyPips = body / pip;
+        
+        // Strong body candle check
+        if(bodyPips >= M5_MinCandleBodyPips)
+        {
+            if(closes[i] > opens[i])
+                bullishCount++;
+            else if(closes[i] < opens[i])
+                bearishCount++;
+        }
+    }
+    
+    // Current price vs M5 EMA
+    double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    bool priceAboveM5EMA = (currentBid > m5_ema);
+    bool priceBelowM5EMA = (currentBid < m5_ema);
+    
+    // BULLISH MOMENTUM: majority bullish candles + price above M5 EMA + RSI not overbought
+    if(bullishCount >= 2 && priceAboveM5EMA && rsi < M5_RSI_Overbought)
+    {
+        g_MomentumSignal = 1;
+    }
+    // BEARISH MOMENTUM: majority bearish candles + price below M5 EMA + RSI not oversold
+    else if(bearishCount >= 2 && priceBelowM5EMA && rsi > M5_RSI_Oversold)
+    {
+        g_MomentumSignal = -1;
+    }
+    // else: 0 = No clear momentum
+}
+
+//+------------------------------------------------------------------+
+//| Update Current ATR Value (call every tick)                        |
+//+------------------------------------------------------------------+
+void UpdateATR()
+{
+    g_CurrentATR = 0.0;
+    if(!EnableATRGap || g_ATRHandle == INVALID_HANDLE) return;
+    
+    double atrBuffer[];
+    ArraySetAsSeries(atrBuffer, true);
+    if(CopyBuffer(g_ATRHandle, 0, 0, 1, atrBuffer) < 1) return;
+    
+    // Convert ATR from price to pips
+    g_CurrentATR = atrBuffer[0] / pip;
+}
+
+//+------------------------------------------------------------------+
+//| Get Dynamic Gap Based on ATR (volatile market = wider gap)        |
+//| isRecovery: false = normal grid, true = recovery grid             |
+//+------------------------------------------------------------------+
+double GetDynamicGap(bool isBuy, bool isRecovery)
+{
+    double gapPips = 0.0;
+    
+    if(EnableATRGap && g_CurrentATR > 0)
+    {
+        // ATR-based dynamic gap
+        double multiplier = isRecovery ? ATR_Multiplier_Recovery : ATR_Multiplier_Normal;
+        gapPips = g_CurrentATR * multiplier;
+        
+        // Clamp to min/max safety limits (different min for normal vs recovery)
+        double minGap = isRecovery ? MinGapPips_Recovery : MinGapPips_Normal;
+        gapPips = MathMax(gapPips, minGap);
+        gapPips = MathMin(gapPips, MaxGapPips);
+    }
+    else
+    {
+        // Fallback to fixed gaps if ATR disabled or unavailable
+        if(isRecovery)
+            gapPips = isBuy ? BuyRecoveryGapPips : SellRecoveryGapPips;
+        else
+            gapPips = isBuy ? BuyGapPips : SellGapPips;
+    }
+    
+    return gapPips;
+}
+
+//+------------------------------------------------------------------+
+//| Delete ALL Pending Orders for a Side (Normal + Recovery)           |
+//| Used to clear opposite-trend pending orders                        |
+//+------------------------------------------------------------------+
+void DeleteAllPendingOrdersForSide(bool isBuy)
+{
+    for(int i = OrdersTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if(isBuy && (type == ORDER_TYPE_BUY_LIMIT || type == ORDER_TYPE_BUY_STOP))
+            trade.OrderDelete(ticket);
+        else if(!isBuy && (type == ORDER_TYPE_SELL_LIMIT || type == ORDER_TYPE_SELL_STOP))
+            trade.OrderDelete(ticket);
+    }
 }
 
 datetime LicenseCacheNow()
@@ -1599,7 +1803,7 @@ void ManageNormalGrid(bool isBuy)
     // Range settings
     double rangeHigh = isBuy ? MathMax(BuyRangeStart, BuyRangeEnd) : MathMax(SellRangeStart, SellRangeEnd);
     double rangeLow = isBuy ? MathMin(BuyRangeStart, BuyRangeEnd) : MathMin(SellRangeStart, SellRangeEnd);
-    double gapPips = isBuy ? BuyGapPips : SellGapPips;
+    double gapPips = GetDynamicGap(isBuy, false); // ATR-based dynamic gap for normal grid
     int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
     double gapPrice = gapPips * pip;
     double minGap = gapPrice * 0.8; // Minimum 80% of gap required between positions/orders
@@ -1693,7 +1897,7 @@ void ManageNormalGrid(bool isBuy)
     if(expectedMinLot <= 0) expectedMinLot = 0.01;
     if(expectedMaxLot <= 0) expectedMaxLot = 100.0;
     if(expectedLotStep <= 0) expectedLotStep = 0.01;
-    double expectedNormalLot = GetEffectiveLotSize();
+    double expectedNormalLot = LotSize;
     expectedNormalLot = MathFloor(expectedNormalLot / expectedLotStep) * expectedLotStep;
     expectedNormalLot = MathMax(expectedMinLot, MathMin(expectedMaxLot, expectedNormalLot));
     
@@ -1945,7 +2149,7 @@ void ManageNormalGrid(bool isBuy)
         if(nearbyOrderExists) continue;
         
         // ===== All checks passed - Place the order =====
-        double lotToUse = GetEffectiveLotSize();
+        double lotToUse = LotSize;
         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
         double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
         double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
@@ -2029,21 +2233,6 @@ void ManageRecoveryGrid(bool isBuy)
                 recoveryFilledCount++;
         }
     }
-
-    int totalPositionsThisSide = 0;
-    for(int i = 0; i < PositionsTotal(); i++)
-    {
-        ulong ticket = PositionGetTicket(i);
-        if(ticket <= 0) continue;
-        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-
-        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-        if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
-            totalPositionsThisSide++;
-    }
-
-    int maxNormalOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
     
     // Find CLOSEST position to current market price for pending order validation
     double currentPriceForCheck = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
@@ -2075,7 +2264,7 @@ void ManageRecoveryGrid(bool isBuy)
     
     // Calculate expected recovery price based on CLOSEST position
     // Then find first empty slot (skip prices where positions already exist)
-    double gapPips = GetProgressiveRecoveryGapPips(totalPositionsThisSide, maxNormalOrders);
+    double gapPips = GetDynamicGap(isBuy, true); // ATR-based dynamic gap for recovery grid
     double expectedRecoveryPrice = isBuy ?
         NormalizeDouble(closestPriceForCheck - (gapPips * pip), _Digits) :
         NormalizeDouble(closestPriceForCheck + (gapPips * pip), _Digits);
@@ -2117,7 +2306,7 @@ void ManageRecoveryGrid(bool isBuy)
     if(expectedMaxLot <= 0) expectedMaxLot = 100.0;
     double expectedEffectiveMaxLot = MathMin(expectedMaxLot, MaxRecoveryLotSize);
 
-    double adjacentLotForExpected = GetEffectiveLotSize();
+    double adjacentLotForExpected = LotSize;
     double adjacentDistForExpected = 999999;
     for(int i = 0; i < PositionsTotal(); i++)
     {
@@ -2158,7 +2347,7 @@ void ManageRecoveryGrid(bool isBuy)
     
     // Count recovery PENDING orders AND relocate if too far from expected price
     int recoveryPendingCount = 0;
-    double gapPipsForRelocate = GetProgressiveRecoveryGapPips(totalPositionsThisSide, maxNormalOrders);
+    double gapPipsForRelocate = GetDynamicGap(isBuy, true); // ATR-based dynamic gap
     double relocateThreshold = gapPipsForRelocate * pip * 0.6; // Keep pending tightly snapped to grid
     
     for(int i = OrdersTotal() - 1; i >= 0; i--)
@@ -2246,6 +2435,20 @@ void ManageRecoveryGrid(bool isBuy)
     
     int totalRecoveryCount = recoveryFilledCount + recoveryPendingCount;
     
+    // Count ALL positions (normal + recovery) for this side
+    int totalPositionsThisSide = 0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+        
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
+            totalPositionsThisSide++;
+    }
+    
     // Debug: Log recovery status every 10 seconds
     static datetime lastBuyStatusLog = 0;
     static datetime lastSellStatusLog = 0;
@@ -2263,7 +2466,7 @@ void ManageRecoveryGrid(bool isBuy)
     if(totalPositionsThisSide < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery)
     {
         double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-        double gapPips = GetProgressiveRecoveryGapPips(totalPositionsThisSide, maxNormalOrders);
+        double gapPips = GetDynamicGap(isBuy, true); // ATR-based dynamic gap for recovery
         
         // ===== NEW LOGIC =====
         // 1. Find TOP DISTANCE LOSS position (highest BUY price / lowest SELL price - most loss)
@@ -2410,7 +2613,7 @@ void ManageRecoveryGrid(bool isBuy)
         // For BUY recovery: find position just ABOVE recoveryPrice (next position in grid going up)
         // For SELL recovery: find position just BELOW recoveryPrice (next position in grid going down)
         // Recovery lot = adjacent position's lot + increment (ensures sequential: 0.10, 0.11, 0.12...)
-        double adjacentLot = GetEffectiveLotSize();  // Default to base lot if no adjacent found
+        double adjacentLot = LotSize;  // Default to base lot if no adjacent found
         double adjacentDist = 999999;
         
         for(int i = 0; i < PositionsTotal(); i++)
@@ -3129,6 +3332,10 @@ void UpdateInfoPanel()
     ObjectDelete(0, "EA_PriceHeader");
     ObjectDelete(0, "EA_PriceInfo");
     ObjectDelete(0, "EA_TotalProfit");
+    ObjectDelete(0, "EA_MomentumInfo");
+    ObjectDelete(0, "EA_TrendInfo");
+    ObjectDelete(0, "EA_EntrySignal");
+    ObjectDelete(0, "EA_ATRInfo");
     // Delete old simplified version objects
     ObjectDelete(0, "EA_Title");
     ObjectDelete(0, "EA_Mode");
@@ -3208,6 +3415,101 @@ void UpdateInfoPanel()
     ObjectSetInteger(0, "EA_ModeStatus", OBJPROP_FONTSIZE, 10);
     ObjectSetString(0, "EA_ModeStatus", OBJPROP_FONT, "Arial Bold");
     yPos += 22;
+    
+    // ===== DUAL TIMEFRAME STATUS =====
+    ObjectDelete(0, "EA_MomentumInfo");
+    ObjectDelete(0, "EA_TrendInfo");
+    
+    // M5 Momentum Status
+    if(EnableM5Momentum)
+    {
+        string momentumText = (g_MomentumSignal == 1) ? "M5 Momentum: BULLISH ↑" : 
+                              (g_MomentumSignal == -1) ? "M5 Momentum: BEARISH ↓" : 
+                              "M5 Momentum: NEUTRAL —";
+        color momentumColor = (g_MomentumSignal == 1) ? clrLime : (g_MomentumSignal == -1) ? clrOrangeRed : clrGray;
+        
+        ObjectCreate(0, "EA_MomentumInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_MomentumInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_MomentumInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_MomentumInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_MomentumInfo", OBJPROP_TEXT, momentumText);
+        ObjectSetInteger(0, "EA_MomentumInfo", OBJPROP_COLOR, momentumColor);
+        ObjectSetInteger(0, "EA_MomentumInfo", OBJPROP_FONTSIZE, 10);
+        ObjectSetString(0, "EA_MomentumInfo", OBJPROP_FONT, "Arial Bold");
+        yPos += 20;
+    }
+    
+    // H1 Trend Confirmation Status
+    if(EnableTrendFilter)
+    {
+        string trendText = (g_TrendBias == 1) ? "H1 Trend: BULLISH ✓" : 
+                           (g_TrendBias == -1) ? "H1 Trend: BEARISH ✓" : 
+                           "H1 Trend: NEUTRAL";
+        color trendColor = (g_TrendBias == 1) ? clrLime : (g_TrendBias == -1) ? clrOrangeRed : clrGray;
+        
+        ObjectCreate(0, "EA_TrendInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_TrendInfo", OBJPROP_TEXT, trendText);
+        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_COLOR, trendColor);
+        ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_FONTSIZE, 10);
+        ObjectSetString(0, "EA_TrendInfo", OBJPROP_FONT, "Arial Bold");
+        yPos += 20;
+    }
+    
+    // Trade Entry Status (combined signal)
+    string entryStatus = "";
+    color entryColor = clrGray;
+    
+    bool buySignal = (g_MomentumSignal == 1 && g_TrendBias >= 0);
+    bool sellSignal = (g_MomentumSignal == -1 && g_TrendBias <= 0);
+    
+    if(buySignal)
+    {
+        entryStatus = "✓ BUY SIGNAL ACTIVE (M5+H1 Aligned)";
+        entryColor = clrLime;
+    }
+    else if(sellSignal)
+    {
+        entryStatus = "✓ SELL SIGNAL ACTIVE (M5+H1 Aligned)";
+        entryColor = clrOrangeRed;
+    }
+    else
+    {
+        entryStatus = "⊗ NO ENTRY SIGNAL (Waiting for M5+H1 Alignment)";
+        entryColor = clrGray;
+    }
+    
+    ObjectCreate(0, "EA_EntrySignal", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_EntrySignal", OBJPROP_TEXT, entryStatus);
+    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_COLOR, entryColor);
+    ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_EntrySignal", OBJPROP_FONT, "Arial Bold");
+    yPos += 22;
+    
+    // ===== ATR GAP INFO =====
+    ObjectDelete(0, "EA_ATRInfo");
+    if(EnableATRGap)
+    {
+        double normalGap = GetDynamicGap(true, false);
+        double recoveryGap = GetDynamicGap(true, true);
+        string atrText = StringFormat("ATR: %.2f pips | Gap: %.1f (Normal) / %.1f (Recovery)", 
+            g_CurrentATR, normalGap, recoveryGap);
+        
+        ObjectCreate(0, "EA_ATRInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_ATRInfo", OBJPROP_TEXT, atrText);
+        ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_COLOR, clrDodgerBlue);
+        ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_FONTSIZE, 9);
+        ObjectSetString(0, "EA_ATRInfo", OBJPROP_FONT, "Arial");
+        yPos += 20;
+    }
     
     // ===== SELL SECTION (LEFT SIDE) =====
     int sellYPos = yPos;
@@ -3614,84 +3916,6 @@ void SendTradeDataToServer()
     int timeout = 2000;
     int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
     
-    // Parse EA control settings from server response
-    if(response == 200 && ArraySize(result) > 0)
-    {
-        string responseStr = CharArrayToString(result);
-        ParseEAControlFromResponse(responseStr);
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Parse EA Control Settings from server JSON response               |
-//+------------------------------------------------------------------+
-void ParseEAControlFromResponse(string json)
-{
-    // Parse is_target_stopped
-    int tsPos = StringFind(json, "\"is_target_stopped\"");
-    if(tsPos >= 0)
-    {
-        int colonPos = StringFind(json, ":", tsPos);
-        if(colonPos >= 0)
-        {
-            string val = StringSubstr(json, colonPos + 1, 10);
-            StringTrimLeft(val);
-            StringTrimRight(val);
-            g_ControlTargetStopped = (StringFind(val, "true") == 0);
-        }
-    }
-    
-    // Parse is_schedule_stopped
-    int ssPos = StringFind(json, "\"is_schedule_stopped\"");
-    if(ssPos >= 0)
-    {
-        int colonPos = StringFind(json, ":", ssPos);
-        if(colonPos >= 0)
-        {
-            string val = StringSubstr(json, colonPos + 1, 10);
-            StringTrimLeft(val);
-            StringTrimRight(val);
-            g_ControlScheduleStopped = (StringFind(val, "true") == 0);
-        }
-    }
-    
-    // Parse lot_size
-    int lsPos = StringFind(json, "\"lot_size\"");
-    if(lsPos >= 0)
-    {
-        int colonPos = StringFind(json, ":", lsPos);
-        if(colonPos >= 0)
-        {
-            // Extract numeric value until next comma or }
-            string rest = StringSubstr(json, colonPos + 1, 20);
-            StringTrimLeft(rest);
-            int endIdx = 0;
-            for(int c = 0; c < StringLen(rest); c++)
-            {
-                ushort ch = StringGetCharacter(rest, c);
-                if((ch >= '0' && ch <= '9') || ch == '.') endIdx = c + 1;
-                else if(endIdx > 0) break;
-            }
-            if(endIdx > 0)
-            {
-                string numStr = StringSubstr(rest, 0, endIdx);
-                double lotVal = StringToDouble(numStr);
-                if(lotVal > 0) g_ControlLotSize = lotVal;
-            }
-        }
-    }
-    
-    g_ControlSettingsLoaded = true;
-}
-
-//+------------------------------------------------------------------+
-//| Get effective lot size (server override or hardcoded)              |
-//+------------------------------------------------------------------+
-double GetEffectiveLotSize()
-{
-    if(g_ControlSettingsLoaded && g_ControlLotSize > 0)
-        return g_ControlLotSize;
-    return LotSize;
 }
 
 //+------------------------------------------------------------------+

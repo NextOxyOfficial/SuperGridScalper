@@ -1669,7 +1669,74 @@ def update_trade_data(request):
     except Exception:
         pass
 
-    return JsonResponse({'success': True, 'message': 'Trade data updated'})
+    # Include EA control settings in response so EA can apply them
+    ea_control_data = {}
+    try:
+        ctrl, _ = EAControlSettings.objects.get_or_create(license=license)
+
+        # Check daily target logic server-side
+        from django.utils import timezone as tz
+        now = tz.now()
+
+        # Auto-reset target_hit if it was from a previous day
+        if ctrl.target_hit_at and ctrl.target_hit_at.date() < now.date():
+            ctrl.is_target_stopped = False
+            ctrl.target_hit_at = None
+            ctrl.save(update_fields=['is_target_stopped', 'target_hit_at'])
+
+        # Check if balance/equity target hit (server-side)
+        if ctrl.enable_daily_target and not ctrl.is_target_stopped:
+            balance = float(data.get('account_balance', 0))
+            equity = float(data.get('account_equity', 0))
+            bal_target = float(ctrl.daily_balance_target)
+            eq_target = float(ctrl.daily_equity_target)
+
+            target_hit = False
+            if bal_target > 0 and balance >= bal_target:
+                target_hit = True
+            if eq_target > 0 and equity >= eq_target:
+                target_hit = True
+
+            if target_hit:
+                ctrl.is_target_stopped = True
+                ctrl.target_hit_at = now
+                ctrl.save(update_fields=['is_target_stopped', 'target_hit_at'])
+
+        # Check cooldown expiry
+        if ctrl.is_target_stopped and ctrl.target_hit_at:
+            elapsed = (now - ctrl.target_hit_at).total_seconds() / 60.0
+            if elapsed >= ctrl.cooldown_minutes:
+                ctrl.is_target_stopped = False
+                ctrl.target_hit_at = None
+                ctrl.save(update_fields=['is_target_stopped', 'target_hit_at'])
+
+        # Check schedule stop
+        server_hour = now.hour
+        server_minute = now.minute
+        current_minutes = server_hour * 60 + server_minute
+        sched_start = ctrl.schedule_stop_hour * 60 + ctrl.schedule_stop_minute
+        sched_end = sched_start + ctrl.schedule_stop_duration_minutes
+
+        in_schedule = False
+        if ctrl.enable_schedule_stop:
+            if sched_end <= 1440:
+                in_schedule = sched_start <= current_minutes < sched_end
+            else:
+                in_schedule = current_minutes >= sched_start or current_minutes < (sched_end % 1440)
+
+        if ctrl.is_schedule_stopped != in_schedule:
+            ctrl.is_schedule_stopped = in_schedule
+            ctrl.save(update_fields=['is_schedule_stopped'])
+
+        ea_control_data = _serialize_ea_control(ctrl)
+    except Exception:
+        pass
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Trade data updated',
+        'ea_control': ea_control_data,
+    })
 
 
 @csrf_exempt
