@@ -1059,6 +1059,10 @@ export default function DashboardHome() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ license_key: licenseKey, email: user?.email || user?.username })
       });
+      if (!res.ok) {
+        setEaControlMsg({ type: 'error', text: `Server error (${res.status}). Run migrations on server.` });
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         setEaControl(data.settings);
@@ -1067,7 +1071,7 @@ export default function DashboardHome() {
       }
     } catch (e) {
       console.error('Failed to fetch EA control settings', e);
-      setEaControlMsg({ type: 'error', text: 'Network error loading settings' });
+      setEaControlMsg({ type: 'error', text: 'Network error. Check server connection.' });
     } finally {
       setEaControlLoading(false);
     }
