@@ -155,6 +155,11 @@ int logMaxSize = 1;
 // API Communication
 datetime g_LastTradeDataUpdate = 0;
 
+// EA Control Settings (fetched from server)
+bool     g_ControlTargetStopped = false;   // Server says target hit, stop trading
+bool     g_ControlScheduleStopped = false; // Server says schedule stop active
+bool     g_ControlSettingsLoaded = false;  // At least one successful fetch
+
 // License Verification
 bool g_LicenseValid = false;
 string g_LicenseMessage = "";
@@ -345,6 +350,52 @@ void OnTick()
     
     // Clear comment when license is valid
     Comment("");
+
+    // Send data to API early so control settings stay fresh even when paused
+    // (must run before target/schedule checks so cooldown expiry is detected)
+    static datetime lastControlSync = 0;
+    if(!IsTesterMode() && TimeCurrent() - lastControlSync >= 10)
+    {
+        lastControlSync = TimeCurrent();
+        SendTradeDataToServer();
+    }
+
+    // EA Control: Daily Target Stop — server flagged target hit
+    if(g_ControlSettingsLoaded && g_ControlTargetStopped)
+    {
+        static datetime lastTargetMsg = 0;
+        static datetime lastTargetCleanup = 0;
+        if(TimeCurrent() - lastTargetCleanup > 10)
+        {
+            lastTargetCleanup = TimeCurrent();
+            CloseAllPendingOrders();
+            CloseAllOpenPositions();
+            ArrayFree(buyBundles);
+            ArrayFree(sellBundles);
+            nextBuyBundleId = 1;
+            nextSellBundleId = 1;
+        }
+        if(TimeCurrent() - lastTargetMsg > 10)
+        {
+            lastTargetMsg = TimeCurrent();
+            AddToLog("EA PAUSED: Daily profit target reached. Closed all trades and waiting for cooldown.", "CONTROL");
+        }
+        Comment("\xF0\x9F\x8E\xAF DAILY TARGET REACHED — EA PAUSED\n\nAll positions/orders closed.\nWaiting for cooldown to expire...\nSet from website EA Control Settings");
+        return;
+    }
+
+    // EA Control: Schedule Stop — server flagged schedule window active
+    if(g_ControlSettingsLoaded && g_ControlScheduleStopped)
+    {
+        static datetime lastSchedMsg = 0;
+        if(TimeCurrent() - lastSchedMsg > 10)
+        {
+            lastSchedMsg = TimeCurrent();
+            AddToLog("EA PAUSED: Scheduled stop window active.", "CONTROL");
+        }
+        Comment("\xE2\x8F\xB8 SCHEDULED STOP — EA PAUSED\n\nWill resume after stop window ends...\nSet from website EA Control Settings");
+        return;
+    }
     
     // Max Drawdown Protection — close all if loss exceeds limit
     if(CheckMaxDrawdown()) return;
@@ -490,13 +541,6 @@ void OnTick()
         UpdateInfoPanel();
     }
     
-    // Send data to API (every 10 seconds)
-    static datetime lastAPIUpdate = 0;
-    if(TimeCurrent() - lastAPIUpdate >= 10)
-    {
-        lastAPIUpdate = TimeCurrent();
-        SendTradeDataToServer();
-    }
 }
 
 // ===== Multi-Bundle Helper Functions =====
@@ -3915,7 +3959,49 @@ void SendTradeDataToServer()
     
     int timeout = 2000;
     int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
-    
+
+    // Parse EA control settings from server response
+    if(response == 200 && ArraySize(result) > 0)
+    {
+        string responseStr = CharArrayToString(result);
+        ParseEAControlFromResponse(responseStr);
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Parse EA Control Settings from server JSON response               |
+//+------------------------------------------------------------------+
+void ParseEAControlFromResponse(string json)
+{
+    // Parse is_target_stopped
+    int tsPos = StringFind(json, "\"is_target_stopped\"");
+    if(tsPos >= 0)
+    {
+        int colonPos = StringFind(json, ":", tsPos);
+        if(colonPos >= 0)
+        {
+            string val = StringSubstr(json, colonPos + 1, 10);
+            StringTrimLeft(val);
+            StringTrimRight(val);
+            g_ControlTargetStopped = (StringFind(val, "true") == 0);
+        }
+    }
+
+    // Parse is_schedule_stopped
+    int ssPos = StringFind(json, "\"is_schedule_stopped\"");
+    if(ssPos >= 0)
+    {
+        int colonPos = StringFind(json, ":", ssPos);
+        if(colonPos >= 0)
+        {
+            string val = StringSubstr(json, colonPos + 1, 10);
+            StringTrimLeft(val);
+            StringTrimRight(val);
+            g_ControlScheduleStopped = (StringFind(val, "true") == 0);
+        }
+    }
+
+    g_ControlSettingsLoaded = true;
 }
 
 //+------------------------------------------------------------------+
