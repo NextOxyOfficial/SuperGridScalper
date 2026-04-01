@@ -335,7 +335,7 @@ class EAControlSettings(models.Model):
     license = models.OneToOneField(License, on_delete=models.CASCADE, related_name='ea_control')
     
     # Trade Lot Size
-    lot_size = models.DecimalField(max_digits=10, decimal_places=2, default=0.01, help_text="Trade lot size for EA")
+    lot_size = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="Trade lot size for EA (0 = use EA default)")
     
     # Daily Balance/Equity Target
     enable_daily_target = models.BooleanField(default=False, help_text="Enable daily profit target auto-stop")

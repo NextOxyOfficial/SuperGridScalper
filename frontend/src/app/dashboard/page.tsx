@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock, Pencil, Gift, Search, Server } from 'lucide-react';
+import { Copy, Check, X, Sparkles, CheckCircle, Loader2, Upload, RefreshCw, Wallet, Clock, Pencil, Gift, Search, Server, SlidersHorizontal } from 'lucide-react';
 import { useDashboard } from './context';
 import axios from 'axios';
 import ExnessBroker from '@/components/ExnessBroker';
@@ -1087,7 +1087,7 @@ export default function DashboardHome() {
 
   const normalizeEaControlSettings = (settingsData: any) => ({
     ...settingsData,
-    lot_size: Number.parseFloat(`${settingsData?.lot_size ?? ''}`) || 0.01,
+    lot_size: Math.max(0, Number.parseFloat(`${settingsData?.lot_size ?? ''}`) || 0),
     daily_balance_target: Number.parseFloat(`${settingsData?.daily_balance_target ?? ''}`) || 0,
     daily_equity_target: Number.parseFloat(`${settingsData?.daily_equity_target ?? ''}`) || 0,
     cooldown_minutes: Number.parseInt(`${settingsData?.cooldown_minutes ?? ''}`, 10) || 60,
@@ -2319,7 +2319,10 @@ export default function DashboardHome() {
                     onClick={() => setShowEaControlPanel(!showEaControlPanel)}
                     className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/5 transition"
                   >
-                    <span className="text-cyan-400 text-xs font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>EA CONTROL SETTINGS</span>
+                    <span className="flex items-center gap-2 text-cyan-400 text-xs font-bold" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      <span>EA CONTROL SETTINGS</span>
+                    </span>
                     <span className="text-gray-500 text-xs">{showEaControlPanel ? '▲' : '▼'}</span>
                   </button>
                   {showEaControlPanel && (
@@ -2334,7 +2337,7 @@ export default function DashboardHome() {
                             <input
                               type="number"
                               step="0.01"
-                              min="0.01"
+                              min="0"
                               value={eaControl.lot_size ?? ''}
                               onChange={e => updateEaControlField('lot_size', e.target.value)}
                               className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-xs focus:border-cyan-500/50 focus:outline-none"

@@ -3687,7 +3687,7 @@ void ParseEAControlFromResponse(string json)
             {
                 string numStr = StringSubstr(rest, 0, endIdx);
                 double lotVal = StringToDouble(numStr);
-                if(lotVal > 0) g_ControlLotSize = lotVal;
+                g_ControlLotSize = MathMax(0.0, lotVal);
             }
         }
     }

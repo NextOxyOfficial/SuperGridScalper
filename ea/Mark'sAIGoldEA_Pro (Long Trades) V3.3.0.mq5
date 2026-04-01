@@ -156,6 +156,7 @@ int logMaxSize = 1;
 datetime g_LastTradeDataUpdate = 0;
 
 // EA Control Settings (fetched from server)
+double   g_ControlLotSize = 0;          // 0 = use hardcoded LotSize
 bool     g_ControlTargetStopped = false;   // Server says target hit, stop trading
 bool     g_ControlScheduleStopped = false; // Server says schedule stop active
 bool     g_ControlSettingsLoaded = false;  // At least one successful fetch
@@ -1941,7 +1942,7 @@ void ManageNormalGrid(bool isBuy)
     if(expectedMinLot <= 0) expectedMinLot = 0.01;
     if(expectedMaxLot <= 0) expectedMaxLot = 100.0;
     if(expectedLotStep <= 0) expectedLotStep = 0.01;
-    double expectedNormalLot = LotSize;
+    double expectedNormalLot = GetEffectiveLotSize();
     expectedNormalLot = MathFloor(expectedNormalLot / expectedLotStep) * expectedLotStep;
     expectedNormalLot = MathMax(expectedMinLot, MathMin(expectedMaxLot, expectedNormalLot));
     
@@ -2193,7 +2194,7 @@ void ManageNormalGrid(bool isBuy)
         if(nearbyOrderExists) continue;
         
         // ===== All checks passed - Place the order =====
-        double lotToUse = LotSize;
+        double lotToUse = GetEffectiveLotSize();
         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
         double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
         double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
@@ -2350,7 +2351,7 @@ void ManageRecoveryGrid(bool isBuy)
     if(expectedMaxLot <= 0) expectedMaxLot = 100.0;
     double expectedEffectiveMaxLot = MathMin(expectedMaxLot, MaxRecoveryLotSize);
 
-    double adjacentLotForExpected = LotSize;
+    double adjacentLotForExpected = GetEffectiveLotSize();
     double adjacentDistForExpected = 999999;
     for(int i = 0; i < PositionsTotal(); i++)
     {
@@ -2657,7 +2658,7 @@ void ManageRecoveryGrid(bool isBuy)
         // For BUY recovery: find position just ABOVE recoveryPrice (next position in grid going up)
         // For SELL recovery: find position just BELOW recoveryPrice (next position in grid going down)
         // Recovery lot = adjacent position's lot + increment (ensures sequential: 0.10, 0.11, 0.12...)
-        double adjacentLot = LotSize;  // Default to base lot if no adjacent found
+        double adjacentLot = GetEffectiveLotSize();  // Default to base lot if no adjacent found
         double adjacentDist = 999999;
         
         for(int i = 0; i < PositionsTotal(); i++)
@@ -4001,7 +4002,42 @@ void ParseEAControlFromResponse(string json)
         }
     }
 
+    // Parse lot_size
+    int lsPos = StringFind(json, "\"lot_size\"");
+    if(lsPos >= 0)
+    {
+        int colonPos = StringFind(json, ":", lsPos);
+        if(colonPos >= 0)
+        {
+            string rest = StringSubstr(json, colonPos + 1, 20);
+            StringTrimLeft(rest);
+            int endIdx = 0;
+            for(int c = 0; c < StringLen(rest); c++)
+            {
+                ushort ch = StringGetCharacter(rest, c);
+                if((ch >= '0' && ch <= '9') || ch == '.') endIdx = c + 1;
+                else if(endIdx > 0) break;
+            }
+            if(endIdx > 0)
+            {
+                string numStr = StringSubstr(rest, 0, endIdx);
+                double lotVal = StringToDouble(numStr);
+                g_ControlLotSize = MathMax(0.0, lotVal);
+            }
+        }
+    }
+
     g_ControlSettingsLoaded = true;
+}
+
+//+------------------------------------------------------------------+
+//| Get effective lot size (server override or hardcoded)            |
+//+------------------------------------------------------------------+
+double GetEffectiveLotSize()
+{
+    if(g_ControlSettingsLoaded && g_ControlLotSize > 0)
+        return g_ControlLotSize;
+    return LotSize;
 }
 
 //+------------------------------------------------------------------+
