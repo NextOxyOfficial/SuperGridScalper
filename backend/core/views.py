@@ -3573,14 +3573,17 @@ def get_ea_control_settings(request):
     except License.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Invalid license key'})
 
-    # Verify ownership
+    # Verify ownership (case-insensitive email check)
     if email:
-        if not User.objects.filter(email=email, id=lic.user_id).exists() and \
-           not User.objects.filter(username=email, id=lic.user_id).exists():
+        if not User.objects.filter(email__iexact=email, id=lic.user_id).exists() and \
+           not User.objects.filter(username__iexact=email, id=lic.user_id).exists():
             return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=403)
 
-    ctrl, _ = EAControlSettings.objects.get_or_create(license=lic)
-    return JsonResponse({'success': True, 'settings': _serialize_ea_control(ctrl)})
+    try:
+        ctrl, _ = EAControlSettings.objects.get_or_create(license=lic)
+        return JsonResponse({'success': True, 'settings': _serialize_ea_control(ctrl)})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'Database error: {str(e)}. Run migrations.'}, status=500)
 
 
 @csrf_exempt
@@ -3604,9 +3607,9 @@ def save_ea_control_settings(request):
     except License.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Invalid license key'})
 
-    # Verify ownership
-    if not User.objects.filter(email=email, id=lic.user_id).exists() and \
-       not User.objects.filter(username=email, id=lic.user_id).exists():
+    # Verify ownership (case-insensitive email check)
+    if not User.objects.filter(email__iexact=email, id=lic.user_id).exists() and \
+       not User.objects.filter(username__iexact=email, id=lic.user_id).exists():
         return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=403)
 
     ctrl, _ = EAControlSettings.objects.get_or_create(license=lic)

@@ -1052,6 +1052,7 @@ export default function DashboardHome() {
   // ===== EA CONTROL SETTINGS =====
   const fetchEaControl = async (licenseKey: string) => {
     setEaControlLoading(true);
+    setEaControlMsg(null);
     try {
       const res = await fetch(`${API_URL}/ea-control/`, {
         method: 'POST',
@@ -1059,9 +1060,14 @@ export default function DashboardHome() {
         body: JSON.stringify({ license_key: licenseKey, email: user?.email || user?.username })
       });
       const data = await res.json();
-      if (data.success) setEaControl(data.settings);
+      if (data.success) {
+        setEaControl(data.settings);
+      } else {
+        setEaControlMsg({ type: 'error', text: data.message || 'Failed to load settings' });
+      }
     } catch (e) {
-      console.error('Failed to fetch EA control settings');
+      console.error('Failed to fetch EA control settings', e);
+      setEaControlMsg({ type: 'error', text: 'Network error loading settings' });
     } finally {
       setEaControlLoading(false);
     }
@@ -2451,7 +2457,15 @@ export default function DashboardHome() {
                           </div>
                         </>
                       ) : (
-                        <p className="text-gray-500 text-xs py-2">Could not load settings.</p>
+                        <div className="py-2">
+                          <p className="text-red-400 text-xs">{eaControlMsg?.text || 'Could not load settings.'}</p>
+                          <button
+                            onClick={() => selectedLicense && fetchEaControl(selectedLicense.license_key)}
+                            className="text-cyan-400 text-[10px] mt-1 hover:underline"
+                          >
+                            Retry
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
