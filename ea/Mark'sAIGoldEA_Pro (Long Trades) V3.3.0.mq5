@@ -23,6 +23,10 @@ input double    MaxDrawdownAmount = 0.0;  // Max loss in $ (0 = disabled). e.g. 
 input double    BuyStopLossPips  = 60.0;   // Buy SL in pips (0 = no SL)
 input double    SellStopLossPips = 60.0;   // Sell SL in pips (0 = no SL)
 
+//--- Neutral Market Avoidance (runtime configurable)
+input bool      EnableNeutralMarketFilter = true;
+input int       NeutralMarketAvoidMinutes = 30; // Recent neutral market duration to avoid new normal entries (0 = disabled)
+
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       2001.0
 #define BuyRangeEnd         8801.0
@@ -92,6 +96,12 @@ input double    SellStopLossPips = 60.0;   // Sell SL in pips (0 = no SL)
 #define H1_EMA_Timeframe        PERIOD_H1       // H1 chart for trend confirmation
 #define H1_EMA_SlopeMinPips     1.5             // Minimum H1 slope to confirm trend
 
+// Neutral market detection is kept fixed; only the duration is user-configurable.
+#define NeutralDetectionTimeframe       PERIOD_M5
+#define NeutralMaxDirectionalEfficiency 0.35
+#define NeutralRangeATRMultiplier       0.65
+#define NeutralWeakBodyMultiplier       0.80
+
 // ===== RECOVERY MODE SETTINGS =====
 // Recovery mode এ average price থেকে calculate হয়, individual position থেকে না
 // Recovery mode activates when positions >= MaxOrders
@@ -131,6 +141,13 @@ double g_CurrentATR = 0.0;            // Current ATR value in pips
 int g_M5_EMAHandle = INVALID_HANDLE;  // M5 EMA indicator handle for momentum
 int g_M5_RSIHandle = INVALID_HANDLE;  // M5 RSI indicator handle for momentum
 int g_MomentumSignal = 0;             // -1=bearish momentum, 0=no momentum, +1=bullish momentum
+bool g_NeutralMarketDetected = false;
+bool g_NeutralTradeBlocked = false;
+datetime g_NeutralSince = 0;
+double g_NeutralRangePips = 0.0;
+double g_NeutralDirectionalEfficiency = 1.0;
+double g_NeutralAverageBodyPips = 0.0;
+int g_NeutralLookbackBars = 0;
 // Multi-bundle system: each bundle has unique ID and tracks its own positions
 struct BundleEntry
 {
@@ -277,6 +294,7 @@ void OnDeinit(const int reason)
     ObjectDelete(0, "EA_MomentumInfo");
     ObjectDelete(0, "EA_TrendInfo");
     ObjectDelete(0, "EA_EntrySignal");
+    ObjectDelete(0, "EA_NeutralInfo");
     ObjectDelete(0, "EA_ATRInfo");
     
     // Only delete pending orders when EA is actually removed
@@ -357,6 +375,9 @@ void OnTick()
     
     // Update ATR for dynamic gap calculation
     UpdateATR();
+
+    // Detect sustained neutral market before placing new normal-mode entries
+    UpdateNeutralMarketFilter();
     
     // Count current positions
     CountPositions();
@@ -444,6 +465,11 @@ void OnTick()
         // No M5 momentum or H1 trend against BUY — delete all BUY pending orders
         DeleteAllPendingOrdersForSide(true);
     }
+    else if(g_NeutralTradeBlocked && !buyInRecovery)
+    {
+        // Neutral filter blocks fresh normal-mode entries after sustained sideways market
+        DeleteAllPendingOrdersForSide(true);
+    }
     else if(!buyInRecovery)
     {
         ManageNormalGrid(true);  // BUY Normal Mode
@@ -463,6 +489,11 @@ void OnTick()
     if(!sellAllowed)
     {
         // No M5 momentum or H1 trend against SELL — delete all SELL pending orders
+        DeleteAllPendingOrdersForSide(false);
+    }
+    else if(g_NeutralTradeBlocked && !sellInRecovery)
+    {
+        // Neutral filter blocks fresh normal-mode entries after sustained sideways market
         DeleteAllPendingOrdersForSide(false);
     }
     else if(!sellInRecovery)
@@ -665,6 +696,144 @@ bool IsRecoveryBreakevenTrailTicket(bool isBuy, ulong ticket)
 bool IsTesterMode()
 {
     return (TesterMode && (MQLInfoInteger(MQL_TESTER) != 0));
+}
+
+int GetNeutralLookbackBars()
+{
+    if(!EnableNeutralMarketFilter || NeutralMarketAvoidMinutes <= 0)
+        return 0;
+
+    int barSeconds = PeriodSeconds(NeutralDetectionTimeframe);
+    if(barSeconds <= 0)
+        barSeconds = 300;
+
+    int bars = (int)MathCeil((double)(NeutralMarketAvoidMinutes * 60) / (double)barSeconds);
+    if(bars < 1)
+        bars = 1;
+
+    return bars;
+}
+
+void UpdateNeutralMarketFilter()
+{
+    static bool lastNeutralDetected = false;
+    static bool lastBlocked = false;
+
+    g_NeutralRangePips = 0.0;
+    g_NeutralDirectionalEfficiency = 1.0;
+    g_NeutralAverageBodyPips = 0.0;
+    g_NeutralLookbackBars = 0;
+
+    if(!EnableNeutralMarketFilter || NeutralMarketAvoidMinutes <= 0)
+    {
+        g_NeutralMarketDetected = false;
+        g_NeutralTradeBlocked = false;
+        g_NeutralSince = 0;
+        lastNeutralDetected = false;
+        lastBlocked = false;
+        return;
+    }
+
+    int lookbackBars = GetNeutralLookbackBars();
+    g_NeutralLookbackBars = lookbackBars;
+    if(lookbackBars <= 0)
+    {
+        g_NeutralMarketDetected = false;
+        g_NeutralTradeBlocked = false;
+        g_NeutralSince = 0;
+        lastNeutralDetected = false;
+        lastBlocked = false;
+        return;
+    }
+
+    double opens[];
+    double closes[];
+    double highs[];
+    double lows[];
+    ArraySetAsSeries(opens, true);
+    ArraySetAsSeries(closes, true);
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+
+    if(CopyOpen(_Symbol, NeutralDetectionTimeframe, 1, lookbackBars, opens) < lookbackBars ||
+       CopyClose(_Symbol, NeutralDetectionTimeframe, 1, lookbackBars, closes) < lookbackBars ||
+       CopyHigh(_Symbol, NeutralDetectionTimeframe, 1, lookbackBars, highs) < lookbackBars ||
+       CopyLow(_Symbol, NeutralDetectionTimeframe, 1, lookbackBars, lows) < lookbackBars)
+    {
+        g_NeutralMarketDetected = false;
+        g_NeutralTradeBlocked = false;
+        g_NeutralSince = 0;
+        lastNeutralDetected = false;
+        lastBlocked = false;
+        return;
+    }
+
+    double highest = highs[0];
+    double lowest = lows[0];
+    double totalBodyPips = 0.0;
+    for(int i = 0; i < lookbackBars; i++)
+    {
+        if(highs[i] > highest)
+            highest = highs[i];
+        if(lows[i] < lowest)
+            lowest = lows[i];
+
+        totalBodyPips += MathAbs(closes[i] - opens[i]) / pip;
+    }
+
+    g_NeutralRangePips = (highest - lowest) / pip;
+    g_NeutralAverageBodyPips = totalBodyPips / lookbackBars;
+
+    double windowStartPrice = opens[lookbackBars - 1];
+    double windowEndPrice = closes[0];
+    double netMovePips = MathAbs(windowEndPrice - windowStartPrice) / pip;
+    g_NeutralDirectionalEfficiency = (g_NeutralRangePips > 0.0) ? (netMovePips / g_NeutralRangePips) : 0.0;
+
+    double atrBaseline = (g_CurrentATR > 0.0) ? g_CurrentATR : ((BuyGapPips + SellGapPips) * 0.5);
+    double compressionLimit = MathMax(atrBaseline * NeutralRangeATRMultiplier, MinGapPips_Normal);
+    bool rangeCompressed = (g_NeutralRangePips <= compressionLimit);
+    bool lowDirectionality = (g_NeutralDirectionalEfficiency <= NeutralMaxDirectionalEfficiency);
+    bool weakCandles = (g_NeutralAverageBodyPips <= (M5_MinCandleBodyPips * NeutralWeakBodyMultiplier));
+    bool signalNeutral = (g_MomentumSignal == 0 && g_TrendBias == 0);
+
+    g_NeutralMarketDetected = signalNeutral || (lowDirectionality && (rangeCompressed || weakCandles));
+
+    if(g_NeutralMarketDetected)
+    {
+        if(g_NeutralSince == 0)
+            g_NeutralSince = TimeCurrent();
+    }
+    else
+    {
+        g_NeutralSince = 0;
+        g_NeutralTradeBlocked = false;
+
+        if(lastBlocked || lastNeutralDetected)
+        {
+            AddToLog("Neutral market cleared - normal entries re-enabled", "FILTER");
+        }
+
+        lastNeutralDetected = false;
+        lastBlocked = false;
+        return;
+    }
+
+    int requiredSeconds = NeutralMarketAvoidMinutes * 60;
+    int neutralSeconds = (int)(TimeCurrent() - g_NeutralSince);
+    g_NeutralTradeBlocked = (neutralSeconds >= requiredSeconds);
+
+    if(g_NeutralTradeBlocked && !lastBlocked)
+    {
+        AddToLog(StringFormat("Neutral market block ON | Window=%d min | Range=%.1f pips | Eff=%.2f", 
+            NeutralMarketAvoidMinutes, g_NeutralRangePips, g_NeutralDirectionalEfficiency), "FILTER");
+    }
+    else if(g_NeutralMarketDetected && !lastNeutralDetected)
+    {
+        AddToLog(StringFormat("Neutral market detected - monitoring %d minute window", NeutralMarketAvoidMinutes), "FILTER");
+    }
+
+    lastNeutralDetected = g_NeutralMarketDetected;
+    lastBlocked = g_NeutralTradeBlocked;
 }
 
 //+------------------------------------------------------------------+
@@ -3335,6 +3504,7 @@ void UpdateInfoPanel()
     ObjectDelete(0, "EA_MomentumInfo");
     ObjectDelete(0, "EA_TrendInfo");
     ObjectDelete(0, "EA_EntrySignal");
+    ObjectDelete(0, "EA_NeutralInfo");
     ObjectDelete(0, "EA_ATRInfo");
     // Delete old simplified version objects
     ObjectDelete(0, "EA_Title");
@@ -3490,6 +3660,43 @@ void UpdateInfoPanel()
     ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_FONTSIZE, 9);
     ObjectSetString(0, "EA_EntrySignal", OBJPROP_FONT, "Arial Bold");
     yPos += 22;
+
+    // Neutral market filter status
+    if(EnableNeutralMarketFilter && NeutralMarketAvoidMinutes > 0)
+    {
+        int neutralSeconds = (g_NeutralMarketDetected && g_NeutralSince > 0) ? (int)(TimeCurrent() - g_NeutralSince) : 0;
+        int neutralMinutes = neutralSeconds / 60;
+        string neutralText = "Neutral Filter: CLEAR";
+        color neutralColor = clrSilver;
+
+        if(g_NeutralTradeBlocked)
+        {
+            neutralText = StringFormat("Neutral Filter: BLOCKED | %d/%d min | Range %.1f", 
+                neutralMinutes, NeutralMarketAvoidMinutes, g_NeutralRangePips);
+            neutralColor = clrOrangeRed;
+        }
+        else if(g_NeutralMarketDetected)
+        {
+            neutralText = StringFormat("Neutral Filter: WAIT %d/%d min | Eff %.2f", 
+                neutralMinutes, NeutralMarketAvoidMinutes, g_NeutralDirectionalEfficiency);
+            neutralColor = clrOrange;
+        }
+        else
+        {
+            neutralText = StringFormat("Neutral Filter: CLEAR | Window %d min", NeutralMarketAvoidMinutes);
+            neutralColor = clrSilver;
+        }
+
+        ObjectCreate(0, "EA_NeutralInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_NeutralInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_NeutralInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_NeutralInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_NeutralInfo", OBJPROP_TEXT, neutralText);
+        ObjectSetInteger(0, "EA_NeutralInfo", OBJPROP_COLOR, neutralColor);
+        ObjectSetInteger(0, "EA_NeutralInfo", OBJPROP_FONTSIZE, 9);
+        ObjectSetString(0, "EA_NeutralInfo", OBJPROP_FONT, "Arial Bold");
+        yPos += 20;
+    }
     
     // ===== ATR GAP INFO =====
     ObjectDelete(0, "EA_ATRInfo");
