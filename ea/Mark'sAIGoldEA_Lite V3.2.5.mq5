@@ -43,6 +43,15 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 #define RecoveryATRMinPips   6.0
 #define RecoveryATRMaxPips   25.0
 
+// Strong-trend filter (recovery mode only): when confirmed, widen recovery gap heavily
+#define RecoveryTrendFastMAPeriod      21
+#define RecoveryTrendSlowMAPeriod      55
+#define RecoveryTrendADXPeriod         14
+#define RecoveryTrendADXMin            25.0
+#define RecoveryTrendDistanceMinPips   8.0
+#define RecoveryTrendGapMultiplier     2.8
+#define RecoveryTrendGapMaxPips        90.0
+
 // ===== TRAILING STOP SETTINGS (Normal Mode) =====
 // Formula: newSL = openPrice + InitialSL + ((profit - TrailingStart) × TrailingRatio)
 // 
@@ -58,13 +67,13 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 // | 10 pip | +5.5 pip    | 2 + (7 × 0.5) |
 // | 20 pip | +10.5 pip   | 2 + (17 × 0.5) |
 
-#define BuyTrailingStartPips    8.0   // Let profit breathe: trailing later so winners get more room
-#define BuyInitialSLPips        3.0   // Lock smaller profit first, then trail gradually
-#define BuyTrailingRatio        0.30  // Slower trail so strong moves are not cut too early
+#define BuyTrailingStartPips    6.0   // Let profit breathe: trailing later so winners get more room
+#define BuyInitialSLPips        3.5   // Lock smaller profit first, then trail gradually
+#define BuyTrailingRatio        0.45  // Slower trail so strong moves are not cut too early
 
-#define SellTrailingStartPips   8.0   // Let profit breathe: trailing later so winners get more room
-#define SellInitialSLPips       3.0   // Lock smaller profit first, then trail gradually
-#define SellTrailingRatio       0.30  // Slower trail so strong moves are not cut too early
+#define SellTrailingStartPips   6.0   // Let profit breathe: trailing later so winners get more room
+#define SellInitialSLPips       3.5   // Lock smaller profit first, then trail gradually
+#define SellTrailingRatio       0.45  // Slower trail so strong moves are not cut too early
 
 // ===== RECOVERY MODE SETTINGS =====
 // Recovery mode এ average price থেকে calculate হয়, individual position থেকে না
@@ -72,14 +81,14 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 
 #define EnableRecovery          true   // Recovery mode enable/disable
 #define RecoveryTakeProfitPips  32.0  // Slightly wider emergency TP before basket trailing takes control
-#define RecoveryBreakevenPips   3.5  // Breakeven close এ profit pips (long-distance + profitable positions)
+#define RecoveryBreakevenPips   5.5  // Breakeven close এ profit pips (long-distance + profitable positions)
 #define RecoveryTrailingStartPips 5.0  // Start trailing later to avoid cutting recovery too early
 #define RecoveryInitialSLPips   2.5    // Keep more breathing room around recovery basket average
-#define RecoveryTrailingRatio   0.35   // Slower basket trail for stronger extensions
+#define RecoveryTrailingRatio   0.45   // Slower basket trail for stronger extensions
 #define RecoveryLotIncrement    0.01   // প্রতি recovery order এ lot size বৃদ্ধি (fixed increment)
 #define MaxRecoveryLotSize      0.25    // Recovery mode এ সর্বোচ্চ lot size (এর বেশি হবে না)
 #define MaxRecoveryOrders       200
-#define RecoveryCleanupThreshold 4  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
+#define RecoveryCleanupThreshold 3  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
 #define ReleaseNormalTPOnTrail  true
 
 #define LotSize         0.10
@@ -122,6 +131,9 @@ int logMaxSize = 1;
 // API Communication
 datetime g_LastTradeDataUpdate = 0;
 int g_RecoveryATRHandle = INVALID_HANDLE;
+int g_RecoveryFastMAHandle = INVALID_HANDLE;
+int g_RecoverySlowMAHandle = INVALID_HANDLE;
+int g_RecoveryADXHandle = INVALID_HANDLE;
 
 // EA Control Settings (fetched from server)
 double   g_ControlLotSize       = 0;      // 0 = use hardcoded LotSize
@@ -147,6 +159,18 @@ int OnInit()
     g_RecoveryATRHandle = iATR(_Symbol, RecoveryATRTimeframe, RecoveryATRPeriod);
     if(g_RecoveryATRHandle == INVALID_HANDLE)
         Print("Recovery ATR handle initialization failed. Static recovery gap fallback will be used.");
+
+    g_RecoveryFastMAHandle = iMA(_Symbol, RecoveryATRTimeframe, RecoveryTrendFastMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+    if(g_RecoveryFastMAHandle == INVALID_HANDLE)
+        Print("Recovery trend FAST MA handle initialization failed. Trend boost will be disabled.");
+
+    g_RecoverySlowMAHandle = iMA(_Symbol, RecoveryATRTimeframe, RecoveryTrendSlowMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+    if(g_RecoverySlowMAHandle == INVALID_HANDLE)
+        Print("Recovery trend SLOW MA handle initialization failed. Trend boost will be disabled.");
+
+    g_RecoveryADXHandle = iADX(_Symbol, RecoveryATRTimeframe, RecoveryTrendADXPeriod);
+    if(g_RecoveryADXHandle == INVALID_HANDLE)
+        Print("Recovery trend ADX handle initialization failed. Trend boost will be disabled.");
     
     // FORCE license to invalid until verified
     g_LicenseValid = false;
@@ -197,6 +221,21 @@ void OnDeinit(const int reason)
     {
         IndicatorRelease(g_RecoveryATRHandle);
         g_RecoveryATRHandle = INVALID_HANDLE;
+    }
+    if(g_RecoveryFastMAHandle != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_RecoveryFastMAHandle);
+        g_RecoveryFastMAHandle = INVALID_HANDLE;
+    }
+    if(g_RecoverySlowMAHandle != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_RecoverySlowMAHandle);
+        g_RecoverySlowMAHandle = INVALID_HANDLE;
+    }
+    if(g_RecoveryADXHandle != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_RecoveryADXHandle);
+        g_RecoveryADXHandle = INVALID_HANDLE;
     }
 
     // Delete all chart objects
@@ -630,9 +669,63 @@ double GetRecoveryATRGapPips()
     return MathMax(RecoveryATRMinPips, MathMin(RecoveryATRMaxPips, atrPips));
 }
 
-double GetProgressiveRecoveryGapPips(int totalPositionsThisSide, int maxNormalOrders)
+bool IsStrongRecoveryTrend(bool isBuy, double &adxValue, double &maDistancePips)
+{
+    adxValue = 0.0;
+    maDistancePips = 0.0;
+
+    if(pip <= 0.0) return false;
+    if(g_RecoveryFastMAHandle == INVALID_HANDLE || g_RecoverySlowMAHandle == INVALID_HANDLE || g_RecoveryADXHandle == INVALID_HANDLE)
+        return false;
+
+    double fastBuf[];
+    double slowBuf[];
+    double adxBuf[];
+    ArraySetAsSeries(fastBuf, true);
+    ArraySetAsSeries(slowBuf, true);
+    ArraySetAsSeries(adxBuf, true);
+
+    if(CopyBuffer(g_RecoveryFastMAHandle, 0, 0, 1, fastBuf) <= 0) return false;
+    if(CopyBuffer(g_RecoverySlowMAHandle, 0, 0, 1, slowBuf) <= 0) return false;
+    if(CopyBuffer(g_RecoveryADXHandle, 0, 0, 1, adxBuf) <= 0) return false;
+
+    double fastMA = fastBuf[0];
+    double slowMA = slowBuf[0];
+    adxValue = adxBuf[0];
+    maDistancePips = MathAbs(fastMA - slowMA) / pip;
+
+    bool trendDirectionOK = isBuy ? (fastMA < slowMA) : (fastMA > slowMA);
+    bool trendStrengthOK = (adxValue >= RecoveryTrendADXMin);
+    bool separationOK = (maDistancePips >= RecoveryTrendDistanceMinPips);
+
+    return (trendDirectionOK && trendStrengthOK && separationOK);
+}
+
+double GetProgressiveRecoveryGapPips(bool isBuy, int totalPositionsThisSide, int maxNormalOrders)
 {
     double baseGapPips = GetRecoveryATRGapPips();
+    double adxValue = 0.0;
+    double maDistancePips = 0.0;
+
+    if(IsStrongRecoveryTrend(isBuy, adxValue, maDistancePips))
+    {
+        double boostedGap = MathMin(RecoveryTrendGapMaxPips, baseGapPips * RecoveryTrendGapMultiplier);
+        if(boostedGap > baseGapPips)
+        {
+            baseGapPips = boostedGap;
+
+            static datetime lastBuyBoostLog = 0;
+            static datetime lastSellBoostLog = 0;
+            datetime &lastBoostLog = isBuy ? lastBuyBoostLog : lastSellBoostLog;
+            if(TimeCurrent() - lastBoostLog > 20)
+            {
+                AddToLog(StringFormat("%s Recovery TrendBoost ON | ADX=%.1f | MA Gap=%.1f pips | BaseGap=%.1f pips", 
+                    isBuy ? "BUY" : "SELL", adxValue, maDistancePips, baseGapPips), "RECOVERY");
+                lastBoostLog = TimeCurrent();
+            }
+        }
+    }
+
     int extraGapSteps = MathMax(0, totalPositionsThisSide - maxNormalOrders + 1);
     return baseGapPips + extraGapSteps;
 }
@@ -2086,7 +2179,7 @@ void ManageRecoveryGrid(bool isBuy)
     
     // Calculate expected recovery price based on CLOSEST position
     // Then find first empty slot (skip prices where positions already exist)
-    double gapPips = GetProgressiveRecoveryGapPips(totalPositionsThisSide, maxNormalOrders);
+    double gapPips = GetProgressiveRecoveryGapPips(isBuy, totalPositionsThisSide, maxNormalOrders);
     double expectedRecoveryPrice = isBuy ?
         NormalizeDouble(closestPriceForCheck - (gapPips * pip), _Digits) :
         NormalizeDouble(closestPriceForCheck + (gapPips * pip), _Digits);
@@ -2169,7 +2262,7 @@ void ManageRecoveryGrid(bool isBuy)
     
     // Count recovery PENDING orders AND relocate if too far from expected price
     int recoveryPendingCount = 0;
-    double gapPipsForRelocate = GetProgressiveRecoveryGapPips(totalPositionsThisSide, maxNormalOrders);
+    double gapPipsForRelocate = GetProgressiveRecoveryGapPips(isBuy, totalPositionsThisSide, maxNormalOrders);
     double relocateThreshold = gapPipsForRelocate * pip * 0.6; // Keep pending tightly snapped to grid
     
     for(int i = OrdersTotal() - 1; i >= 0; i--)
@@ -2274,7 +2367,7 @@ void ManageRecoveryGrid(bool isBuy)
     if(totalPositionsThisSide < MaxRecoveryOrders && recoveryPendingCount == 0 && EnableRecovery)
     {
         double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-        double gapPips = GetProgressiveRecoveryGapPips(totalPositionsThisSide, maxNormalOrders);
+        double gapPips = GetProgressiveRecoveryGapPips(isBuy, totalPositionsThisSide, maxNormalOrders);
         
         // ===== NEW LOGIC =====
         // 1. Find TOP DISTANCE LOSS position (highest BUY price / lowest SELL price - most loss)
