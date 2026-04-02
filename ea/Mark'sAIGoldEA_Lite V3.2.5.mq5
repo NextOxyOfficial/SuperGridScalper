@@ -40,7 +40,7 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 #define SellRecoveryGapPips  6
 #define RecoveryATRTimeframe PERIOD_M5
 #define RecoveryATRPeriod    14
-#define RecoveryATRMinPips   6.0
+#define RecoveryATRMinPips   8.0
 #define RecoveryATRMaxPips   25.0
 
 // Strong-trend filter (recovery mode only): when confirmed, widen recovery gap heavily
@@ -49,6 +49,8 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 #define RecoveryTrendADXPeriod         14
 #define RecoveryTrendADXMin            25.0
 #define RecoveryTrendDistanceMinPips   8.0
+#define RecoveryTrendConfirmTF1        PERIOD_M5
+#define RecoveryTrendConfirmTF2        PERIOD_H1
 #define RecoveryTrendGapMultiplier     2.8
 #define RecoveryTrendGapMaxPips        90.0
 
@@ -81,7 +83,7 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 
 #define EnableRecovery          true   // Recovery mode enable/disable
 #define RecoveryTakeProfitPips  32.0  // Slightly wider emergency TP before basket trailing takes control
-#define RecoveryBreakevenPips   5.5  // Breakeven close এ profit pips (long-distance + profitable positions)
+#define RecoveryBreakevenPips   3.5  // Breakeven close এ profit pips (long-distance + profitable positions)
 #define RecoveryTrailingStartPips 5.0  // Start trailing later to avoid cutting recovery too early
 #define RecoveryInitialSLPips   2.5    // Keep more breathing room around recovery basket average
 #define RecoveryTrailingRatio   0.45   // Slower basket trail for stronger extensions
@@ -134,6 +136,9 @@ int g_RecoveryATRHandle = INVALID_HANDLE;
 int g_RecoveryFastMAHandle = INVALID_HANDLE;
 int g_RecoverySlowMAHandle = INVALID_HANDLE;
 int g_RecoveryADXHandle = INVALID_HANDLE;
+int g_RecoveryFastMAHandleH1 = INVALID_HANDLE;
+int g_RecoverySlowMAHandleH1 = INVALID_HANDLE;
+int g_RecoveryADXHandleH1 = INVALID_HANDLE;
 
 // EA Control Settings (fetched from server)
 double   g_ControlLotSize       = 0;      // 0 = use hardcoded LotSize
@@ -160,17 +165,29 @@ int OnInit()
     if(g_RecoveryATRHandle == INVALID_HANDLE)
         Print("Recovery ATR handle initialization failed. Static recovery gap fallback will be used.");
 
-    g_RecoveryFastMAHandle = iMA(_Symbol, RecoveryATRTimeframe, RecoveryTrendFastMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+    g_RecoveryFastMAHandle = iMA(_Symbol, RecoveryTrendConfirmTF1, RecoveryTrendFastMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
     if(g_RecoveryFastMAHandle == INVALID_HANDLE)
-        Print("Recovery trend FAST MA handle initialization failed. Trend boost will be disabled.");
+        Print("Recovery trend FAST MA M5 handle initialization failed. Trend boost will be disabled.");
 
-    g_RecoverySlowMAHandle = iMA(_Symbol, RecoveryATRTimeframe, RecoveryTrendSlowMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+    g_RecoverySlowMAHandle = iMA(_Symbol, RecoveryTrendConfirmTF1, RecoveryTrendSlowMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
     if(g_RecoverySlowMAHandle == INVALID_HANDLE)
-        Print("Recovery trend SLOW MA handle initialization failed. Trend boost will be disabled.");
+        Print("Recovery trend SLOW MA M5 handle initialization failed. Trend boost will be disabled.");
 
-    g_RecoveryADXHandle = iADX(_Symbol, RecoveryATRTimeframe, RecoveryTrendADXPeriod);
+    g_RecoveryADXHandle = iADX(_Symbol, RecoveryTrendConfirmTF1, RecoveryTrendADXPeriod);
     if(g_RecoveryADXHandle == INVALID_HANDLE)
-        Print("Recovery trend ADX handle initialization failed. Trend boost will be disabled.");
+        Print("Recovery trend ADX M5 handle initialization failed. Trend boost will be disabled.");
+
+    g_RecoveryFastMAHandleH1 = iMA(_Symbol, RecoveryTrendConfirmTF2, RecoveryTrendFastMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+    if(g_RecoveryFastMAHandleH1 == INVALID_HANDLE)
+        Print("Recovery trend FAST MA H1 handle initialization failed. Trend boost will be disabled.");
+
+    g_RecoverySlowMAHandleH1 = iMA(_Symbol, RecoveryTrendConfirmTF2, RecoveryTrendSlowMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+    if(g_RecoverySlowMAHandleH1 == INVALID_HANDLE)
+        Print("Recovery trend SLOW MA H1 handle initialization failed. Trend boost will be disabled.");
+
+    g_RecoveryADXHandleH1 = iADX(_Symbol, RecoveryTrendConfirmTF2, RecoveryTrendADXPeriod);
+    if(g_RecoveryADXHandleH1 == INVALID_HANDLE)
+        Print("Recovery trend ADX H1 handle initialization failed. Trend boost will be disabled.");
     
     // FORCE license to invalid until verified
     g_LicenseValid = false;
@@ -236,6 +253,21 @@ void OnDeinit(const int reason)
     {
         IndicatorRelease(g_RecoveryADXHandle);
         g_RecoveryADXHandle = INVALID_HANDLE;
+    }
+    if(g_RecoveryFastMAHandleH1 != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_RecoveryFastMAHandleH1);
+        g_RecoveryFastMAHandleH1 = INVALID_HANDLE;
+    }
+    if(g_RecoverySlowMAHandleH1 != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_RecoverySlowMAHandleH1);
+        g_RecoverySlowMAHandleH1 = INVALID_HANDLE;
+    }
+    if(g_RecoveryADXHandleH1 != INVALID_HANDLE)
+    {
+        IndicatorRelease(g_RecoveryADXHandleH1);
+        g_RecoveryADXHandleH1 = INVALID_HANDLE;
     }
 
     // Delete all chart objects
@@ -669,13 +701,13 @@ double GetRecoveryATRGapPips()
     return MathMax(RecoveryATRMinPips, MathMin(RecoveryATRMaxPips, atrPips));
 }
 
-bool IsStrongRecoveryTrend(bool isBuy, double &adxValue, double &maDistancePips)
+bool IsStrongRecoveryTrendSingleTF(bool isBuy, int fastMAHandle, int slowMAHandle, int adxHandle, double &adxValue, double &maDistancePips)
 {
     adxValue = 0.0;
     maDistancePips = 0.0;
 
     if(pip <= 0.0) return false;
-    if(g_RecoveryFastMAHandle == INVALID_HANDLE || g_RecoverySlowMAHandle == INVALID_HANDLE || g_RecoveryADXHandle == INVALID_HANDLE)
+    if(fastMAHandle == INVALID_HANDLE || slowMAHandle == INVALID_HANDLE || adxHandle == INVALID_HANDLE)
         return false;
 
     double fastBuf[];
@@ -685,9 +717,9 @@ bool IsStrongRecoveryTrend(bool isBuy, double &adxValue, double &maDistancePips)
     ArraySetAsSeries(slowBuf, true);
     ArraySetAsSeries(adxBuf, true);
 
-    if(CopyBuffer(g_RecoveryFastMAHandle, 0, 0, 1, fastBuf) <= 0) return false;
-    if(CopyBuffer(g_RecoverySlowMAHandle, 0, 0, 1, slowBuf) <= 0) return false;
-    if(CopyBuffer(g_RecoveryADXHandle, 0, 0, 1, adxBuf) <= 0) return false;
+    if(CopyBuffer(fastMAHandle, 0, 0, 1, fastBuf) <= 0) return false;
+    if(CopyBuffer(slowMAHandle, 0, 0, 1, slowBuf) <= 0) return false;
+    if(CopyBuffer(adxHandle, 0, 0, 1, adxBuf) <= 0) return false;
 
     double fastMA = fastBuf[0];
     double slowMA = slowBuf[0];
@@ -701,13 +733,31 @@ bool IsStrongRecoveryTrend(bool isBuy, double &adxValue, double &maDistancePips)
     return (trendDirectionOK && trendStrengthOK && separationOK);
 }
 
+bool IsStrongRecoveryTrend(bool isBuy, double &adxM5, double &maGapM5, double &adxH1, double &maGapH1)
+{
+    adxM5 = 0.0;
+    maGapM5 = 0.0;
+    adxH1 = 0.0;
+    maGapH1 = 0.0;
+
+    bool m5Ok = IsStrongRecoveryTrendSingleTF(isBuy, g_RecoveryFastMAHandle, g_RecoverySlowMAHandle, g_RecoveryADXHandle, adxM5, maGapM5);
+    if(!m5Ok) return false;
+
+    bool h1Ok = IsStrongRecoveryTrendSingleTF(isBuy, g_RecoveryFastMAHandleH1, g_RecoverySlowMAHandleH1, g_RecoveryADXHandleH1, adxH1, maGapH1);
+    if(!h1Ok) return false;
+
+    return true;
+}
+
 double GetProgressiveRecoveryGapPips(bool isBuy, int totalPositionsThisSide, int maxNormalOrders)
 {
     double baseGapPips = GetRecoveryATRGapPips();
-    double adxValue = 0.0;
-    double maDistancePips = 0.0;
+    double adxM5 = 0.0;
+    double maGapM5 = 0.0;
+    double adxH1 = 0.0;
+    double maGapH1 = 0.0;
 
-    if(IsStrongRecoveryTrend(isBuy, adxValue, maDistancePips))
+    if(IsStrongRecoveryTrend(isBuy, adxM5, maGapM5, adxH1, maGapH1))
     {
         double boostedGap = MathMin(RecoveryTrendGapMaxPips, baseGapPips * RecoveryTrendGapMultiplier);
         if(boostedGap > baseGapPips)
@@ -716,11 +766,11 @@ double GetProgressiveRecoveryGapPips(bool isBuy, int totalPositionsThisSide, int
 
             static datetime lastBuyBoostLog = 0;
             static datetime lastSellBoostLog = 0;
-            datetime &lastBoostLog = isBuy ? lastBuyBoostLog : lastSellBoostLog;
+            datetime lastBoostLog = isBuy ? lastBuyBoostLog : lastSellBoostLog;
             if(TimeCurrent() - lastBoostLog > 20)
             {
-                AddToLog(StringFormat("%s Recovery TrendBoost ON | ADX=%.1f | MA Gap=%.1f pips | BaseGap=%.1f pips", 
-                    isBuy ? "BUY" : "SELL", adxValue, maDistancePips, baseGapPips), "RECOVERY");
+                AddToLog(StringFormat("%s Recovery TrendBoost ON | M5(ADX=%.1f, MA Gap=%.1f) H1(ADX=%.1f, MA Gap=%.1f) | BaseGap=%.1f pips", 
+                    isBuy ? "BUY" : "SELL", adxM5, maGapM5, adxH1, maGapH1, baseGapPips), "RECOVERY");
                 lastBoostLog = TimeCurrent();
             }
         }
@@ -3506,6 +3556,88 @@ void UpdateInfoPanel()
     ObjectSetString(0, "EA_TotalProfit", OBJPROP_FONT, "Arial Bold");
 }
 
+void GetPositionModeSnapshot(int &normalBuyCount, int &recoveryBuyCount, int &normalSellCount, int &recoverySellCount)
+{
+    normalBuyCount = 0;
+    recoveryBuyCount = 0;
+    normalSellCount = 0;
+    recoverySellCount = 0;
+
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        string comment = PositionGetString(POSITION_COMMENT);
+        bool isRecovery = (StringFind(comment, "Recovery") >= 0);
+
+        if(type == POSITION_TYPE_BUY)
+        {
+            if(isRecovery) recoveryBuyCount++;
+            else normalBuyCount++;
+        }
+        else if(type == POSITION_TYPE_SELL)
+        {
+            if(isRecovery) recoverySellCount++;
+            else normalSellCount++;
+        }
+    }
+}
+
+bool IsSideRecoveryModeLive(bool isBuy, int normalCount, int recoveryCount)
+{
+    int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
+    return (recoveryCount > 0 || normalCount >= maxOrders);
+}
+
+double GetDashboardRecoveryGapPips(bool isBuy, int totalPositionsThisSide, int maxNormalOrders)
+{
+    double baseGapPips = GetRecoveryATRGapPips();
+    double adxM5 = 0.0;
+    double maGapM5 = 0.0;
+    double adxH1 = 0.0;
+    double maGapH1 = 0.0;
+
+    if(IsStrongRecoveryTrend(isBuy, adxM5, maGapM5, adxH1, maGapH1))
+        baseGapPips = MathMin(RecoveryTrendGapMaxPips, baseGapPips * RecoveryTrendGapMultiplier);
+
+    int extraGapSteps = MathMax(0, totalPositionsThisSide - maxNormalOrders + 1);
+    return baseGapPips + extraGapSteps;
+}
+
+string GetDashboardTrendDirection()
+{
+    double adxM5 = 0.0;
+    double maGapM5 = 0.0;
+    double adxH1 = 0.0;
+    double maGapH1 = 0.0;
+    bool bearishTrend = IsStrongRecoveryTrend(true, adxM5, maGapM5, adxH1, maGapH1);
+
+    adxM5 = 0.0;
+    maGapM5 = 0.0;
+    adxH1 = 0.0;
+    maGapH1 = 0.0;
+    bool bullishTrend = IsStrongRecoveryTrend(false, adxM5, maGapM5, adxH1, maGapH1);
+
+    if(bullishTrend && !bearishTrend) return "UP";
+    if(bearishTrend && !bullishTrend) return "DOWN";
+    return "FLAT";
+}
+
+string GetDashboardFilterStatus(bool skipBuy, bool skipSell, bool drawdownHit)
+{
+    if(!g_LicenseValid) return "LICENSE";
+    if(g_ControlTargetStopped) return "TARGET STOP";
+    if(g_ControlScheduleStopped) return "SCHEDULE STOP";
+    if(drawdownHit) return "DRAWDOWN";
+    if(skipBuy && skipSell) return "RANGE";
+    if(skipBuy || skipSell) return "PARTIAL";
+    return "OK";
+}
+
 //+------------------------------------------------------------------+
 //| Send trade data to backend server                                 |
 //+------------------------------------------------------------------+
@@ -3521,6 +3653,48 @@ void SendTradeDataToServer()
     g_LastTradeDataUpdate = TimeCurrent();
     
     int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
+    int normalBuyCount = 0;
+    int recoveryBuyCount = 0;
+    int normalSellCount = 0;
+    int recoverySellCount = 0;
+    GetPositionModeSnapshot(normalBuyCount, recoveryBuyCount, normalSellCount, recoverySellCount);
+
+    bool liveBuyRecovery = IsSideRecoveryModeLive(true, normalBuyCount, recoveryBuyCount);
+    bool liveSellRecovery = IsSideRecoveryModeLive(false, normalSellCount, recoverySellCount);
+    int totalBuySidePositions = normalBuyCount + recoveryBuyCount;
+    int totalSellSidePositions = normalSellCount + recoverySellCount;
+
+    double spreadPoints = (ask - bid) / _Point;
+    double atrGapBuy = GetDashboardRecoveryGapPips(true, totalBuySidePositions, MaxBuyOrders);
+    double atrGapSell = GetDashboardRecoveryGapPips(false, totalSellSidePositions, MaxSellOrders);
+    string trendDirection = GetDashboardTrendDirection();
+
+    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+    double drawdownAmount = MathMax(0.0, balance - equity);
+    double drawdownPercent = (balance > 0.0) ? (drawdownAmount / balance) * 100.0 : 0.0;
+    double drawdownLimitPercent = (balance > 0.0 && MaxDrawdownAmount > 0.0) ? (MaxDrawdownAmount / balance) * 100.0 : 0.0;
+    bool drawdownHit = (MaxDrawdownAmount > 0.0 && drawdownAmount >= MaxDrawdownAmount);
+
+    double buyRangeHigh = MathMax(BuyRangeStart, BuyRangeEnd);
+    double buyRangeLow = MathMin(BuyRangeStart, BuyRangeEnd);
+    double sellRangeHigh = MathMax(SellRangeStart, SellRangeEnd);
+    double sellRangeLow = MathMin(SellRangeStart, SellRangeEnd);
+    bool skipBuy = (!liveBuyRecovery && (bid < buyRangeLow || bid > buyRangeHigh));
+    bool skipSell = (!liveSellRecovery && (ask < sellRangeLow || ask > sellRangeHigh));
+    if(!g_LicenseValid || g_ControlTargetStopped || g_ControlScheduleStopped || drawdownHit)
+    {
+        skipBuy = true;
+        skipSell = true;
+    }
+
+    string filterStatus = GetDashboardFilterStatus(skipBuy, skipSell, drawdownHit);
+    string buyMode = liveBuyRecovery ? "RECOVERY" : "NORMAL";
+    string sellMode = liveSellRecovery ? "RECOVERY" : "NORMAL";
+    double liveLotSize = GetEffectiveLotSize();
     
     // Build positions array
     string positionsJson = "[";
@@ -3700,7 +3874,22 @@ void SendTradeDataToServer()
     jsonRequest += "\"total_pending_orders\":" + IntegerToString(pendingCount) + ",";
     jsonRequest += "\"trading_mode\":\"" + tradingMode + "\",";
     jsonRequest += "\"symbol\":\"" + _Symbol + "\",";
-    jsonRequest += "\"current_price\":" + DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_BID), digits) + ",";
+    jsonRequest += "\"current_price\":" + DoubleToString(bid, digits) + ",";
+    jsonRequest += "\"trend_direction\":\"" + trendDirection + "\",";
+    jsonRequest += "\"filter_status\":\"" + filterStatus + "\",";
+    jsonRequest += "\"atr_gap_buy\":" + DoubleToString(atrGapBuy, 1) + ",";
+    jsonRequest += "\"atr_gap_sell\":" + DoubleToString(atrGapSell, 1) + ",";
+    jsonRequest += "\"spread\":" + DoubleToString(spreadPoints, 1) + ",";
+    jsonRequest += "\"skip_buy\":" + (skipBuy ? "true" : "false") + ",";
+    jsonRequest += "\"skip_sell\":" + (skipSell ? "true" : "false") + ",";
+    jsonRequest += "\"buy_mode\":\"" + buyMode + "\",";
+    jsonRequest += "\"sell_mode\":\"" + sellMode + "\",";
+    jsonRequest += "\"drawdown_amount\":" + DoubleToString(drawdownAmount, 2) + ",";
+    jsonRequest += "\"drawdown_percent\":" + DoubleToString(drawdownPercent, 2) + ",";
+    jsonRequest += "\"drawdown_limit\":" + DoubleToString(drawdownLimitPercent, 2) + ",";
+    jsonRequest += "\"equity_skip_percent\":" + DoubleToString(drawdownLimitPercent, 2) + ",";
+    jsonRequest += "\"max_recovery_lot\":" + DoubleToString(MaxRecoveryLotSize, 2) + ",";
+    jsonRequest += "\"lot_size\":" + DoubleToString(liveLotSize, 2) + ",";
     jsonRequest += "\"open_positions\":" + positionsJson + ",";
     jsonRequest += "\"pending_orders\":" + pendingJson + ",";
     jsonRequest += "\"closed_positions\":" + closedJson;

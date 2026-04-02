@@ -102,6 +102,10 @@ input double    TrendLotMultiplier      = 3.0;  // Trend lot = GridBaseLotSize *
 #define H1_EMA_Period           20              // H1 EMA for trend confirmation
 #define H1_EMA_Timeframe        PERIOD_H1       // H1 chart for trend confirmation
 #define H1_EMA_SlopeMinPips     1.5             // Minimum H1 slope to confirm trend
+#define TrendConfirmADXPeriod   14              // ADX period for trend-strength confirmation
+#define TrendConfirmADXMin      25.0            // Minimum ADX to treat trend as strong
+
+#define TrailingMaxDistancePips 25.0            // Maximum SL/TP distance from current price while trailing
 
 // Neutral market detection is kept fixed; only the duration is user-configurable.
 #define NeutralDetectionTimeframe       PERIOD_M5
@@ -191,6 +195,8 @@ int g_ATRHandle = INVALID_HANDLE;     // ATR indicator handle for dynamic gap
 double g_CurrentATR = 0.0;            // Current ATR value in pips
 int g_M5_EMAHandle = INVALID_HANDLE;  // M5 EMA indicator handle for momentum
 int g_M5_RSIHandle = INVALID_HANDLE;  // M5 RSI indicator handle for momentum
+int g_H1_ADXHandle = INVALID_HANDLE;  // H1 ADX indicator handle for trend-strength confirmation
+int g_M5_ADXHandle = INVALID_HANDLE;  // M5 ADX indicator handle for trend-strength confirmation
 int g_MomentumSignal = 0;             // -1=bearish momentum, 0=no momentum, +1=bullish momentum
 bool g_NeutralMarketDetected = false;
 bool g_NeutralTradeBlocked = false;
@@ -295,6 +301,14 @@ int OnInit()
         g_H1_EMAHandle = iMA(_Symbol, H1_EMA_Timeframe, H1_EMA_Period, 0, MODE_EMA, PRICE_CLOSE);
         if(g_H1_EMAHandle == INVALID_HANDLE)
             Print("WARNING: Failed to create H1 EMA indicator handle");
+
+        g_H1_ADXHandle = iADX(_Symbol, PERIOD_H1, TrendConfirmADXPeriod);
+        if(g_H1_ADXHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create H1 ADX indicator handle");
+
+        g_M5_ADXHandle = iADX(_Symbol, PERIOD_M5, TrendConfirmADXPeriod);
+        if(g_M5_ADXHandle == INVALID_HANDLE)
+            Print("WARNING: Failed to create M5 ADX indicator handle");
     }
     
     // Initialize M5 momentum indicators
@@ -368,6 +382,8 @@ void OnDeinit(const int reason)
     if(g_H1_EMAHandle != INVALID_HANDLE) IndicatorRelease(g_H1_EMAHandle);
     if(g_M5_EMAHandle != INVALID_HANDLE) IndicatorRelease(g_M5_EMAHandle);
     if(g_M5_RSIHandle != INVALID_HANDLE) IndicatorRelease(g_M5_RSIHandle);
+    if(g_H1_ADXHandle != INVALID_HANDLE) IndicatorRelease(g_H1_ADXHandle);
+    if(g_M5_ADXHandle != INVALID_HANDLE) IndicatorRelease(g_M5_ADXHandle);
     if(g_ATRHandle != INVALID_HANDLE) IndicatorRelease(g_ATRHandle);
     Lite_OnDeinitInternal(reason);
     
@@ -942,27 +958,51 @@ void UpdateNeutralMarketFilter()
 }
 
 //+------------------------------------------------------------------+
-//| H1 EMA Trend Confirmation                                          |
-//| g_TrendBias: +1 = Bullish confirmed, -1 = Bearish confirmed      |
-//|              0 = Neutral (no clear H1 trend)                      |
+//| Single timeframe trend-direction check (EMA slope + ADX strength)|
+//| Returns: +1 bullish, -1 bearish, 0 neutral/weak                  |
+//+------------------------------------------------------------------+
+int GetTrendSignalSingleTF(int emaHandle, int adxHandle)
+{
+    if(emaHandle == INVALID_HANDLE || adxHandle == INVALID_HANDLE)
+        return 0;
+
+    double emaBuffer[];
+    ArraySetAsSeries(emaBuffer, true);
+    if(CopyBuffer(emaHandle, 0, 0, 6, emaBuffer) < 6)
+        return 0;
+
+    double adxBuffer[];
+    ArraySetAsSeries(adxBuffer, true);
+    if(CopyBuffer(adxHandle, 0, 0, 1, adxBuffer) < 1)
+        return 0;
+
+    double slopePips = (emaBuffer[0] - emaBuffer[5]) / pip;
+    if(adxBuffer[0] < TrendConfirmADXMin)
+        return 0;
+
+    if(slopePips >= H1_EMA_SlopeMinPips)
+        return 1;
+    if(slopePips <= -H1_EMA_SlopeMinPips)
+        return -1;
+
+    return 0;
+}
+
+//+------------------------------------------------------------------+
+//| Dual-timeframe trend confirmation (M5 + H1 must agree)           |
+//| g_TrendBias: +1 = bullish, -1 = bearish, 0 = no strong trend     |
 //+------------------------------------------------------------------+
 void UpdateH1TrendConfirmation()
 {
     g_TrendBias = 0;
-    if(!EnableTrendFilter || g_H1_EMAHandle == INVALID_HANDLE) return;
-    
-    double emaBuffer[];
-    ArraySetAsSeries(emaBuffer, true); // [0]=newest bar
-    if(CopyBuffer(g_H1_EMAHandle, 0, 0, 6, emaBuffer) < 6) return;
-    
-    // H1 Slope = EMA change over last 5 bars (in pips)
-    double slope = (emaBuffer[0] - emaBuffer[5]) / pip;
-    
-    if(slope >= H1_EMA_SlopeMinPips)
-        g_TrendBias = 1;    // Bullish confirmed — BUY allowed, SELL blocked
-    else if(slope <= -H1_EMA_SlopeMinPips)
-        g_TrendBias = -1;   // Bearish confirmed — SELL allowed, BUY blocked
-    // else: 0 = Neutral — both sides allowed (no blocking in neutral)
+    if(!EnableTrendFilter)
+        return;
+
+    int m5Signal = GetTrendSignalSingleTF(g_M5_EMAHandle, g_M5_ADXHandle);
+    int h1Signal = GetTrendSignalSingleTF(g_H1_EMAHandle, g_H1_ADXHandle);
+
+    if(m5Signal != 0 && m5Signal == h1Signal)
+        g_TrendBias = m5Signal;
 }
 
 //+------------------------------------------------------------------+
@@ -1050,6 +1090,51 @@ void UpdateATR()
     
     // Convert ATR from price to pips
     g_CurrentATR = atrBuffer[0] / pip;
+}
+
+//+------------------------------------------------------------------+
+//| Cap SL/TP distance from current price during trailing updates    |
+//+------------------------------------------------------------------+
+double CapTrailingSLDistance(double proposedSL, ENUM_POSITION_TYPE type, double currentPrice)
+{
+    if(proposedSL <= 0.0)
+        return proposedSL;
+
+    if(type == POSITION_TYPE_BUY)
+    {
+        double minAllowedSL = currentPrice - (TrailingMaxDistancePips * pip);
+        if(proposedSL < minAllowedSL)
+            proposedSL = minAllowedSL;
+    }
+    else if(type == POSITION_TYPE_SELL)
+    {
+        double maxAllowedSL = currentPrice + (TrailingMaxDistancePips * pip);
+        if(proposedSL > maxAllowedSL)
+            proposedSL = maxAllowedSL;
+    }
+
+    return NormalizeDouble(proposedSL, _Digits);
+}
+
+double CapTrailingTPDistance(double proposedTP, ENUM_POSITION_TYPE type, double currentPrice)
+{
+    if(proposedTP <= 0.0)
+        return proposedTP;
+
+    if(type == POSITION_TYPE_BUY)
+    {
+        double maxAllowedTP = currentPrice + (TrailingMaxDistancePips * pip);
+        if(proposedTP > maxAllowedTP)
+            proposedTP = maxAllowedTP;
+    }
+    else if(type == POSITION_TYPE_SELL)
+    {
+        double minAllowedTP = currentPrice - (TrailingMaxDistancePips * pip);
+        if(proposedTP < minAllowedTP)
+            proposedTP = minAllowedTP;
+    }
+
+    return NormalizeDouble(proposedTP, _Digits);
 }
 
 //+------------------------------------------------------------------+
@@ -3326,7 +3411,10 @@ void ApplyRecoveryBreakevenTrailingForSide(bool isBuy)
                 (isBuy && newSL > currentSL + (0.5 * pip)) ||
                 (!isBuy && newSL < currentSL - (0.5 * pip));
             
-            if(needsUpdate && trade.PositionModify(ticket, newSL, currentTP))
+            double cappedSL = CapTrailingSLDistance(newSL, type, currentPrice);
+            double cappedTP = CapTrailingTPDistance(currentTP, type, currentPrice);
+
+            if(needsUpdate && trade.PositionModify(ticket, cappedSL, cappedTP))
                 updateCount++;
         }
         
@@ -3442,9 +3530,12 @@ void ApplyTrailing()
             
             if(safetySL > 0)
             {
-                trade.PositionModify(ticket, safetySL, currentTP);
+                double cappedSafetySL = CapTrailingSLDistance(safetySL, type, currentPrice);
+                double cappedSafetyTP = CapTrailingTPDistance(currentTP, type, currentPrice);
+
+                trade.PositionModify(ticket, cappedSafetySL, cappedSafetyTP);
                 AddToLog(StringFormat("Safety SL set: %s #%I64u | Open: %.2f | SL: %.2f", 
-                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", ticket, openPrice, safetySL), "TRAILING");
+                    type == POSITION_TYPE_BUY ? "BUY" : "SELL", ticket, openPrice, cappedSafetySL), "TRAILING");
             }
         }
         
@@ -3478,7 +3569,10 @@ void ApplyTrailing()
                 if(!inRecovery && ReleaseNormalTPOnTrail)
                     targetTP = 0;
 
-                trade.PositionModify(ticket, newSL, targetTP);
+                double cappedSL = CapTrailingSLDistance(newSL, type, currentPrice);
+                double cappedTP = CapTrailingTPDistance(targetTP, type, currentPrice);
+
+                trade.PositionModify(ticket, cappedSL, cappedTP);
                 AddToLog(StringFormat("Trailing SL: %s | Profit: %.1f pips", 
                     type == POSITION_TYPE_BUY ? "BUY" : "SELL", profitPips), "TRAILING");
             }
