@@ -20,8 +20,8 @@ input int       CachedLicenseMaxAgeHours = 24;
 input double    MaxDrawdownAmount = 0.0;  // Max loss in $ (0 = disabled). e.g. 200 means close all if loss >= $200
 
 //--- Per Order Stop Loss (0 = disabled)
-input double    BuyStopLossPips  = 120.0;   // Buy SL in pips (0 = no SL)
-input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
+input double    BuyStopLossPips  = 60.0;   // Buy SL in pips (0 = no SL)
+input double    SellStopLossPips = 60.0;   // Sell SL in pips (0 = no SL)
 
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       2001.0
@@ -56,11 +56,11 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 
 #define BuyTrailingStartPips    8.0   // Let profit breathe: trailing later so winners get more room
 #define BuyInitialSLPips        4.0   // Lock more profit when trail activates
-#define BuyTrailingRatio        0.35  // Tighter trail to protect high-profit trades from pullbacks
+#define BuyTrailingRatio        0.40  // Tighter trail to protect high-profit trades from pullbacks
 
 #define SellTrailingStartPips   8.0   // Let profit breathe: trailing later so winners get more room
 #define SellInitialSLPips       4.0   // Lock more profit when trail activates
-#define SellTrailingRatio       0.35  // Tighter trail to protect high-profit trades from pullbacks
+#define SellTrailingRatio       0.40  // Tighter trail to protect high-profit trades from pullbacks
 
 // ===== ATR DYNAMIC GAP SETTINGS =====
 // ATR onujayi gap automatically adjust hobe — volatile market e boro gap, calm market e chhoto gap
@@ -108,7 +108,7 @@ input double    SellStopLossPips = 110.0;   // Sell SL in pips (0 = no SL)
 #define RecoveryCleanupThreshold 4  // যখন শুধু recovery positions থাকে এবং সংখ্যা এর সমান বা কম, সব close করে normal mode restart
 #define ReleaseNormalTPOnTrail  true
 
-#define LotSize         0.30
+#define LotSize         0.10
 #define MagicNumber     999888
 #define OrderComment    "CleanGrid"
 #define ManageAllTrades false
@@ -154,12 +154,6 @@ int logMaxSize = 1;
 
 // API Communication
 datetime g_LastTradeDataUpdate = 0;
-
-// EA Control Settings (fetched from server)
-double   g_ControlLotSize = 0;          // 0 = use hardcoded LotSize
-bool     g_ControlTargetStopped = false;   // Server says target hit, stop trading
-bool     g_ControlScheduleStopped = false; // Server says schedule stop active
-bool     g_ControlSettingsLoaded = false;  // At least one successful fetch
 
 // License Verification
 bool g_LicenseValid = false;
@@ -351,52 +345,6 @@ void OnTick()
     
     // Clear comment when license is valid
     Comment("");
-
-    // Send data to API early so control settings stay fresh even when paused
-    // (must run before target/schedule checks so cooldown expiry is detected)
-    static datetime lastControlSync = 0;
-    if(!IsTesterMode() && TimeCurrent() - lastControlSync >= 10)
-    {
-        lastControlSync = TimeCurrent();
-        SendTradeDataToServer();
-    }
-
-    // EA Control: Daily Target Stop — server flagged target hit
-    if(g_ControlSettingsLoaded && g_ControlTargetStopped)
-    {
-        static datetime lastTargetMsg = 0;
-        static datetime lastTargetCleanup = 0;
-        if(TimeCurrent() - lastTargetCleanup > 10)
-        {
-            lastTargetCleanup = TimeCurrent();
-            CloseAllPendingOrders();
-            CloseAllOpenPositions();
-            ArrayFree(buyBundles);
-            ArrayFree(sellBundles);
-            nextBuyBundleId = 1;
-            nextSellBundleId = 1;
-        }
-        if(TimeCurrent() - lastTargetMsg > 10)
-        {
-            lastTargetMsg = TimeCurrent();
-            AddToLog("EA PAUSED: Daily profit target reached. Closed all trades and waiting for cooldown.", "CONTROL");
-        }
-        Comment("\xF0\x9F\x8E\xAF DAILY TARGET REACHED — EA PAUSED\n\nAll positions/orders closed.\nWaiting for cooldown to expire...\nSet from website EA Control Settings");
-        return;
-    }
-
-    // EA Control: Schedule Stop — server flagged schedule window active
-    if(g_ControlSettingsLoaded && g_ControlScheduleStopped)
-    {
-        static datetime lastSchedMsg = 0;
-        if(TimeCurrent() - lastSchedMsg > 10)
-        {
-            lastSchedMsg = TimeCurrent();
-            AddToLog("EA PAUSED: Scheduled stop window active.", "CONTROL");
-        }
-        Comment("\xE2\x8F\xB8 SCHEDULED STOP — EA PAUSED\n\nWill resume after stop window ends...\nSet from website EA Control Settings");
-        return;
-    }
     
     // Max Drawdown Protection — close all if loss exceeds limit
     if(CheckMaxDrawdown()) return;
@@ -542,6 +490,13 @@ void OnTick()
         UpdateInfoPanel();
     }
     
+    // Send data to API (every 10 seconds)
+    static datetime lastAPIUpdate = 0;
+    if(TimeCurrent() - lastAPIUpdate >= 10)
+    {
+        lastAPIUpdate = TimeCurrent();
+        SendTradeDataToServer();
+    }
 }
 
 // ===== Multi-Bundle Helper Functions =====
@@ -1942,7 +1897,7 @@ void ManageNormalGrid(bool isBuy)
     if(expectedMinLot <= 0) expectedMinLot = 0.01;
     if(expectedMaxLot <= 0) expectedMaxLot = 100.0;
     if(expectedLotStep <= 0) expectedLotStep = 0.01;
-    double expectedNormalLot = GetEffectiveLotSize();
+    double expectedNormalLot = LotSize;
     expectedNormalLot = MathFloor(expectedNormalLot / expectedLotStep) * expectedLotStep;
     expectedNormalLot = MathMax(expectedMinLot, MathMin(expectedMaxLot, expectedNormalLot));
     
@@ -2194,7 +2149,7 @@ void ManageNormalGrid(bool isBuy)
         if(nearbyOrderExists) continue;
         
         // ===== All checks passed - Place the order =====
-        double lotToUse = GetEffectiveLotSize();
+        double lotToUse = LotSize;
         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
         double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
         double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
@@ -2351,7 +2306,7 @@ void ManageRecoveryGrid(bool isBuy)
     if(expectedMaxLot <= 0) expectedMaxLot = 100.0;
     double expectedEffectiveMaxLot = MathMin(expectedMaxLot, MaxRecoveryLotSize);
 
-    double adjacentLotForExpected = GetEffectiveLotSize();
+    double adjacentLotForExpected = LotSize;
     double adjacentDistForExpected = 999999;
     for(int i = 0; i < PositionsTotal(); i++)
     {
@@ -2658,7 +2613,7 @@ void ManageRecoveryGrid(bool isBuy)
         // For BUY recovery: find position just ABOVE recoveryPrice (next position in grid going up)
         // For SELL recovery: find position just BELOW recoveryPrice (next position in grid going down)
         // Recovery lot = adjacent position's lot + increment (ensures sequential: 0.10, 0.11, 0.12...)
-        double adjacentLot = GetEffectiveLotSize();  // Default to base lot if no adjacent found
+        double adjacentLot = LotSize;  // Default to base lot if no adjacent found
         double adjacentDist = 999999;
         
         for(int i = 0; i < PositionsTotal(); i++)
@@ -3960,84 +3915,7 @@ void SendTradeDataToServer()
     
     int timeout = 2000;
     int response = WebRequest("POST", url, headers, timeout, postData, result, resultHeaders);
-
-    // Parse EA control settings from server response
-    if(response == 200 && ArraySize(result) > 0)
-    {
-        string responseStr = CharArrayToString(result);
-        ParseEAControlFromResponse(responseStr);
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Parse EA Control Settings from server JSON response               |
-//+------------------------------------------------------------------+
-void ParseEAControlFromResponse(string json)
-{
-    // Parse is_target_stopped
-    int tsPos = StringFind(json, "\"is_target_stopped\"");
-    if(tsPos >= 0)
-    {
-        int colonPos = StringFind(json, ":", tsPos);
-        if(colonPos >= 0)
-        {
-            string val = StringSubstr(json, colonPos + 1, 10);
-            StringTrimLeft(val);
-            StringTrimRight(val);
-            g_ControlTargetStopped = (StringFind(val, "true") == 0);
-        }
-    }
-
-    // Parse is_schedule_stopped
-    int ssPos = StringFind(json, "\"is_schedule_stopped\"");
-    if(ssPos >= 0)
-    {
-        int colonPos = StringFind(json, ":", ssPos);
-        if(colonPos >= 0)
-        {
-            string val = StringSubstr(json, colonPos + 1, 10);
-            StringTrimLeft(val);
-            StringTrimRight(val);
-            g_ControlScheduleStopped = (StringFind(val, "true") == 0);
-        }
-    }
-
-    // Parse lot_size
-    int lsPos = StringFind(json, "\"lot_size\"");
-    if(lsPos >= 0)
-    {
-        int colonPos = StringFind(json, ":", lsPos);
-        if(colonPos >= 0)
-        {
-            string rest = StringSubstr(json, colonPos + 1, 20);
-            StringTrimLeft(rest);
-            int endIdx = 0;
-            for(int c = 0; c < StringLen(rest); c++)
-            {
-                ushort ch = StringGetCharacter(rest, c);
-                if((ch >= '0' && ch <= '9') || ch == '.') endIdx = c + 1;
-                else if(endIdx > 0) break;
-            }
-            if(endIdx > 0)
-            {
-                string numStr = StringSubstr(rest, 0, endIdx);
-                double lotVal = StringToDouble(numStr);
-                g_ControlLotSize = MathMax(0.0, lotVal);
-            }
-        }
-    }
-
-    g_ControlSettingsLoaded = true;
-}
-
-//+------------------------------------------------------------------+
-//| Get effective lot size (server override or hardcoded)            |
-//+------------------------------------------------------------------+
-double GetEffectiveLotSize()
-{
-    if(g_ControlSettingsLoaded && g_ControlLotSize > 0)
-        return g_ControlLotSize;
-    return LotSize;
+    
 }
 
 //+------------------------------------------------------------------+
