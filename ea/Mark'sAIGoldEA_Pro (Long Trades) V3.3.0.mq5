@@ -3,7 +3,7 @@
 //|                                  Simplified Grid Trading System   |
 //+------------------------------------------------------------------+
 #property copyright "Mark's AI Gold EA - Clean Version"
-#property version   "2.00"
+#property version   "3.44"
 #property strict
 
 #include <Trade\Trade.mqh>
@@ -25,7 +25,7 @@ input double    SellStopLossPips = 40.0;   // Sell SL in pips (0 = no SL)
 
 //--- Neutral Market Avoidance (runtime configurable)
 input bool      EnableNeutralMarketFilter = true;
-input int       NeutralMarketAvoidMinutes = 30; // Recent neutral market duration to avoid new normal entries (0 = disabled)
+input int       NeutralMarketAvoidMinutes = 30; // Recent neutral market duration to avoid all new entries (0 = disabled)
 input bool      EnableSessionFilter = true;
 input bool      UseUTCSessionClock = true;
 input int       ServerToUTCOffsetHours = 0; // If server is UTC+2 then set 2
@@ -45,6 +45,14 @@ input int       NewsBlackout2StartHourUTC = 18;
 input int       NewsBlackout2EndHourUTC = 19;
 input bool      EnableSideRiskCap = false;
 input double    MaxSideRiskPercent = 2.0; // Max per-side SL risk as % of balance
+input bool      IncludePendingOrdersInSideRiskCap = false;
+input bool      UseEffectiveBalanceForSideRiskCap = true;
+input bool      EnableBalanceLotSizing = true;
+input double    BalanceLotReferenceUSD = 100.0;   // $100 balance = 0.10 lot
+input double    BalanceLotReferenceVolume = 0.10;
+input double    BalanceSizingDivisor = 1.0;       // Use 100.0 for cent-style balances (e.g. 15000 => $150)
+input bool      AutoDetectCentBalanceInTester = true;
+input double    MaxBaseLotCap = 5.0;              // Safety cap for base lot size
 
 //--- All Settings Hardcoded (Hidden from user)
 #define BuyRangeStart       2001.0
@@ -115,6 +123,108 @@ input double    MaxSideRiskPercent = 2.0; // Max per-side SL risk as % of balanc
 #define H1_EMA_Timeframe        PERIOD_H1       // H1 chart for trend confirmation
 #define H1_EMA_SlopeMinPips     1.5             // Minimum H1 slope to confirm trend
 
+// ===== SMART TREND + PRICE ACTION FILTERS =====
+input ENUM_TIMEFRAMES TrendStructureTimeframe = PERIOD_H4;
+input ENUM_TIMEFRAMES TrendMacroTimeframe = PERIOD_D1;
+input int       StructureSwingStrength = 2;
+input int       StructureScanBars = 80;
+input int       TrendConsensusScore = 2;
+input bool      EnableSupportResistanceFilter = true;
+input ENUM_TIMEFRAMES SupportResistanceTimeframe = PERIOD_H4;
+input double    SupportResistanceTolerancePips = 8.0;
+input double    MinRoomToOppositeLevelPips = 12.0;
+input bool      EnableOrderBlockFilter = true;
+input ENUM_TIMEFRAMES OrderBlockTimeframe = PERIOD_H1;
+input int       OrderBlockMaxAgeBars = 36;
+input double    OrderBlockImpulseMultiplier = 1.6;
+input double    OrderBlockTolerancePips = 6.0;
+input bool      EnableFVGFilter = true;
+input ENUM_TIMEFRAMES FVGTimeframe = PERIOD_M15;
+input int       FVGMaxAgeBars = 24;
+input double    FVGMinGapPips = 4.0;
+input double    FVGTolerancePips = 4.0;
+input int       MinContextSignals = 2;
+input bool      EnableLiquiditySweepFilter = true;
+input ENUM_TIMEFRAMES LiquiditySweepTimeframe = PERIOD_M15;
+input int       LiquiditySweepMaxAgeBars = 8;
+input double    LiquiditySweepTolerancePips = 3.0;
+input bool      EnablePremiumDiscountFilter = true;
+input ENUM_TIMEFRAMES PremiumDiscountTimeframe = PERIOD_H4;
+input int       PremiumDiscountLookbackBars = 60;
+input double    PremiumDiscountMinRangePips = 40.0;
+input double    BuyDiscountMaxPercent = 0.45;
+input double    SellPremiumMinPercent = 0.55;
+
+// ===== CANDLE PATTERN DETECTION (Hammer, Engulfing, Pin Bar) =====
+input bool      EnableCandlePatterns = true;
+input ENUM_TIMEFRAMES CandlePatternTimeframe = PERIOD_M15;
+input double    PinBarWickBodyRatio = 2.0;    // Minimum wick-to-body ratio for pin bar/hammer
+input double    EngulfingMinBodyPips = 2.0;    // Minimum body size for engulfing candle
+
+// ===== ATR-BASED DYNAMIC TP =====
+input bool      EnableATRDynamicTP = true;
+input double    ATR_TP_Multiplier = 2.0;       // TP = ATR × this multiplier
+input double    ATR_SL_Multiplier = 1.0;       // SL = ATR × this multiplier (0 = use fixed)
+input double    ATR_TP_MinPips = 30.0;         // Minimum dynamic TP in pips
+input double    ATR_TP_MaxPips = 120.0;        // Maximum dynamic TP in pips
+
+// ===== PARTIAL TAKE PROFIT (Scale Out) =====
+input bool      EnablePartialTP = true;
+input double    PartialTP_Percent = 50.0;      // Close this % of position at first target
+input double    PartialTP_RR_Ratio = 1.0;      // First TP at 1:1 Risk:Reward
+input double    PartialTP_MinProfitPips = 15.0; // Minimum profit pips before partial close
+
+// ===== ROUND NUMBER / PSYCHOLOGICAL LEVELS =====
+input bool      EnableRoundNumberFilter = true;
+input double    RoundNumberInterval = 50.0;    // Round number every X price units (e.g., 50 = 2300, 2350, 2400)
+input double    RoundNumberZonePips = 5.0;     // Zone around round number for confluence
+
+// ===== BREAKOUT + RETEST STRATEGY =====
+input bool      EnableBreakoutRetest = true;
+input ENUM_TIMEFRAMES BreakoutTimeframe = PERIOD_H1;
+input int       BreakoutLookbackBars = 48;     // How far back to scan for breakout levels
+input double    BreakoutRetestTolerancePips = 5.0; // Price must return within this distance of broken level
+input int       BreakoutRetestMaxBars = 12;    // Max bars after breakout to wait for retest
+input double    BreakoutMinMovePips = 15.0;    // Minimum move after breakout to confirm it
+
+// ===== FAST MARKET ENTRY =====
+input bool      EnableInstantMarketEntry = true;
+input int       InstantEntryCooldownMinutes = 5;
+input int       InstantEntryRequiredSignals = 0;
+input bool      KeepNormalPendingOrders = false;
+input bool      EnableSingleDirectionExposure = true;
+input bool      SingleDirectionRequireTrendAlignment = true;
+input bool      EnableTrendPyramidEntry = true;
+input int       MaxInstantEntriesPerSide = 3;
+input double    InstantEntryMinSpacingGapFactor = 0.85;
+input double    InstantEntryMinSpacingPips = 8.0;
+input bool      AllowInstantEntryWithPendingGrid = true;
+input bool      RequireAlignedCandlePatternForFreshEntries = true;
+input bool      RequireFreshPatternBarForFastEntry = true;
+input bool      AllowStrongTrendContinuationWithoutPattern = true;
+input int       StrongTrendContinuationMinContextScore = 2;
+input double    StrongTrendContinuationMinSlopePips = 2.5;
+input double    AdaptiveSLGapMultiplier = 1.35;
+input double    AdaptiveSLCandleRangeMultiplier = 1.10;
+input bool      BlockOppositeEntriesWhileProfitable = true;
+input double    OppositeProfitBlockAmount = 0.0;
+input bool      BlockOppositeEntriesDuringRecovery = true;
+
+// ===== RUNTIME PROFILES =====
+input bool      UseSeparateRuntimeProfiles = true;
+input bool      EnableAggressiveTesterProfile = true;
+input int       TesterInstantEntryCooldownMinutes = 1;
+input int       TesterInstantEntryRequiredSignals = 0;
+input bool      TesterKeepNormalPendingOrders = false;
+input bool      TesterIgnoreNeutralFilter = false;
+input bool      TesterAllowDirectEntry = true;
+input bool      EnableConservativeLiveProfile = true;
+input int       LiveInstantEntryCooldownMinutes = 10;
+input int       LiveInstantEntryRequiredSignals = 1;
+input bool      LiveKeepNormalPendingOrders = false;
+input bool      LiveIgnoreNeutralFilter = false;
+input bool      LiveAllowDirectEntry = true;
+
 // Neutral market detection is kept fixed; only the duration is user-configurable.
 #define NeutralDetectionTimeframe       PERIOD_M5
 #define NeutralMaxDirectionalEfficiency 0.35
@@ -155,6 +265,9 @@ bool buyInRecovery = false;
 bool sellInRecovery = false;
 int g_H1_EMAHandle = INVALID_HANDLE;  // H1 EMA indicator handle for trend confirmation
 int g_TrendBias = 0;                  // -1=bearish (SELL only), 0=neutral, +1=bullish (BUY only)
+int g_MacroTrendBias = 0;
+int g_StructureTrendBias = 0;
+double g_H1SlopePips = 0.0;
 int g_ATRHandle = INVALID_HANDLE;     // ATR indicator handle for dynamic gap
 int g_ADXHandle = INVALID_HANDLE;     // ADX indicator handle for regime filter
 double g_CurrentATR = 0.0;            // Current ATR value in pips
@@ -169,6 +282,51 @@ double g_NeutralRangePips = 0.0;
 double g_NeutralDirectionalEfficiency = 1.0;
 double g_NeutralAverageBodyPips = 0.0;
 int g_NeutralLookbackBars = 0;
+double g_SupportLevel = 0.0;
+double g_ResistanceLevel = 0.0;
+bool g_BullishOrderBlockActive = false;
+bool g_BearishOrderBlockActive = false;
+double g_BullishOrderBlockLow = 0.0;
+double g_BullishOrderBlockHigh = 0.0;
+double g_BearishOrderBlockLow = 0.0;
+double g_BearishOrderBlockHigh = 0.0;
+datetime g_BullishOrderBlockTime = 0;
+datetime g_BearishOrderBlockTime = 0;
+bool g_BullishFVGActive = false;
+bool g_BearishFVGActive = false;
+double g_BullishFVGLow = 0.0;
+double g_BullishFVGHigh = 0.0;
+double g_BearishFVGLow = 0.0;
+double g_BearishFVGHigh = 0.0;
+datetime g_BullishFVGTime = 0;
+datetime g_BearishFVGTime = 0;
+bool g_BuyLiquiditySweepActive = false;
+bool g_SellLiquiditySweepActive = false;
+datetime g_BuyLiquiditySweepTime = 0;
+datetime g_SellLiquiditySweepTime = 0;
+double g_DealingRangeLow = 0.0;
+double g_DealingRangeHigh = 0.0;
+double g_DealingRangeMid = 0.0;
+// Candle Pattern globals
+int g_CandlePatternSignal = 0;   // +1=bullish pattern, -1=bearish, 0=none
+string g_CandlePatternName = ""; // Name of detected pattern
+// Breakout + Retest globals
+bool g_BuyBreakoutRetestActive = false;
+bool g_SellBreakoutRetestActive = false;
+double g_BuyBreakoutLevel = 0.0;
+double g_SellBreakoutLevel = 0.0;
+datetime g_LastBuyInstantEntry = 0;
+datetime g_LastSellInstantEntry = 0;
+datetime g_LastBuyPatternEntryBar = 0;
+datetime g_LastSellPatternEntryBar = 0;
+// Partial TP tracking
+struct PartialTPEntry
+{
+    ulong ticket;
+    bool partialTaken;
+};
+PartialTPEntry g_PartialTPTracking[];
+int g_PartialTPCount = 0;
 // Multi-bundle system: each bundle has unique ID and tracks its own positions
 struct BundleEntry
 {
@@ -280,6 +438,13 @@ int OnInit()
     }
     
     // Update panel on startup
+    if(UseAggressiveTesterProfile())
+        AddToLog("Runtime Profile: AGGRESSIVE TESTER", "PROFILE");
+    else if(UseConservativeLiveProfile())
+        AddToLog("Runtime Profile: CONSERVATIVE LIVE", "PROFILE");
+    else
+        AddToLog("Runtime Profile: STANDARD", "PROFILE");
+
     UpdateLicensePanel();
     return(INIT_SUCCEEDED);
 }
@@ -325,6 +490,16 @@ void OnDeinit(const int reason)
     ObjectDelete(0, "EA_EntrySignal");
     ObjectDelete(0, "EA_NeutralInfo");
     ObjectDelete(0, "EA_ATRInfo");
+    ObjectDelete(0, "EA_StructureInfo");
+    ObjectDelete(0, "EA_SRInfo");
+    ObjectDelete(0, "EA_OrderBlockInfo");
+    ObjectDelete(0, "EA_FVGInfo");
+    ObjectDelete(0, "EA_SweepInfo");
+    ObjectDelete(0, "EA_PremiumInfo");
+    ObjectDelete(0, "EA_CandlePatternInfo");
+    ObjectDelete(0, "EA_RoundNumberInfo");
+    ObjectDelete(0, "EA_BreakoutInfo");
+    ObjectDelete(0, "EA_DynamicTPInfo");
     
     // Only delete pending orders when EA is actually removed
     if(reason == REASON_REMOVE || reason == REASON_CHARTCLOSE || reason == REASON_PROGRAM)
@@ -401,6 +576,9 @@ void OnTick()
     
     // Update H1 trend confirmation (confirm hoye trade open)
     UpdateH1TrendConfirmation();
+
+    // Update price-action zones for smart entry placement
+    UpdatePriceActionContext();
     
     // Update ATR for dynamic gap calculation
     UpdateATR();
@@ -416,6 +594,9 @@ void OnTick()
     bool newsBlackoutActive = IsNewsBlackoutActive();
     bool gridRegimeOK = (!EnableADXRegimeFilter || g_CurrentADX <= MaxADXForGrid);
     bool trendRegimeOK = (!EnableADXRegimeFilter || g_CurrentADX >= MinADXForTrend);
+    bool ignoreNeutralFilter = RuntimeIgnoreNeutralFilter();
+    bool keepNormalPendingOrdersRuntime = RuntimeKeepNormalPendingOrders();
+    bool neutralBlocksAllEntries = (g_NeutralTradeBlocked && !ignoreNeutralFilter);
     bool allowNewNormalEntries = !newsBlackoutActive &&
                                  ((gridSessionActive && gridRegimeOK) || (trendSessionActive && trendRegimeOK));
     
@@ -428,13 +609,16 @@ void OnTick()
     {
         double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
         string trendStr = (g_TrendBias == 1) ? "UP" : (g_TrendBias == -1) ? "DOWN" : "FLAT";
-        AddToLog(StringFormat("DEBUG | Price: %.2f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d | Trend: %s | ADX: %.1f", 
+        AddToLog(StringFormat("DEBUG | Price: %.2f | BuyMode: %s | SellMode: %s | BuyPos: %d | SellPos: %d | Trend: %s | Macro: %d | Structure: %d | H1Slope: %.1f | ADX: %.1f", 
             currentBid,
             buyInRecovery ? "RECOVERY" : "NORMAL",
             sellInRecovery ? "RECOVERY" : "NORMAL",
             currentBuyPositions,
             currentSellPositions,
             trendStr,
+            g_MacroTrendBias,
+            g_StructureTrendBias,
+            g_H1SlopePips,
             g_CurrentADX), "DEBUG");
         lastDebugLog = TimeCurrent();
     }
@@ -489,34 +673,48 @@ void OnTick()
     // M5 Momentum (druto signal) + H1 Trend Confirmation (confirm hoye trade open)
     // 
     // BUY Entry Requires:
-    //   - M5 bullish momentum (g_MomentumSignal = +1) 
-    //   - H1 bullish trend confirmed (g_TrendBias = +1) OR neutral (g_TrendBias = 0)
+    //   - M5 bullish momentum (g_MomentumSignal = +1)
+    //   - Smart trend consensus confirmed bullish (macro + structure + H1 EMA)
+    //   - Normal-grid target level must align with S/R, order block, or FVG confluence
     //
     // SELL Entry Requires:
     //   - M5 bearish momentum (g_MomentumSignal = -1)
-    //   - H1 bearish trend confirmed (g_TrendBias = -1) OR neutral (g_TrendBias = 0)
+    //   - Smart trend consensus confirmed bearish (macro + structure + H1 EMA)
+    //   - Normal-grid target level must align with S/R, order block, or FVG confluence
     
     // === BUY SIDE ===
-    bool buyMomentumOK = (!EnableM5Momentum || g_MomentumSignal == 1);  // M5 bullish momentum
-    bool buyTrendOK = (!EnableTrendFilter || g_TrendBias >= 0);         // H1 bullish or neutral
-    bool buyAllowed = buyMomentumOK && buyTrendOK;
+    bool buyAllowed = IsSideSignalAllowed(true);
+    string buyBlockReason = "";
+    bool buyBlockedByOppositeSide = ShouldBlockNewEntriesForSide(true, buyBlockReason);
+    static datetime lastBuyGuardLog = 0;
     
     if(!allowNewNormalEntries && !buyInRecovery)
     {
+        if(!keepNormalPendingOrdersRuntime)
+            DeleteAllPendingOrdersForSide(true);
+    }
+    else if(neutralBlocksAllEntries)
+    {
         DeleteAllPendingOrdersForSide(true);
+    }
+    else if(buyBlockedByOppositeSide && !buyInRecovery)
+    {
+        DeleteAllPendingOrdersForSide(true);
+        if(TimeCurrent() - lastBuyGuardLog > 20)
+        {
+            AddToLog(StringFormat("BUY entries blocked: %s", buyBlockReason), "GUARD");
+            lastBuyGuardLog = TimeCurrent();
+        }
     }
     else if(!buyAllowed)
     {
         // No M5 momentum or H1 trend against BUY — delete all BUY pending orders
-        DeleteAllPendingOrdersForSide(true);
-    }
-    else if(g_NeutralTradeBlocked && !buyInRecovery)
-    {
-        // Neutral filter blocks fresh normal-mode entries after sustained sideways market
-        DeleteAllPendingOrdersForSide(true);
+        if(!keepNormalPendingOrdersRuntime)
+            DeleteAllPendingOrdersForSide(true);
     }
     else if(!buyInRecovery)
     {
+        TryInstantMarketEntry(true);
         ManageNormalGrid(true);  // BUY Normal Mode
     }
     else
@@ -527,26 +725,38 @@ void OnTick()
     }
         
     // === SELL SIDE ===
-    bool sellMomentumOK = (!EnableM5Momentum || g_MomentumSignal == -1); // M5 bearish momentum
-    bool sellTrendOK = (!EnableTrendFilter || g_TrendBias <= 0);         // H1 bearish or neutral
-    bool sellAllowed = sellMomentumOK && sellTrendOK;
+    bool sellAllowed = IsSideSignalAllowed(false);
+    string sellBlockReason = "";
+    bool sellBlockedByOppositeSide = ShouldBlockNewEntriesForSide(false, sellBlockReason);
+    static datetime lastSellGuardLog = 0;
     
     if(!allowNewNormalEntries && !sellInRecovery)
     {
+        if(!keepNormalPendingOrdersRuntime)
+            DeleteAllPendingOrdersForSide(false);
+    }
+    else if(neutralBlocksAllEntries)
+    {
         DeleteAllPendingOrdersForSide(false);
+    }
+    else if(sellBlockedByOppositeSide && !sellInRecovery)
+    {
+        DeleteAllPendingOrdersForSide(false);
+        if(TimeCurrent() - lastSellGuardLog > 20)
+        {
+            AddToLog(StringFormat("SELL entries blocked: %s", sellBlockReason), "GUARD");
+            lastSellGuardLog = TimeCurrent();
+        }
     }
     else if(!sellAllowed)
     {
         // No M5 momentum or H1 trend against SELL — delete all SELL pending orders
-        DeleteAllPendingOrdersForSide(false);
-    }
-    else if(g_NeutralTradeBlocked && !sellInRecovery)
-    {
-        // Neutral filter blocks fresh normal-mode entries after sustained sideways market
-        DeleteAllPendingOrdersForSide(false);
+        if(!keepNormalPendingOrdersRuntime)
+            DeleteAllPendingOrdersForSide(false);
     }
     else if(!sellInRecovery)
     {
+        TryInstantMarketEntry(false);
         ManageNormalGrid(false); // SELL Normal Mode
     }
     else
@@ -558,6 +768,9 @@ void OnTick()
     
     // CRITICAL: Recovery Mode TP Worker - runs every tick to ensure TP is at breakeven
     EnsureRecoveryModeTP();
+    
+    // Partial Take Profit worker - close portion of position at first target
+    ProcessPartialTakeProfit();
     
     // Apply trailing stops
     ApplyTrailing();
@@ -747,6 +960,134 @@ bool IsTesterMode()
     return (TesterMode && (MQLInfoInteger(MQL_TESTER) != 0));
 }
 
+bool UseAggressiveTesterProfile()
+{
+    return (UseSeparateRuntimeProfiles && EnableAggressiveTesterProfile && (MQLInfoInteger(MQL_TESTER) != 0));
+}
+
+bool UseConservativeLiveProfile()
+{
+    return (UseSeparateRuntimeProfiles && EnableConservativeLiveProfile && (MQLInfoInteger(MQL_TESTER) == 0));
+}
+
+bool RuntimeAllowDirectEntry()
+{
+    if(UseAggressiveTesterProfile())
+        return TesterAllowDirectEntry;
+    if(UseConservativeLiveProfile())
+        return LiveAllowDirectEntry;
+    return EnableInstantMarketEntry;
+}
+
+int RuntimeInstantEntryCooldownMinutes()
+{
+    if(UseAggressiveTesterProfile())
+        return TesterInstantEntryCooldownMinutes;
+    if(UseConservativeLiveProfile())
+        return LiveInstantEntryCooldownMinutes;
+    return InstantEntryCooldownMinutes;
+}
+
+int RuntimeInstantEntryRequiredSignals()
+{
+    if(UseAggressiveTesterProfile())
+        return TesterInstantEntryRequiredSignals;
+    if(UseConservativeLiveProfile())
+        return LiveInstantEntryRequiredSignals;
+    return InstantEntryRequiredSignals;
+}
+
+bool RuntimeKeepNormalPendingOrders()
+{
+    if(UseAggressiveTesterProfile())
+        return TesterKeepNormalPendingOrders;
+    if(UseConservativeLiveProfile())
+        return LiveKeepNormalPendingOrders;
+    return KeepNormalPendingOrders;
+}
+
+bool RuntimeIgnoreNeutralFilter()
+{
+    if(UseAggressiveTesterProfile())
+        return TesterIgnoreNeutralFilter;
+    if(UseConservativeLiveProfile())
+        return LiveIgnoreNeutralFilter;
+    return false;
+}
+
+double NormalizeLotToBroker(double lotCandidate)
+{
+    double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+    double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+    double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+
+    if(minLot <= 0) minLot = 0.01;
+    if(maxLot <= 0) maxLot = 100.0;
+    if(lotStep <= 0) lotStep = 0.01;
+
+    lotCandidate = MathFloor((lotCandidate + 1e-9) / lotStep) * lotStep;
+    lotCandidate = MathMax(minLot, MathMin(maxLot, lotCandidate));
+    return lotCandidate;
+}
+
+double GetEffectiveBalanceForSizing()
+{
+    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+    if(balance <= 0.0)
+        return balance;
+
+    double effectiveBalance = balance;
+    if(BalanceSizingDivisor > 0.0)
+        effectiveBalance = balance / BalanceSizingDivisor;
+
+    if(AutoDetectCentBalanceInTester && MQLInfoInteger(MQL_TESTER) != 0 && BalanceSizingDivisor <= 1.0)
+    {
+        double centAdjustedBalance = balance / 100.0;
+        if((balance >= 10000.0 || effectiveBalance >= 10000.0) && centAdjustedBalance > 0.0 && centAdjustedBalance < effectiveBalance)
+            effectiveBalance = centAdjustedBalance;
+    }
+
+    return effectiveBalance;
+}
+
+double GetBaseLotSize()
+{
+    double baseLot = LotSize;
+
+    if(EnableBalanceLotSizing && BalanceLotReferenceUSD > 0.0 && BalanceLotReferenceVolume > 0.0)
+    {
+        double effectiveBalance = GetEffectiveBalanceForSizing();
+        if(effectiveBalance > 0.0)
+            baseLot = (effectiveBalance / BalanceLotReferenceUSD) * BalanceLotReferenceVolume;
+    }
+
+    if(MaxBaseLotCap > 0.0)
+        baseLot = MathMin(baseLot, MaxBaseLotCap);
+
+    return NormalizeLotToBroker(baseLot);
+}
+
+double GetScaledRecoveryLotIncrement()
+{
+    double baseLot = GetBaseLotSize();
+    if(LotSize <= 0.0)
+        return RecoveryLotIncrement;
+
+    double scale = baseLot / LotSize;
+    return RecoveryLotIncrement * scale;
+}
+
+double GetScaledRecoveryMaxLotSize()
+{
+    double baseLot = GetBaseLotSize();
+    if(LotSize <= 0.0)
+        return MathMax(MaxRecoveryLotSize, baseLot);
+
+    double recoveryFactor = MaxRecoveryLotSize / LotSize;
+    double scaledCap = baseLot * recoveryFactor;
+    return MathMax(MaxRecoveryLotSize, scaledCap);
+}
+
 int GetNeutralLookbackBars()
 {
     if(!EnableNeutralMarketFilter || NeutralMarketAvoidMinutes <= 0)
@@ -885,28 +1226,1513 @@ void UpdateNeutralMarketFilter()
     lastBlocked = g_NeutralTradeBlocked;
 }
 
+string TimeframeToText(ENUM_TIMEFRAMES timeframe)
+{
+    switch(timeframe)
+    {
+        case PERIOD_M5: return "M5";
+        case PERIOD_M15: return "M15";
+        case PERIOD_M30: return "M30";
+        case PERIOD_H1: return "H1";
+        case PERIOD_H4: return "H4";
+        case PERIOD_D1: return "D1";
+        case PERIOD_W1: return "W1";
+    }
+    return "TF";
+}
+
+bool IsSwingHigh(const double &highs[], int index, int strength)
+{
+    for(int offset = 1; offset <= strength; offset++)
+    {
+        if(highs[index] <= highs[index - offset] || highs[index] <= highs[index + offset])
+            return false;
+    }
+    return true;
+}
+
+bool IsSwingLow(const double &lows[], int index, int strength)
+{
+    for(int offset = 1; offset <= strength; offset++)
+    {
+        if(lows[index] >= lows[index - offset] || lows[index] >= lows[index + offset])
+            return false;
+    }
+    return true;
+}
+
+int DetectStructureBias(ENUM_TIMEFRAMES timeframe, int swingStrength, int scanBars, double &recentSupport, double &recentResistance)
+{
+    recentSupport = 0.0;
+    recentResistance = 0.0;
+
+    int barsToRead = MathMax(scanBars, swingStrength * 6 + 20);
+    double highs[];
+    double lows[];
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+
+    if(CopyHigh(_Symbol, timeframe, 1, barsToRead, highs) < barsToRead ||
+       CopyLow(_Symbol, timeframe, 1, barsToRead, lows) < barsToRead)
+        return 0;
+
+    double high1 = 0.0, high2 = 0.0;
+    double low1 = 0.0, low2 = 0.0;
+    int highsFound = 0;
+    int lowsFound = 0;
+
+    for(int i = swingStrength; i < barsToRead - swingStrength; i++)
+    {
+        if(highsFound < 2 && IsSwingHigh(highs, i, swingStrength))
+        {
+            if(highsFound == 0)
+                high1 = highs[i];
+            else
+                high2 = highs[i];
+            highsFound++;
+        }
+
+        if(lowsFound < 2 && IsSwingLow(lows, i, swingStrength))
+        {
+            if(lowsFound == 0)
+                low1 = lows[i];
+            else
+                low2 = lows[i];
+            lowsFound++;
+        }
+
+        if(highsFound >= 2 && lowsFound >= 2)
+            break;
+    }
+
+    if(lowsFound == 0)
+    {
+        int minIndex = ArrayMinimum(lows);
+        if(minIndex >= 0)
+        {
+            low1 = lows[minIndex];
+            lowsFound = 1;
+        }
+    }
+    if(highsFound == 0)
+    {
+        int maxIndex = ArrayMaximum(highs);
+        if(maxIndex >= 0)
+        {
+            high1 = highs[maxIndex];
+            highsFound = 1;
+        }
+    }
+
+    recentSupport = low1;
+    recentResistance = high1;
+
+    if(highsFound < 2 || lowsFound < 2)
+        return 0;
+
+    if(high1 > high2 && low1 > low2)
+        return 1;
+    if(high1 < high2 && low1 < low2)
+        return -1;
+    return 0;
+}
+
+bool FindRecentOrderBlock(bool isBuy, ENUM_TIMEFRAMES timeframe, int maxAgeBars, double impulseMultiplier,
+                          double &zoneLow, double &zoneHigh, datetime &zoneTime)
+{
+    zoneLow = 0.0;
+    zoneHigh = 0.0;
+    zoneTime = 0;
+
+    int barsToRead = MathMax(maxAgeBars + 10, 20);
+    double opens[];
+    double closes[];
+    double highs[];
+    double lows[];
+    datetime times[];
+    ArraySetAsSeries(opens, true);
+    ArraySetAsSeries(closes, true);
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+    ArraySetAsSeries(times, true);
+
+    if(CopyOpen(_Symbol, timeframe, 1, barsToRead, opens) < barsToRead ||
+       CopyClose(_Symbol, timeframe, 1, barsToRead, closes) < barsToRead ||
+       CopyHigh(_Symbol, timeframe, 1, barsToRead, highs) < barsToRead ||
+       CopyLow(_Symbol, timeframe, 1, barsToRead, lows) < barsToRead ||
+       CopyTime(_Symbol, timeframe, 1, barsToRead, times) < barsToRead)
+        return false;
+
+    for(int i = 2; i < MathMin(maxAgeBars, barsToRead - 6); i++)
+    {
+        bool candidateOpposite = isBuy ? (closes[i] < opens[i]) : (closes[i] > opens[i]);
+        if(!candidateOpposite) continue;
+
+        double avgRange = 0.0;
+        int avgCount = 0;
+        for(int j = i; j < MathMin(i + 6, barsToRead); j++)
+        {
+            avgRange += (highs[j] - lows[j]);
+            avgCount++;
+        }
+        if(avgCount <= 0) continue;
+        avgRange /= avgCount;
+
+        if(isBuy)
+        {
+            double impulse = closes[i - 2] - highs[i];
+            if(closes[i - 2] <= highs[i] || impulse < avgRange * impulseMultiplier)
+                continue;
+
+            zoneLow = lows[i];
+            zoneHigh = MathMax(opens[i], closes[i]);
+        }
+        else
+        {
+            double impulse = lows[i] - closes[i - 2];
+            if(closes[i - 2] >= lows[i] || impulse < avgRange * impulseMultiplier)
+                continue;
+
+            zoneLow = MathMin(opens[i], closes[i]);
+            zoneHigh = highs[i];
+        }
+
+        zoneTime = times[i];
+        return true;
+    }
+
+    return false;
+}
+
+bool FindRecentFVG(bool isBuy, ENUM_TIMEFRAMES timeframe, int maxAgeBars, double minGapPips,
+                   double &zoneLow, double &zoneHigh, datetime &zoneTime)
+{
+    zoneLow = 0.0;
+    zoneHigh = 0.0;
+    zoneTime = 0;
+
+    int barsToRead = MathMax(maxAgeBars + 5, 12);
+    double opens[];
+    double closes[];
+    double highs[];
+    double lows[];
+    datetime times[];
+    ArraySetAsSeries(opens, true);
+    ArraySetAsSeries(closes, true);
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+    ArraySetAsSeries(times, true);
+
+    if(CopyOpen(_Symbol, timeframe, 1, barsToRead, opens) < barsToRead ||
+       CopyClose(_Symbol, timeframe, 1, barsToRead, closes) < barsToRead ||
+       CopyHigh(_Symbol, timeframe, 1, barsToRead, highs) < barsToRead ||
+       CopyLow(_Symbol, timeframe, 1, barsToRead, lows) < barsToRead ||
+       CopyTime(_Symbol, timeframe, 1, barsToRead, times) < barsToRead)
+        return false;
+
+    double minGapPrice = minGapPips * pip;
+
+    for(int i = 0; i < MathMin(maxAgeBars, barsToRead - 2); i++)
+    {
+        int mid = i + 1;
+        int older = i + 2;
+
+        if(isBuy)
+        {
+            double gap = lows[i] - highs[older];
+            if(lows[i] > highs[older] && closes[mid] > opens[mid] && gap >= minGapPrice)
+            {
+                zoneLow = highs[older];
+                zoneHigh = lows[i];
+                zoneTime = times[mid];
+                return true;
+            }
+        }
+        else
+        {
+            double gap = lows[older] - highs[i];
+            if(highs[i] < lows[older] && closes[mid] < opens[mid] && gap >= minGapPrice)
+            {
+                zoneLow = highs[i];
+                zoneHigh = lows[older];
+                zoneTime = times[mid];
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool FindDealingRange(ENUM_TIMEFRAMES timeframe, int lookbackBars, double &rangeLow, double &rangeHigh)
+{
+    rangeLow = 0.0;
+    rangeHigh = 0.0;
+
+    int barsToRead = MathMax(lookbackBars, 20);
+    double highs[];
+    double lows[];
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+
+    if(CopyHigh(_Symbol, timeframe, 1, barsToRead, highs) < barsToRead ||
+       CopyLow(_Symbol, timeframe, 1, barsToRead, lows) < barsToRead)
+        return false;
+
+    int maxIndex = ArrayMaximum(highs);
+    int minIndex = ArrayMinimum(lows);
+    if(maxIndex < 0 || minIndex < 0)
+        return false;
+
+    rangeHigh = highs[maxIndex];
+    rangeLow = lows[minIndex];
+    return (rangeHigh > rangeLow);
+}
+
+bool DetectLiquiditySweep(bool isBuy, ENUM_TIMEFRAMES timeframe, int maxAgeBars, double referenceLevel,
+                          double tolerancePips, datetime &sweepTime)
+{
+    sweepTime = 0;
+    if(referenceLevel <= 0.0)
+        return false;
+
+    int barsToRead = MathMax(maxAgeBars + 3, 10);
+    double highs[];
+    double lows[];
+    double closes[];
+    datetime times[];
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+    ArraySetAsSeries(closes, true);
+    ArraySetAsSeries(times, true);
+
+    if(CopyHigh(_Symbol, timeframe, 1, barsToRead, highs) < barsToRead ||
+       CopyLow(_Symbol, timeframe, 1, barsToRead, lows) < barsToRead ||
+       CopyClose(_Symbol, timeframe, 1, barsToRead, closes) < barsToRead ||
+       CopyTime(_Symbol, timeframe, 1, barsToRead, times) < barsToRead)
+        return false;
+
+    double tolerance = tolerancePips * pip;
+    for(int i = 0; i < MathMin(maxAgeBars, barsToRead); i++)
+    {
+        if(isBuy)
+        {
+            if(lows[i] < (referenceLevel - tolerance) && closes[i] > referenceLevel)
+            {
+                sweepTime = times[i];
+                return true;
+            }
+        }
+        else
+        {
+            if(highs[i] > (referenceLevel + tolerance) && closes[i] < referenceLevel)
+            {
+                sweepTime = times[i];
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+void UpdatePriceActionContext()
+{
+    double srSupport = 0.0;
+    double srResistance = 0.0;
+    DetectStructureBias(SupportResistanceTimeframe, StructureSwingStrength, StructureScanBars, srSupport, srResistance);
+    g_SupportLevel = srSupport;
+    g_ResistanceLevel = srResistance;
+
+    g_BullishOrderBlockActive = FindRecentOrderBlock(true, OrderBlockTimeframe, OrderBlockMaxAgeBars,
+                                                     OrderBlockImpulseMultiplier, g_BullishOrderBlockLow,
+                                                     g_BullishOrderBlockHigh, g_BullishOrderBlockTime);
+    g_BearishOrderBlockActive = FindRecentOrderBlock(false, OrderBlockTimeframe, OrderBlockMaxAgeBars,
+                                                     OrderBlockImpulseMultiplier, g_BearishOrderBlockLow,
+                                                     g_BearishOrderBlockHigh, g_BearishOrderBlockTime);
+
+    g_BullishFVGActive = FindRecentFVG(true, FVGTimeframe, FVGMaxAgeBars, FVGMinGapPips,
+                                       g_BullishFVGLow, g_BullishFVGHigh, g_BullishFVGTime);
+    g_BearishFVGActive = FindRecentFVG(false, FVGTimeframe, FVGMaxAgeBars, FVGMinGapPips,
+                                       g_BearishFVGLow, g_BearishFVGHigh, g_BearishFVGTime);
+
+    if(!FindDealingRange(PremiumDiscountTimeframe, PremiumDiscountLookbackBars, g_DealingRangeLow, g_DealingRangeHigh))
+    {
+        g_DealingRangeLow = 0.0;
+        g_DealingRangeHigh = 0.0;
+        g_DealingRangeMid = 0.0;
+    }
+    else
+    {
+        g_DealingRangeMid = (g_DealingRangeLow + g_DealingRangeHigh) * 0.5;
+    }
+
+    g_BuyLiquiditySweepActive = DetectLiquiditySweep(true, LiquiditySweepTimeframe, LiquiditySweepMaxAgeBars,
+                                                     g_SupportLevel, LiquiditySweepTolerancePips,
+                                                     g_BuyLiquiditySweepTime);
+    g_SellLiquiditySweepActive = DetectLiquiditySweep(false, LiquiditySweepTimeframe, LiquiditySweepMaxAgeBars,
+                                                      g_ResistanceLevel, LiquiditySweepTolerancePips,
+                                                      g_SellLiquiditySweepTime);
+
+    // Update candle pattern detection
+    UpdateCandlePatternDetection();
+
+    // Update breakout + retest detection
+    UpdateBreakoutRetest();
+}
+
 //+------------------------------------------------------------------+
-//| H1 EMA Trend Confirmation                                          |
-//| g_TrendBias: +1 = Bullish confirmed, -1 = Bearish confirmed      |
-//|              0 = Neutral (no clear H1 trend)                      |
+//| Candle Pattern Detection (Hammer, Engulfing, Pin Bar)             |
+//| Detects high-probability reversal/continuation patterns           |
+//+------------------------------------------------------------------+
+void UpdateCandlePatternDetection()
+{
+    g_CandlePatternSignal = 0;
+    g_CandlePatternName = "";
+    if(!EnableCandlePatterns) return;
+
+    double opens[], closes[], highs[], lows[];
+    ArraySetAsSeries(opens, true);
+    ArraySetAsSeries(closes, true);
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+
+    // Need last 3 closed candles (index 1,2,3 — skip current forming candle at 0)
+    if(CopyOpen(_Symbol, CandlePatternTimeframe, 1, 3, opens) < 3) return;
+    if(CopyClose(_Symbol, CandlePatternTimeframe, 1, 3, closes) < 3) return;
+    if(CopyHigh(_Symbol, CandlePatternTimeframe, 1, 3, highs) < 3) return;
+    if(CopyLow(_Symbol, CandlePatternTimeframe, 1, 3, lows) < 3) return;
+
+    // [0] = most recent closed candle, [1] = previous, [2] = oldest
+
+    double body0 = MathAbs(closes[0] - opens[0]);
+    double body1 = MathAbs(closes[1] - opens[1]);
+    double range0 = highs[0] - lows[0];
+    double range1 = highs[1] - lows[1];
+    bool bullish0 = (closes[0] > opens[0]);
+    bool bearish0 = (closes[0] < opens[0]);
+    bool bullish1 = (closes[1] > opens[1]);
+    bool bearish1 = (closes[1] < opens[1]);
+
+    double body0Pips = body0 / pip;
+    double body1Pips = body1 / pip;
+
+    // ===== 1. BULLISH HAMMER / PIN BAR =====
+    // Long lower wick, small body at top, lower wick >= PinBarWickBodyRatio × body
+    if(range0 > 0 && body0 > 0)
+    {
+        double upperWick0 = highs[0] - MathMax(opens[0], closes[0]);
+        double lowerWick0 = MathMin(opens[0], closes[0]) - lows[0];
+
+        // Bullish Hammer: long lower wick, body at top
+        if(lowerWick0 >= body0 * PinBarWickBodyRatio && upperWick0 < body0 * 0.5 && body0Pips >= 0.5)
+        {
+            g_CandlePatternSignal = 1;
+            g_CandlePatternName = "Bullish Hammer";
+        }
+        // Bearish Shooting Star: long upper wick, body at bottom
+        else if(upperWick0 >= body0 * PinBarWickBodyRatio && lowerWick0 < body0 * 0.5 && body0Pips >= 0.5)
+        {
+            g_CandlePatternSignal = -1;
+            g_CandlePatternName = "Bearish ShootingStar";
+        }
+        // Bullish Pin Bar: long lower wick overall
+        else if(lowerWick0 >= body0 * PinBarWickBodyRatio && lowerWick0 > range0 * 0.6)
+        {
+            g_CandlePatternSignal = 1;
+            g_CandlePatternName = "Bullish PinBar";
+        }
+        // Bearish Pin Bar: long upper wick overall
+        else if(upperWick0 >= body0 * PinBarWickBodyRatio && upperWick0 > range0 * 0.6)
+        {
+            g_CandlePatternSignal = -1;
+            g_CandlePatternName = "Bearish PinBar";
+        }
+    }
+
+    // ===== 2. BULLISH ENGULFING =====
+    // Previous candle bearish, current candle bullish and body engulfs previous body
+    if(g_CandlePatternSignal == 0 && body0Pips >= EngulfingMinBodyPips && body1Pips >= 0.5)
+    {
+        if(bullish0 && bearish1 &&
+           closes[0] > opens[1] && opens[0] < closes[1])
+        {
+            g_CandlePatternSignal = 1;
+            g_CandlePatternName = "Bullish Engulfing";
+        }
+        // BEARISH ENGULFING
+        else if(bearish0 && bullish1 &&
+                closes[0] < opens[1] && opens[0] > closes[1])
+        {
+            g_CandlePatternSignal = -1;
+            g_CandlePatternName = "Bearish Engulfing";
+        }
+    }
+
+    // ===== 3. MORNING STAR (3-candle bullish reversal) =====
+    if(g_CandlePatternSignal == 0)
+    {
+        double body2 = MathAbs(closes[2] - opens[2]);
+        double body2Pips = body2 / pip;
+        bool bearish2 = (closes[2] < opens[2]);
+
+        // Morning Star: bearish[2] + small body[1] + bullish[0], closes above midpoint of [2]
+        if(bearish2 && body2Pips >= EngulfingMinBodyPips &&
+           body1Pips < body2Pips * 0.5 &&
+           bullish0 && body0Pips >= EngulfingMinBodyPips &&
+           closes[0] > (opens[2] + closes[2]) * 0.5)
+        {
+            g_CandlePatternSignal = 1;
+            g_CandlePatternName = "Morning Star";
+        }
+        // Evening Star: bullish[2] + small body[1] + bearish[0]
+        bool bullish2 = (closes[2] > opens[2]);
+        if(bullish2 && body2Pips >= EngulfingMinBodyPips &&
+           body1Pips < body2Pips * 0.5 &&
+           bearish0 && body0Pips >= EngulfingMinBodyPips &&
+           closes[0] < (opens[2] + closes[2]) * 0.5)
+        {
+            g_CandlePatternSignal = -1;
+            g_CandlePatternName = "Evening Star";
+        }
+    }
+
+    if(g_CandlePatternSignal != 0)
+    {
+        static datetime lastPatternLog = 0;
+        if(TimeCurrent() - lastPatternLog > 30)
+        {
+            AddToLog(StringFormat("CANDLE PATTERN: %s (%s)", g_CandlePatternName,
+                g_CandlePatternSignal == 1 ? "BULLISH" : "BEARISH"), "PATTERN");
+            lastPatternLog = TimeCurrent();
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Round Number / Psychological Level Check                          |
+//| Returns true if price is near a round number (e.g., 2300, 2350)  |
+//+------------------------------------------------------------------+
+bool IsRoundNumberAligned(double price)
+{
+    if(!EnableRoundNumberFilter) return false;
+
+    double remainder = MathMod(price, RoundNumberInterval);
+    double distToRound = MathMin(remainder, RoundNumberInterval - remainder);
+    double zonePriceUnits = RoundNumberZonePips * pip;
+
+    return (distToRound <= zonePriceUnits);
+}
+
+//+------------------------------------------------------------------+
+//| Get Nearest Round Number Level                                    |
+//+------------------------------------------------------------------+
+double GetNearestRoundNumber(double price)
+{
+    double lower = MathFloor(price / RoundNumberInterval) * RoundNumberInterval;
+    double upper = lower + RoundNumberInterval;
+    return (MathAbs(price - lower) <= MathAbs(price - upper)) ? lower : upper;
+}
+
+//+------------------------------------------------------------------+
+//| Breakout + Retest Detection                                       |
+//| Detects when price breaks a key S/R level then retests it         |
+//+------------------------------------------------------------------+
+void UpdateBreakoutRetest()
+{
+    g_BuyBreakoutRetestActive = false;
+    g_SellBreakoutRetestActive = false;
+    g_BuyBreakoutLevel = 0.0;
+    g_SellBreakoutLevel = 0.0;
+    if(!EnableBreakoutRetest) return;
+
+    int barsToRead = MathMax(BreakoutLookbackBars + BreakoutRetestMaxBars + 5, 30);
+    double opens[], closes[], highs[], lows[];
+    ArraySetAsSeries(opens, true);
+    ArraySetAsSeries(closes, true);
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+
+    if(CopyOpen(_Symbol, BreakoutTimeframe, 0, barsToRead, opens) < barsToRead) return;
+    if(CopyClose(_Symbol, BreakoutTimeframe, 0, barsToRead, closes) < barsToRead) return;
+    if(CopyHigh(_Symbol, BreakoutTimeframe, 0, barsToRead, highs) < barsToRead) return;
+    if(CopyLow(_Symbol, BreakoutTimeframe, 0, barsToRead, lows) < barsToRead) return;
+
+    double tolerance = BreakoutRetestTolerancePips * pip;
+    double minMove = BreakoutMinMovePips * pip;
+
+    // Find swing highs/lows in the lookback zone (excluding recent retest zone)
+    int scanStart = BreakoutRetestMaxBars + 2;
+    int scanEnd = MathMin(BreakoutLookbackBars + BreakoutRetestMaxBars, barsToRead - 2);
+
+    // ===== BULLISH BREAKOUT + RETEST =====
+    // Find resistance level that was broken upward, then price retested from above
+    for(int i = scanStart; i < scanEnd; i++)
+    {
+        // Check if this bar is a swing high (resistance)
+        if(highs[i] > highs[i-1] && highs[i] > highs[i+1])
+        {
+            double resistanceLevel = highs[i];
+
+            // Check if price broke above this level AFTER the swing was formed
+            bool brokeAbove = false;
+            int breakoutBar = -1;
+            for(int j = i - 1; j >= BreakoutRetestMaxBars; j--)
+            {
+                if(closes[j] > resistanceLevel + minMove * 0.5)
+                {
+                    brokeAbove = true;
+                    breakoutBar = j;
+                    break;
+                }
+            }
+            if(!brokeAbove) continue;
+
+            // Check for retest: price came back to broken resistance (now support) in recent bars
+            for(int j = breakoutBar - 1; j >= 0; j--)
+            {
+                if(j > BreakoutRetestMaxBars) continue;
+                double distToLevel = lows[j] - resistanceLevel;
+                if(distToLevel >= -tolerance && distToLevel <= tolerance * 2)
+                {
+                    // Price retested the level and is bouncing — bullish retest confirmed
+                    if(closes[j] > resistanceLevel && closes[j] > opens[j])
+                    {
+                        g_BuyBreakoutRetestActive = true;
+                        g_BuyBreakoutLevel = resistanceLevel;
+                        break;
+                    }
+                }
+            }
+            if(g_BuyBreakoutRetestActive) break;
+        }
+    }
+
+    // ===== BEARISH BREAKOUT + RETEST =====
+    // Find support level that was broken downward, then price retested from below
+    for(int i = scanStart; i < scanEnd; i++)
+    {
+        // Check if this bar is a swing low (support)
+        if(lows[i] < lows[i-1] && lows[i] < lows[i+1])
+        {
+            double supportLevel = lows[i];
+
+            // Check if price broke below this level AFTER the swing was formed
+            bool brokeBelow = false;
+            int breakoutBar = -1;
+            for(int j = i - 1; j >= BreakoutRetestMaxBars; j--)
+            {
+                if(closes[j] < supportLevel - minMove * 0.5)
+                {
+                    brokeBelow = true;
+                    breakoutBar = j;
+                    break;
+                }
+            }
+            if(!brokeBelow) continue;
+
+            // Check for retest: price came back to broken support (now resistance) in recent bars
+            for(int j = breakoutBar - 1; j >= 0; j--)
+            {
+                if(j > BreakoutRetestMaxBars) continue;
+                double distToLevel = supportLevel - highs[j];
+                if(distToLevel >= -tolerance && distToLevel <= tolerance * 2)
+                {
+                    // Price retested the level and is rejecting — bearish retest confirmed
+                    if(closes[j] < supportLevel && closes[j] < opens[j])
+                    {
+                        g_SellBreakoutRetestActive = true;
+                        g_SellBreakoutLevel = supportLevel;
+                        break;
+                    }
+                }
+            }
+            if(g_SellBreakoutRetestActive) break;
+        }
+    }
+
+    if(g_BuyBreakoutRetestActive || g_SellBreakoutRetestActive)
+    {
+        static datetime lastBreakoutLog = 0;
+        if(TimeCurrent() - lastBreakoutLog > 30)
+        {
+            if(g_BuyBreakoutRetestActive)
+                AddToLog(StringFormat("BREAKOUT RETEST: BUY signal at %.2f", g_BuyBreakoutLevel), "BREAKOUT");
+            if(g_SellBreakoutRetestActive)
+                AddToLog(StringFormat("BREAKOUT RETEST: SELL signal at %.2f", g_SellBreakoutLevel), "BREAKOUT");
+            lastBreakoutLog = TimeCurrent();
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Calculate Dynamic TP based on ATR                                 |
+//| Returns TP in pips, clamped between min and max                   |
+//+------------------------------------------------------------------+
+double GetDynamicTPPips()
+{
+    if(!EnableATRDynamicTP || g_CurrentATR <= 0)
+        return 0.0;
+
+    double dynamicTP = g_CurrentATR * ATR_TP_Multiplier;
+    dynamicTP = MathMax(dynamicTP, ATR_TP_MinPips);
+    dynamicTP = MathMin(dynamicTP, ATR_TP_MaxPips);
+    return dynamicTP;
+}
+
+//+------------------------------------------------------------------+
+//| Calculate Dynamic SL based on ATR                                 |
+//| Returns SL in pips (0 = use fixed SL)                             |
+//+------------------------------------------------------------------+
+double GetDynamicSLPips()
+{
+    if(!EnableATRDynamicTP || ATR_SL_Multiplier <= 0 || g_CurrentATR <= 0)
+        return 0.0;
+
+    double dynamicSL = g_CurrentATR * ATR_SL_Multiplier;
+    dynamicSL = MathMax(dynamicSL, 15.0); // Minimum 15 pips SL
+    dynamicSL = MathMin(dynamicSL, 80.0); // Maximum 80 pips SL
+    return dynamicSL;
+}
+
+int CountNormalPositionsForSide(bool isBuy)
+{
+    int count = 0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue;
+        count++;
+    }
+    return count;
+}
+
+int CountInstantEntryPositionsForSide(bool isBuy)
+{
+    int count = 0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "FastEntry_") >= 0)
+            count++;
+    }
+    return count;
+}
+
+bool IsCandlePatternConfirmedForSide(bool isBuy)
+{
+    if(!EnableCandlePatterns)
+        return true;
+
+    return ((isBuy && g_CandlePatternSignal == 1) || (!isBuy && g_CandlePatternSignal == -1));
+}
+
+datetime GetLatestClosedPatternBarTime()
+{
+    if(!EnableCandlePatterns)
+        return 0;
+
+    datetime candleTimes[];
+    ArraySetAsSeries(candleTimes, true);
+    if(CopyTime(_Symbol, CandlePatternTimeframe, 1, 1, candleTimes) < 1)
+        return 0;
+
+    return candleTimes[0];
+}
+
+double GetLatestClosedCandleRangePips(ENUM_TIMEFRAMES timeframe)
+{
+    double highs[];
+    double lows[];
+    ArraySetAsSeries(highs, true);
+    ArraySetAsSeries(lows, true);
+
+    if(CopyHigh(_Symbol, timeframe, 1, 1, highs) < 1) return 0.0;
+    if(CopyLow(_Symbol, timeframe, 1, 1, lows) < 1) return 0.0;
+    if(pip <= 0.0) return 0.0;
+
+    return (highs[0] - lows[0]) / pip;
+}
+
+bool HasStrongTrendContinuationSignal(bool isBuy, int contextScore)
+{
+    if(!AllowStrongTrendContinuationWithoutPattern)
+        return false;
+
+    int desiredBias = isBuy ? 1 : -1;
+    if(g_TrendBias != desiredBias || g_MomentumSignal != desiredBias)
+        return false;
+
+    if(MathAbs(g_H1SlopePips) < StrongTrendContinuationMinSlopePips)
+        return false;
+
+    if(g_CandlePatternSignal == -desiredBias)
+        return false;
+
+    if((isBuy && g_BuyBreakoutRetestActive) || (!isBuy && g_SellBreakoutRetestActive))
+        return true;
+
+    return (contextScore >= StrongTrendContinuationMinContextScore);
+}
+
+bool IsFreshEntryTriggerValid(bool isBuy, int contextScore, string &reason)
+{
+    reason = "";
+    if(!RequireAlignedCandlePatternForFreshEntries)
+        return true;
+
+    if(IsCandlePatternConfirmedForSide(isBuy))
+        return true;
+
+    if(HasStrongTrendContinuationSignal(isBuy, contextScore))
+    {
+        reason = "strong trend continuation";
+        return true;
+    }
+
+    reason = "fresh entry waiting for candle confirmation";
+    return false;
+}
+
+double GetAdaptiveStopLossPips(bool isBuy)
+{
+    double baseSL = GetDynamicSLPips();
+    if(baseSL <= 0.0)
+        baseSL = isBuy ? BuyStopLossPips : SellStopLossPips;
+
+    double gapFloor = GetDynamicGap(isBuy, false) * AdaptiveSLGapMultiplier;
+    double candleFloor = GetLatestClosedCandleRangePips(CandlePatternTimeframe) * AdaptiveSLCandleRangeMultiplier;
+
+    double adaptiveSL = MathMax(baseSL, MathMax(gapFloor, candleFloor));
+    if(adaptiveSL <= 0.0)
+        adaptiveSL = baseSL;
+
+    return adaptiveSL;
+}
+
+int CountNormalPendingOrdersForSide(bool isBuy)
+{
+    int count = 0;
+    for(int i = 0; i < OrdersTotal(); i++)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue;
+
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if((isBuy && type == ORDER_TYPE_BUY_LIMIT) || (!isBuy && type == ORDER_TYPE_SELL_LIMIT))
+            count++;
+    }
+    return count;
+}
+
+int CountPendingOrdersForSide(bool isBuy)
+{
+    int count = 0;
+    for(int i = 0; i < OrdersTotal(); i++)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if(isBuy && (type == ORDER_TYPE_BUY_LIMIT || type == ORDER_TYPE_BUY_STOP))
+            count++;
+        else if(!isBuy && (type == ORDER_TYPE_SELL_LIMIT || type == ORDER_TYPE_SELL_STOP))
+            count++;
+    }
+    return count;
+}
+
+int CountOpenPositionsForSide(bool isBuy)
+{
+    int count = 0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
+            count++;
+    }
+    return count;
+}
+
+double GetOpenProfitForSide(bool isBuy)
+{
+    double totalProfit = 0.0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type == POSITION_TYPE_BUY) || (!isBuy && type == POSITION_TYPE_SELL))
+            totalProfit += PositionGetDouble(POSITION_PROFIT);
+    }
+    return totalProfit;
+}
+
+double GetNearestNormalExposureDistancePips(bool isBuy, double referencePrice)
+{
+    double nearestDistance = DBL_MAX;
+
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if((isBuy && type != POSITION_TYPE_BUY) || (!isBuy && type != POSITION_TYPE_SELL)) continue;
+
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue;
+
+        double distance = MathAbs(PositionGetDouble(POSITION_PRICE_OPEN) - referencePrice) / pip;
+        if(distance < nearestDistance)
+            nearestDistance = distance;
+    }
+
+    for(int i = 0; i < OrdersTotal(); i++)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if(ticket <= 0) continue;
+        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+
+        string comment = OrderGetString(ORDER_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue;
+
+        ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+        if((isBuy && type != ORDER_TYPE_BUY_LIMIT && type != ORDER_TYPE_BUY_STOP) ||
+           (!isBuy && type != ORDER_TYPE_SELL_LIMIT && type != ORDER_TYPE_SELL_STOP))
+            continue;
+
+        double distance = MathAbs(OrderGetDouble(ORDER_PRICE_OPEN) - referencePrice) / pip;
+        if(distance < nearestDistance)
+            nearestDistance = distance;
+    }
+
+    if(nearestDistance == DBL_MAX)
+        return -1.0;
+
+    return nearestDistance;
+}
+
+bool CanAddInstantEntryExposure(bool isBuy, double entryPrice, string &reason)
+{
+    reason = "";
+
+    int normalPositions = CountNormalPositionsForSide(isBuy);
+    int normalPendingOrders = CountNormalPendingOrdersForSide(isBuy);
+    int allSideExposure = CountOpenPositionsForSide(isBuy) + CountPendingOrdersForSide(isBuy);
+    int maxOrders = isBuy ? MaxBuyOrders : MaxSellOrders;
+
+    if(normalPositions + normalPendingOrders >= maxOrders)
+    {
+        reason = "side already filled to max slots";
+        return false;
+    }
+
+    if(normalPositions > 0 && !EnableTrendPyramidEntry)
+    {
+        reason = "trend pyramid disabled";
+        return false;
+    }
+
+    if(MaxInstantEntriesPerSide > 0 && CountInstantEntryPositionsForSide(isBuy) >= MaxInstantEntriesPerSide)
+    {
+        reason = "max fast entries reached";
+        return false;
+    }
+
+    if(normalPendingOrders > 0 && RuntimeKeepNormalPendingOrders() && !AllowInstantEntryWithPendingGrid)
+    {
+        reason = "pending grid already active";
+        return false;
+    }
+
+    if(RequireFreshPatternBarForFastEntry && EnableCandlePatterns && IsCandlePatternConfirmedForSide(isBuy))
+    {
+        datetime latestPatternBar = GetLatestClosedPatternBarTime();
+        datetime lastPatternBar = isBuy ? g_LastBuyPatternEntryBar : g_LastSellPatternEntryBar;
+        if(latestPatternBar > 0 && latestPatternBar == lastPatternBar)
+        {
+            reason = "same candle pattern already used";
+            return false;
+        }
+    }
+
+    double minSpacingPips = GetDynamicGap(isBuy, false) * InstantEntryMinSpacingGapFactor;
+    if(minSpacingPips <= 0.0)
+        minSpacingPips = InstantEntryMinSpacingPips;
+    minSpacingPips = MathMax(InstantEntryMinSpacingPips, minSpacingPips);
+
+    double nearestDistancePips = GetNearestNormalExposureDistancePips(isBuy, entryPrice);
+    if(nearestDistancePips >= 0.0 && nearestDistancePips < minSpacingPips)
+    {
+        reason = StringFormat("nearest same-side exposure only %.1f pips away", nearestDistancePips);
+        return false;
+    }
+
+    return true;
+}
+
+int GetDirectionalEntryBias()
+{
+    if(EnableTrendFilter && g_TrendBias != 0)
+        return g_TrendBias;
+
+    if(!SingleDirectionRequireTrendAlignment && EnableM5Momentum && g_MomentumSignal != 0)
+        return g_MomentumSignal;
+
+    return 0;
+}
+
+bool IsSideSignalAllowed(bool isBuy)
+{
+    int desiredBias = isBuy ? 1 : -1;
+    bool momentumOK = (!EnableM5Momentum || g_MomentumSignal == desiredBias);
+    bool trendOK = (!EnableTrendFilter || g_TrendBias == desiredBias);
+
+    if(momentumOK && trendOK)
+        return true;
+
+    if(!UseAggressiveTesterProfile())
+        return false;
+
+    if(!EnableTrendFilter && !EnableM5Momentum)
+        return true;
+
+    // In aggressive tester mode, choose one dominant side instead of allowing contradictory BUY+SELL signals.
+    if(EnableTrendFilter && g_TrendBias != 0)
+        return (g_TrendBias == desiredBias);
+
+    if(EnableM5Momentum && g_MomentumSignal != 0)
+        return (g_MomentumSignal == desiredBias);
+
+    if(!EnableTrendFilter)
+        return momentumOK;
+    if(!EnableM5Momentum)
+        return trendOK;
+
+    return false;
+}
+
+bool ShouldBlockNewEntriesForSide(bool isBuy, string &reason)
+{
+    reason = "";
+    bool oppositeIsBuy = !isBuy;
+    int oppositePositions = CountOpenPositionsForSide(oppositeIsBuy);
+    int oppositePendingOrders = CountPendingOrdersForSide(oppositeIsBuy);
+
+    if(EnableSingleDirectionExposure)
+    {
+        int desiredBias = isBuy ? 1 : -1;
+        int directionBias = GetDirectionalEntryBias();
+
+        if(oppositePositions + oppositePendingOrders > 0)
+        {
+            reason = StringFormat("opposite %s exposure active", oppositeIsBuy ? "BUY" : "SELL");
+            return true;
+        }
+
+        if(directionBias == 0)
+        {
+            reason = "trend direction not confirmed";
+            return true;
+        }
+
+        if(directionBias != desiredBias)
+        {
+            reason = StringFormat("trend locked to %s", directionBias == 1 ? "BUY" : "SELL");
+            return true;
+        }
+    }
+
+    if(oppositePositions <= 0)
+        return false;
+
+    if(BlockOppositeEntriesDuringRecovery)
+    {
+        if((oppositeIsBuy && buyInRecovery) || (!oppositeIsBuy && sellInRecovery))
+        {
+            reason = "opposite side in recovery";
+            return true;
+        }
+    }
+
+    if(BlockOppositeEntriesWhileProfitable)
+    {
+        double oppositeProfit = GetOpenProfitForSide(oppositeIsBuy);
+        if(oppositeProfit > OppositeProfitBlockAmount)
+        {
+            reason = StringFormat("opposite side profit %.2f", oppositeProfit);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool InstantEntryCooldownPassed(bool isBuy)
+{
+    datetime lastEntry = isBuy ? g_LastBuyInstantEntry : g_LastSellInstantEntry;
+    if(lastEntry <= 0)
+        return true;
+    return (TimeCurrent() - lastEntry >= RuntimeInstantEntryCooldownMinutes() * 60);
+}
+
+void TryInstantMarketEntry(bool isBuy)
+{
+    if(!RuntimeAllowDirectEntry())
+        return;
+    if(!InstantEntryCooldownPassed(isBuy))
+        return;
+
+    string sideBlockReason = "";
+    if(ShouldBlockNewEntriesForSide(isBuy, sideBlockReason))
+        return;
+
+    double entryPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    string instantExposureReason = "";
+    if(!CanAddInstantEntryExposure(isBuy, entryPrice, instantExposureReason))
+        return;
+
+    int normalPendingOrders = CountNormalPendingOrdersForSide(isBuy);
+    int allSideExposure = CountOpenPositionsForSide(isBuy) + CountPendingOrdersForSide(isBuy);
+
+    string contextTags = "";
+    int contextScore = 0;
+    IsSmartEntryContextValid(isBuy, entryPrice, contextTags, contextScore);
+    if(contextScore < RuntimeInstantEntryRequiredSignals())
+        return;
+
+    string freshEntryReason = "";
+    if(allSideExposure <= 0 && !IsFreshEntryTriggerValid(isBuy, contextScore, freshEntryReason))
+        return;
+
+    double lotToUse = GetBaseLotSize();
+
+    double dynamicTP = GetDynamicTPPips();
+    double dynamicSL = GetAdaptiveStopLossPips(isBuy);
+    double tpPips = dynamicTP > 0 ? dynamicTP : (isBuy ? BuyTakeProfitPips : SellTakeProfitPips);
+    double slPips = dynamicSL > 0 ? dynamicSL : (isBuy ? BuyStopLossPips : SellStopLossPips);
+    double sl = 0.0;
+    double tp = 0.0;
+
+    if(isBuy)
+    {
+        if(slPips > 0) sl = NormalizeDouble(entryPrice - (slPips * pip), _Digits);
+        if(tpPips > 0) tp = NormalizeDouble(entryPrice + (tpPips * pip), _Digits);
+    }
+    else
+    {
+        if(slPips > 0) sl = NormalizeDouble(entryPrice + (slPips * pip), _Digits);
+        if(tpPips > 0) tp = NormalizeDouble(entryPrice - (tpPips * pip), _Digits);
+    }
+
+    if(!CanPlaceOrderWithinRiskCap(isBuy, entryPrice, sl, lotToUse))
+        return;
+
+    if(normalPendingOrders > 0 && !AllowInstantEntryWithPendingGrid && !RuntimeKeepNormalPendingOrders())
+        DeleteAllPendingOrdersForSide(isBuy);
+
+    bool opened = false;
+    if(isBuy)
+        opened = trade.Buy(lotToUse, _Symbol, 0.0, sl, tp, "FastEntry_BUY");
+    else
+        opened = trade.Sell(lotToUse, _Symbol, 0.0, sl, tp, "FastEntry_SELL");
+
+    if(!opened)
+        return;
+
+    if(isBuy)
+    {
+        g_LastBuyInstantEntry = TimeCurrent();
+        if(IsCandlePatternConfirmedForSide(true))
+            g_LastBuyPatternEntryBar = GetLatestClosedPatternBarTime();
+    }
+    else
+    {
+        g_LastSellInstantEntry = TimeCurrent();
+        if(IsCandlePatternConfirmedForSide(false))
+            g_LastSellPatternEntryBar = GetLatestClosedPatternBarTime();
+    }
+
+    AddToLog(StringFormat("FAST ENTRY %s | Lot: %.2f | Price: %.2f | TP: %.2f | SL: %.2f | Context: %s | Score: %d",
+        isBuy ? "BUY" : "SELL", lotToUse, entryPrice, tp, sl,
+        StringLen(contextTags) > 0 ? contextTags : "BASE", contextScore), "FAST_ENTRY");
+}
+
+//+------------------------------------------------------------------+
+//| Partial Take Profit - Check if partial has been taken for ticket  |
+//+------------------------------------------------------------------+
+bool IsPartialTPTaken(ulong ticket)
+{
+    for(int i = 0; i < g_PartialTPCount; i++)
+    {
+        if(g_PartialTPTracking[i].ticket == ticket)
+            return g_PartialTPTracking[i].partialTaken;
+    }
+    return false;
+}
+
+void MarkPartialTPTaken(ulong ticket)
+{
+    // Check if already tracked
+    for(int i = 0; i < g_PartialTPCount; i++)
+    {
+        if(g_PartialTPTracking[i].ticket == ticket)
+        {
+            g_PartialTPTracking[i].partialTaken = true;
+            return;
+        }
+    }
+    // Add new entry
+    ArrayResize(g_PartialTPTracking, g_PartialTPCount + 1);
+    g_PartialTPTracking[g_PartialTPCount].ticket = ticket;
+    g_PartialTPTracking[g_PartialTPCount].partialTaken = true;
+    g_PartialTPCount++;
+}
+
+void CleanupPartialTPTracking()
+{
+    int write = 0;
+    for(int i = 0; i < g_PartialTPCount; i++)
+    {
+        if(PositionSelectByTicket(g_PartialTPTracking[i].ticket))
+        {
+            g_PartialTPTracking[write] = g_PartialTPTracking[i];
+            write++;
+        }
+    }
+    g_PartialTPCount = write;
+    ArrayResize(g_PartialTPTracking, write);
+}
+
+//+------------------------------------------------------------------+
+//| Partial Take Profit Worker                                        |
+//| Closes a portion of profitable positions at first TP target       |
+//+------------------------------------------------------------------+
+void ProcessPartialTakeProfit()
+{
+    if(!EnablePartialTP) return;
+
+    // Cleanup closed positions from tracking
+    static datetime lastPTPCleanup = 0;
+    if(TimeCurrent() - lastPTPCleanup > 10)
+    {
+        CleanupPartialTPTracking();
+        lastPTPCleanup = TimeCurrent();
+    }
+
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket <= 0) continue;
+        if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+        if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+        // Skip recovery positions - partial TP only for normal mode
+        string comment = PositionGetString(POSITION_COMMENT);
+        if(StringFind(comment, "Recovery") >= 0) continue;
+
+        // Skip if already partially closed
+        if(IsPartialTPTaken(ticket)) continue;
+
+        // Skip if in recovery mode
+        ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        bool inRecovery = (type == POSITION_TYPE_BUY && buyInRecovery) ||
+                          (type == POSITION_TYPE_SELL && sellInRecovery);
+        if(inRecovery) continue;
+
+        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+        double lots = PositionGetDouble(POSITION_VOLUME);
+        double currentPrice = (type == POSITION_TYPE_BUY) ?
+            SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
+        double profitPips = (type == POSITION_TYPE_BUY) ?
+            (currentPrice - openPrice) / pip :
+            (openPrice - currentPrice) / pip;
+
+        // Check minimum profit
+        if(profitPips < PartialTP_MinProfitPips) continue;
+
+        // Calculate partial TP target based on SL distance × RR ratio
+        double slPips = (type == POSITION_TYPE_BUY) ? BuyStopLossPips : SellStopLossPips;
+        if(slPips <= 0) slPips = 40.0; // Default if no SL
+        double partialTarget = slPips * PartialTP_RR_Ratio;
+
+        if(profitPips >= partialTarget)
+        {
+            // Calculate partial close volume
+            double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+            double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+            if(lotStep <= 0) lotStep = 0.01;
+            if(minLot <= 0) minLot = 0.01;
+
+            double closeLots = lots * (PartialTP_Percent / 100.0);
+            closeLots = MathFloor(closeLots / lotStep) * lotStep;
+            closeLots = MathMax(closeLots, minLot);
+
+            // Ensure we don't close the entire position
+            if(closeLots >= lots)
+                closeLots = lots - minLot;
+
+            if(closeLots >= minLot)
+            {
+                if(trade.PositionClosePartial(ticket, closeLots))
+                {
+                    MarkPartialTPTaken(ticket);
+                    AddToLog(StringFormat("PARTIAL TP: %s #%I64u closed %.2f lots (%.0f%%) at %.1f pips profit | Remaining: %.2f lots",
+                        type == POSITION_TYPE_BUY ? "BUY" : "SELL", ticket, closeLots,
+                        PartialTP_Percent, profitPips, lots - closeLots), "PARTIAL_TP");
+                }
+            }
+        }
+    }
+}
+
+bool IsSupportResistanceAligned(bool isBuy, double price)
+{
+    if(g_SupportLevel <= 0.0 || g_ResistanceLevel <= 0.0)
+        return false;
+
+    double tolerance = SupportResistanceTolerancePips * pip;
+    double minRoom = MinRoomToOppositeLevelPips * pip;
+
+    if(isBuy)
+        return (MathAbs(price - g_SupportLevel) <= tolerance && (g_ResistanceLevel - price) >= minRoom);
+
+    return (MathAbs(price - g_ResistanceLevel) <= tolerance && (price - g_SupportLevel) >= minRoom);
+}
+
+bool IsOrderBlockAligned(bool isBuy, double price)
+{
+    double tolerance = OrderBlockTolerancePips * pip;
+    if(isBuy)
+    {
+        if(!g_BullishOrderBlockActive) return false;
+        return (price >= g_BullishOrderBlockLow - tolerance && price <= g_BullishOrderBlockHigh + tolerance);
+    }
+
+    if(!g_BearishOrderBlockActive) return false;
+    return (price >= g_BearishOrderBlockLow - tolerance && price <= g_BearishOrderBlockHigh + tolerance);
+}
+
+bool IsFVGAligned(bool isBuy, double price)
+{
+    double tolerance = FVGTolerancePips * pip;
+    if(isBuy)
+    {
+        if(!g_BullishFVGActive) return false;
+        return (price >= g_BullishFVGLow - tolerance && price <= g_BullishFVGHigh + tolerance);
+    }
+
+    if(!g_BearishFVGActive) return false;
+    return (price >= g_BearishFVGLow - tolerance && price <= g_BearishFVGHigh + tolerance);
+}
+
+bool IsLiquiditySweepAligned(bool isBuy, double price)
+{
+    double tolerance = MathMax(LiquiditySweepTolerancePips, SupportResistanceTolerancePips) * pip;
+    if(isBuy)
+    {
+        if(!g_BuyLiquiditySweepActive || g_SupportLevel <= 0.0) return false;
+        return (MathAbs(price - g_SupportLevel) <= tolerance);
+    }
+
+    if(!g_SellLiquiditySweepActive || g_ResistanceLevel <= 0.0) return false;
+    return (MathAbs(price - g_ResistanceLevel) <= tolerance);
+}
+
+bool IsPremiumDiscountAligned(bool isBuy, double price)
+{
+    if(g_DealingRangeLow <= 0.0 || g_DealingRangeHigh <= g_DealingRangeLow)
+        return false;
+
+    double rangeSizePips = (g_DealingRangeHigh - g_DealingRangeLow) / pip;
+    if(rangeSizePips < PremiumDiscountMinRangePips)
+        return false;
+
+    double rangePosition = (price - g_DealingRangeLow) / (g_DealingRangeHigh - g_DealingRangeLow);
+    if(isBuy)
+        return (rangePosition <= BuyDiscountMaxPercent);
+
+    return (rangePosition >= SellPremiumMinPercent);
+}
+
+bool IsSmartEntryContextValid(bool isBuy, double price, string &contextTags, int &score)
+{
+    score = 0;
+    contextTags = "";
+    int enabledCount = 0;
+
+    if(EnableSupportResistanceFilter)
+    {
+        enabledCount++;
+        if(IsSupportResistanceAligned(isBuy, price))
+        {
+            score++;
+            contextTags += (StringLen(contextTags) > 0 ? "+SR" : "SR");
+        }
+    }
+
+    if(EnableOrderBlockFilter)
+    {
+        enabledCount++;
+        if(IsOrderBlockAligned(isBuy, price))
+        {
+            score++;
+            contextTags += (StringLen(contextTags) > 0 ? "+OB" : "OB");
+        }
+    }
+
+    if(EnableFVGFilter)
+    {
+        enabledCount++;
+        if(IsFVGAligned(isBuy, price))
+        {
+            score++;
+            contextTags += (StringLen(contextTags) > 0 ? "+FVG" : "FVG");
+        }
+    }
+
+    if(EnableLiquiditySweepFilter)
+    {
+        enabledCount++;
+        if(IsLiquiditySweepAligned(isBuy, price))
+        {
+            score++;
+            contextTags += (StringLen(contextTags) > 0 ? "+SWEEP" : "SWEEP");
+        }
+    }
+
+    if(EnablePremiumDiscountFilter)
+    {
+        enabledCount++;
+        if(IsPremiumDiscountAligned(isBuy, price))
+        {
+            score++;
+            contextTags += (StringLen(contextTags) > 0 ? "+PD" : "PD");
+        }
+    }
+
+    // Round Number confluence bonus
+    if(EnableRoundNumberFilter)
+    {
+        enabledCount++;
+        if(IsRoundNumberAligned(price))
+        {
+            score++;
+            contextTags += (StringLen(contextTags) > 0 ? "+RN" : "RN");
+        }
+    }
+
+    // Breakout + Retest confluence bonus
+    if(EnableBreakoutRetest)
+    {
+        enabledCount++;
+        if((isBuy && g_BuyBreakoutRetestActive) || (!isBuy && g_SellBreakoutRetestActive))
+        {
+            score++;
+            contextTags += (StringLen(contextTags) > 0 ? "+BKO" : "BKO");
+        }
+    }
+
+    // Candle Pattern confluence bonus
+    if(EnableCandlePatterns)
+    {
+        enabledCount++;
+        if((isBuy && g_CandlePatternSignal == 1) || (!isBuy && g_CandlePatternSignal == -1))
+        {
+            score++;
+            contextTags += (StringLen(contextTags) > 0 ? "+" + g_CandlePatternName : g_CandlePatternName);
+        }
+    }
+
+    if(enabledCount <= 0)
+        return true;
+
+    int requiredSignals = MathMin(enabledCount, MathMax(1, MinContextSignals));
+    return (score >= requiredSignals);
+}
+
+//+------------------------------------------------------------------+
+//| Smart Trend Confirmation                                          |
+//| Combines D1/H4 structure with H1 EMA slope                        |
 //+------------------------------------------------------------------+
 void UpdateH1TrendConfirmation()
 {
     g_TrendBias = 0;
+    g_MacroTrendBias = 0;
+    g_StructureTrendBias = 0;
+    g_H1SlopePips = 0.0;
     if(!EnableTrendFilter || g_H1_EMAHandle == INVALID_HANDLE) return;
     
     double emaBuffer[];
     ArraySetAsSeries(emaBuffer, true); // [0]=newest bar
     if(CopyBuffer(g_H1_EMAHandle, 0, 0, 6, emaBuffer) < 6) return;
     
-    // H1 Slope = EMA change over last 5 bars (in pips)
-    double slope = (emaBuffer[0] - emaBuffer[5]) / pip;
-    
-    if(slope >= H1_EMA_SlopeMinPips)
-        g_TrendBias = 1;    // Bullish confirmed — BUY allowed, SELL blocked
-    else if(slope <= -H1_EMA_SlopeMinPips)
-        g_TrendBias = -1;   // Bearish confirmed — SELL allowed, BUY blocked
-    // else: 0 = Neutral — both sides allowed (no blocking in neutral)
+    g_H1SlopePips = (emaBuffer[0] - emaBuffer[5]) / pip;
+
+    int emaBias = 0;
+    if(g_H1SlopePips >= H1_EMA_SlopeMinPips)
+        emaBias = 1;
+    else if(g_H1SlopePips <= -H1_EMA_SlopeMinPips)
+        emaBias = -1;
+
+    double macroSupport = 0.0;
+    double macroResistance = 0.0;
+    double structureSupport = 0.0;
+    double structureResistance = 0.0;
+    g_MacroTrendBias = DetectStructureBias(TrendMacroTimeframe, StructureSwingStrength, StructureScanBars,
+                                           macroSupport, macroResistance);
+    g_StructureTrendBias = DetectStructureBias(TrendStructureTimeframe, StructureSwingStrength, StructureScanBars,
+                                               structureSupport, structureResistance);
+
+    int bullScore = 0;
+    int bearScore = 0;
+    if(g_MacroTrendBias == 1) bullScore++;
+    else if(g_MacroTrendBias == -1) bearScore++;
+    if(g_StructureTrendBias == 1) bullScore++;
+    else if(g_StructureTrendBias == -1) bearScore++;
+    if(emaBias == 1) bullScore++;
+    else if(emaBias == -1) bearScore++;
+
+    if(bullScore >= TrendConsensusScore && g_MacroTrendBias != -1 && g_StructureTrendBias != -1 && emaBias != -1)
+        g_TrendBias = 1;
+    else if(bearScore >= TrendConsensusScore && g_MacroTrendBias != 1 && g_StructureTrendBias != 1 && emaBias != 1)
+        g_TrendBias = -1;
 }
 
 //+------------------------------------------------------------------+
@@ -1089,27 +2915,30 @@ double GetSideRiskAmount(bool isBuy)
             riskAmount += -potential;
     }
 
-    for(int i = 0; i < OrdersTotal(); i++)
+    if(IncludePendingOrdersInSideRiskCap)
     {
-        ulong ticket = OrderGetTicket(i);
-        if(ticket <= 0) continue;
-        if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
-        if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
+        for(int i = 0; i < OrdersTotal(); i++)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if(ticket <= 0) continue;
+            if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+            if(OrderGetInteger(ORDER_MAGIC) != MagicNumber) continue;
 
-        ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-        bool sameSide = (isBuy && (orderType == ORDER_TYPE_BUY_LIMIT || orderType == ORDER_TYPE_BUY_STOP)) ||
-                        (!isBuy && (orderType == ORDER_TYPE_SELL_LIMIT || orderType == ORDER_TYPE_SELL_STOP));
-        if(!sameSide) continue;
+            ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            bool sameSide = (isBuy && (orderType == ORDER_TYPE_BUY_LIMIT || orderType == ORDER_TYPE_BUY_STOP)) ||
+                            (!isBuy && (orderType == ORDER_TYPE_SELL_LIMIT || orderType == ORDER_TYPE_SELL_STOP));
+            if(!sameSide) continue;
 
-        double sl = OrderGetDouble(ORDER_SL);
-        if(sl <= 0.0) continue;
+            double sl = OrderGetDouble(ORDER_SL);
+            if(sl <= 0.0) continue;
 
-        double openPrice = OrderGetDouble(ORDER_PRICE_OPEN);
-        double lots = OrderGetDouble(ORDER_VOLUME_CURRENT);
-        double potential = 0.0;
-        ENUM_ORDER_TYPE calcType = isBuy ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
-        if(OrderCalcProfit(calcType, _Symbol, lots, openPrice, sl, potential) && potential < 0.0)
-            riskAmount += -potential;
+            double openPrice = OrderGetDouble(ORDER_PRICE_OPEN);
+            double lots = OrderGetDouble(ORDER_VOLUME_CURRENT);
+            double potential = 0.0;
+            ENUM_ORDER_TYPE calcType = isBuy ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+            if(OrderCalcProfit(calcType, _Symbol, lots, openPrice, sl, potential) && potential < 0.0)
+                riskAmount += -potential;
+        }
     }
 
     return riskAmount;
@@ -1132,7 +2961,10 @@ bool CanPlaceOrderWithinRiskCap(bool isBuy, double entryPrice, double slPrice, d
         newOrderRisk = -potential;
 
     double currentRisk = GetSideRiskAmount(isBuy);
-    double maxAllowedRisk = AccountInfoDouble(ACCOUNT_BALANCE) * (MaxSideRiskPercent / 100.0);
+    double capBalance = UseEffectiveBalanceForSideRiskCap ? GetEffectiveBalanceForSizing() : AccountInfoDouble(ACCOUNT_BALANCE);
+    if(capBalance <= 0.0)
+        capBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+    double maxAllowedRisk = capBalance * (MaxSideRiskPercent / 100.0);
     return (currentRisk + newOrderRisk <= maxAllowedRisk);
 }
 
@@ -2199,7 +4031,7 @@ void ManageNormalGrid(bool isBuy)
         positionPrices[normalPositionCount] = PositionGetDouble(POSITION_PRICE_OPEN);
         normalPositionCount++;
     }
-    
+
     // If already at max NORMAL positions, delete all normal pending orders and return
     if(normalPositionCount >= maxOrders)
     {
@@ -2255,7 +4087,7 @@ void ManageNormalGrid(bool isBuy)
     if(expectedMinLot <= 0) expectedMinLot = 0.01;
     if(expectedMaxLot <= 0) expectedMaxLot = 100.0;
     if(expectedLotStep <= 0) expectedLotStep = 0.01;
-    double expectedNormalLot = LotSize;
+    double expectedNormalLot = GetBaseLotSize();
     expectedNormalLot = MathFloor(expectedNormalLot / expectedLotStep) * expectedLotStep;
     expectedNormalLot = MathMax(expectedMinLot, MathMin(expectedMaxLot, expectedNormalLot));
     
@@ -2290,8 +4122,11 @@ void ManageNormalGrid(bool isBuy)
     // We pick levels on the correct side of price, not occupied by positions.
     // This prevents target levels from shifting every tick and causing order escaping.
     
-    // Build all fixed grid levels within range
+    // Build all fixed grid levels within range.
+    // Smart context is used as a ranking preference, not a hard blocker,
+    // otherwise the grid can go idle when confluence is temporarily scarce.
     double allGridLevels[];
+    int allGridScores[];
     int allGridCount = 0;
     for(double lvl = rangeLow; lvl <= rangeHigh + gapPrice * 0.1; lvl += gapPrice)
     {
@@ -2313,26 +4148,49 @@ void ManageNormalGrid(bool isBuy)
             }
         }
         if(tooCloseToPos) continue;
+
+        string gridContextTags = "";
+        int gridContextScore = 0;
+        IsSmartEntryContextValid(isBuy, gridLvl, gridContextTags, gridContextScore);
         
         ArrayResize(allGridLevels, allGridCount + 1);
+        ArrayResize(allGridScores, allGridCount + 1);
         allGridLevels[allGridCount] = gridLvl;
+        allGridScores[allGridCount] = gridContextScore;
         allGridCount++;
     }
     
-    // Sort by distance to market (closest first)
+    // Sort by context score DESC first, then distance to market ASC.
     for(int i = 0; i < allGridCount - 1; i++)
     {
         for(int j = i + 1; j < allGridCount; j++)
         {
+            bool shouldSwap = false;
             double distI = MathAbs(allGridLevels[i] - currentPrice);
             double distJ = MathAbs(allGridLevels[j] - currentPrice);
-            if(distJ < distI)
+
+            if(allGridScores[j] > allGridScores[i])
+                shouldSwap = true;
+            else if(allGridScores[j] == allGridScores[i] && distJ < distI)
+                shouldSwap = true;
+
+            if(shouldSwap)
             {
                 double tmp = allGridLevels[i];
                 allGridLevels[i] = allGridLevels[j];
                 allGridLevels[j] = tmp;
+
+                int tmpScore = allGridScores[i];
+                allGridScores[i] = allGridScores[j];
+                allGridScores[j] = tmpScore;
             }
         }
+    }
+
+    if(allGridCount > 0 && allGridScores[0] <= 0)
+    {
+        AddToLog(StringFormat("%s Grid: No strong confluence level found, using nearest base grid levels", 
+            isBuy ? "BUY" : "SELL"), "FILTER");
     }
     
     // Take up to (maxOrders - normalPositionCount) closest levels as targets
@@ -2411,7 +4269,6 @@ void ManageNormalGrid(bool isBuy)
         bool inRange = (orderPrice >= rangeLow && orderPrice <= rangeHigh);
         bool lotAligned = MathAbs(orderLot - expectedNormalLot) <= expectedLotStep * 0.5;
         double orderDistance = MathAbs(orderPrice - currentPrice);
-        
         // Check if order sits on ANY fixed grid point (not just current targets)
         bool onGridPoint = false;
         double remainder = MathMod(MathAbs(orderPrice - rangeLow), gapPrice);
@@ -2434,7 +4291,11 @@ void ManageNormalGrid(bool isBuy)
         if(!validSide || !inRange || !lotAligned || tooCloseToPos)
         {
             trade.OrderDelete(existingOrderTickets[i]);
-            string reason = !validSide ? "wrong side" : (!inRange ? "out of range" : (!lotAligned ? "lot mismatch" : "too close to position"));
+            string reason = "wrong side";
+            if(!validSide) reason = "wrong side";
+            else if(!inRange) reason = "out of range";
+            else if(!lotAligned) reason = "lot mismatch";
+            else if(tooCloseToPos) reason = "too close to position";
             AddToLog(StringFormat("%s order #%I64u deleted - %s (price=%.2f)", isBuy ? "BUY" : "SELL",
                 existingOrderTickets[i], reason, orderPrice), "MODIFY");
         }
@@ -2505,24 +4366,39 @@ void ManageNormalGrid(bool isBuy)
             }
         }
         if(nearbyOrderExists) continue;
+
+        string contextTags = "";
+        int contextScore = 0;
+        IsSmartEntryContextValid(isBuy, targetPrice, contextTags, contextScore);
+        if(StringLen(contextTags) == 0)
+            contextTags = "BASE";
+
+        bool freshSideStart = (normalPositionCount == 0 && survivingOrderCount == 0);
+        if(freshSideStart)
+        {
+            string freshGridReason = "";
+            if(!IsFreshEntryTriggerValid(isBuy, contextScore, freshGridReason))
+                continue;
+        }
         
         // ===== All checks passed - Place the order =====
-        double lotToUse = LotSize;
-        double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-        double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-        double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-        if(minLot <= 0) minLot = 0.01;
-        if(maxLot <= 0) maxLot = 100.0;
-        if(lotStep <= 0) lotStep = 0.01;
-        lotToUse = MathFloor(lotToUse / lotStep) * lotStep;
-        lotToUse = MathMax(minLot, MathMin(maxLot, lotToUse));
+        double lotToUse = GetBaseLotSize();
         
         double tp = 0, sl = 0;
         
+        // Calculate TP/SL — use ATR dynamic if enabled, otherwise fixed
+        double effectiveTPPips = 0;
+        double effectiveSLPips = 0;
+
         if(isBuy)
         {
-            tp = (BuyTakeProfitPips > 0) ? NormalizeDouble(targetPrice + (BuyTakeProfitPips * pip), _Digits) : 0;
-            sl = (BuyStopLossPips > 0) ? NormalizeDouble(targetPrice - (BuyStopLossPips * pip), _Digits) : 0;
+            double dynamicTP = GetDynamicTPPips();
+            double dynamicSL = GetAdaptiveStopLossPips(true);
+            effectiveTPPips = (dynamicTP > 0) ? dynamicTP : BuyTakeProfitPips;
+            effectiveSLPips = (dynamicSL > 0) ? dynamicSL : BuyStopLossPips;
+
+            tp = (effectiveTPPips > 0) ? NormalizeDouble(targetPrice + (effectiveTPPips * pip), _Digits) : 0;
+            sl = (effectiveSLPips > 0) ? NormalizeDouble(targetPrice - (effectiveSLPips * pip), _Digits) : 0;
 
             if(!CanPlaceOrderWithinRiskCap(true, targetPrice, sl, lotToUse))
             {
@@ -2532,14 +4408,19 @@ void ManageNormalGrid(bool isBuy)
 
             if(trade.BuyLimit(lotToUse, targetPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
-                AddToLog(StringFormat("BUY LIMIT @ %.2f | Lot: %.2f", targetPrice, lotToUse), "OPEN_BUY");
+                AddToLog(StringFormat("BUY LIMIT @ %.2f | Lot: %.2f | Context: %s", targetPrice, lotToUse, contextTags), "OPEN_BUY");
                 ordersPlaced++;
             }
         }
         else
         {
-            tp = (SellTakeProfitPips > 0) ? NormalizeDouble(targetPrice - (SellTakeProfitPips * pip), _Digits) : 0;
-            sl = (SellStopLossPips > 0) ? NormalizeDouble(targetPrice + (SellStopLossPips * pip), _Digits) : 0;
+            double dynamicTP = GetDynamicTPPips();
+            double dynamicSL = GetAdaptiveStopLossPips(false);
+            effectiveTPPips = (dynamicTP > 0) ? dynamicTP : SellTakeProfitPips;
+            effectiveSLPips = (dynamicSL > 0) ? dynamicSL : SellStopLossPips;
+
+            tp = (effectiveTPPips > 0) ? NormalizeDouble(targetPrice - (effectiveTPPips * pip), _Digits) : 0;
+            sl = (effectiveSLPips > 0) ? NormalizeDouble(targetPrice + (effectiveSLPips * pip), _Digits) : 0;
 
             if(!CanPlaceOrderWithinRiskCap(false, targetPrice, sl, lotToUse))
             {
@@ -2549,7 +4430,7 @@ void ManageNormalGrid(bool isBuy)
 
             if(trade.SellLimit(lotToUse, targetPrice, _Symbol, sl, tp, ORDER_TIME_GTC, 0, OrderComment))
             {
-                AddToLog(StringFormat("SELL LIMIT @ %.2f | Lot: %.2f", targetPrice, lotToUse), "OPEN_SELL");
+                AddToLog(StringFormat("SELL LIMIT @ %.2f | Lot: %.2f | Context: %s", targetPrice, lotToUse, contextTags), "OPEN_SELL");
                 ordersPlaced++;
             }
         }
@@ -2676,9 +4557,9 @@ void ManageRecoveryGrid(bool isBuy)
     double expectedMaxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
     if(expectedMinLot <= 0) expectedMinLot = 0.01;
     if(expectedMaxLot <= 0) expectedMaxLot = 100.0;
-    double expectedEffectiveMaxLot = MathMin(expectedMaxLot, MaxRecoveryLotSize);
+    double expectedEffectiveMaxLot = MathMin(expectedMaxLot, GetScaledRecoveryMaxLotSize());
 
-    double adjacentLotForExpected = LotSize;
+    double adjacentLotForExpected = GetBaseLotSize();
     double adjacentDistForExpected = 999999;
     for(int i = 0; i < PositionsTotal(); i++)
     {
@@ -2713,7 +4594,7 @@ void ManageRecoveryGrid(bool isBuy)
         }
     }
 
-    double correctRecoveryLot = adjacentLotForExpected + RecoveryLotIncrement;
+    double correctRecoveryLot = adjacentLotForExpected + GetScaledRecoveryLotIncrement();
     correctRecoveryLot = MathFloor(correctRecoveryLot / lotStep) * lotStep;
     correctRecoveryLot = MathMax(expectedMinLot, MathMin(expectedEffectiveMaxLot, correctRecoveryLot));
     
@@ -2985,7 +4866,7 @@ void ManageRecoveryGrid(bool isBuy)
         // For BUY recovery: find position just ABOVE recoveryPrice (next position in grid going up)
         // For SELL recovery: find position just BELOW recoveryPrice (next position in grid going down)
         // Recovery lot = adjacent position's lot + increment (ensures sequential: 0.10, 0.11, 0.12...)
-        double adjacentLot = LotSize;  // Default to base lot if no adjacent found
+        double adjacentLot = GetBaseLotSize();  // Default to base lot if no adjacent found
         double adjacentDist = 999999;
         
         for(int i = 0; i < PositionsTotal(); i++)
@@ -3029,7 +4910,7 @@ void ManageRecoveryGrid(bool isBuy)
         
         // Recovery lot = adjacent position's lot + increment
         // This ensures sequential lot increase: 0.10 -> 0.11 -> 0.12 -> ...
-        double recoveryLot = adjacentLot + RecoveryLotIncrement;
+        double recoveryLot = adjacentLot + GetScaledRecoveryLotIncrement();
         
         // Ensure lot is within broker limits AND MaxRecoveryLotSize
         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
@@ -3038,7 +4919,7 @@ void ManageRecoveryGrid(bool isBuy)
         if(maxLot <= 0) maxLot = 100.0;
         
         // Apply MaxRecoveryLotSize limit
-        double effectiveMaxLot = MathMin(maxLot, MaxRecoveryLotSize);
+        double effectiveMaxLot = MathMin(maxLot, GetScaledRecoveryMaxLotSize());
         
         recoveryLot = MathFloor(recoveryLot / lotStep) * lotStep;
         recoveryLot = MathMax(minLot, MathMin(effectiveMaxLot, recoveryLot));
@@ -3714,8 +5595,19 @@ void UpdateInfoPanel()
     ObjectDelete(0, "EA_MomentumInfo");
     ObjectDelete(0, "EA_TrendInfo");
     ObjectDelete(0, "EA_EntrySignal");
+    ObjectDelete(0, "EA_DirectionLockInfo");
     ObjectDelete(0, "EA_NeutralInfo");
     ObjectDelete(0, "EA_ATRInfo");
+    ObjectDelete(0, "EA_StructureInfo");
+    ObjectDelete(0, "EA_SRInfo");
+    ObjectDelete(0, "EA_OrderBlockInfo");
+    ObjectDelete(0, "EA_FVGInfo");
+    ObjectDelete(0, "EA_SweepInfo");
+    ObjectDelete(0, "EA_PremiumInfo");
+    ObjectDelete(0, "EA_CandlePatternInfo");
+    ObjectDelete(0, "EA_RoundNumberInfo");
+    ObjectDelete(0, "EA_BreakoutInfo");
+    ObjectDelete(0, "EA_DynamicTPInfo");
     // Delete old simplified version objects
     ObjectDelete(0, "EA_Title");
     ObjectDelete(0, "EA_Mode");
@@ -3799,6 +5691,10 @@ void UpdateInfoPanel()
     // ===== DUAL TIMEFRAME STATUS =====
     ObjectDelete(0, "EA_MomentumInfo");
     ObjectDelete(0, "EA_TrendInfo");
+    ObjectDelete(0, "EA_StructureInfo");
+    ObjectDelete(0, "EA_SRInfo");
+    ObjectDelete(0, "EA_OrderBlockInfo");
+    ObjectDelete(0, "EA_FVGInfo");
     
     // M5 Momentum Status
     if(EnableM5Momentum)
@@ -3822,9 +5718,9 @@ void UpdateInfoPanel()
     // H1 Trend Confirmation Status
     if(EnableTrendFilter)
     {
-        string trendText = (g_TrendBias == 1) ? "H1 Trend: BULLISH ✓" : 
-                           (g_TrendBias == -1) ? "H1 Trend: BEARISH ✓" : 
-                           "H1 Trend: NEUTRAL";
+        string trendText = (g_TrendBias == 1) ? "Smart Trend: BULLISH ✓" : 
+                           (g_TrendBias == -1) ? "Smart Trend: BEARISH ✓" : 
+                           "Smart Trend: NEUTRAL";
         color trendColor = (g_TrendBias == 1) ? clrLime : (g_TrendBias == -1) ? clrOrangeRed : clrGray;
         
         ObjectCreate(0, "EA_TrendInfo", OBJ_LABEL, 0, 0, 0);
@@ -3836,16 +5732,45 @@ void UpdateInfoPanel()
         ObjectSetInteger(0, "EA_TrendInfo", OBJPROP_FONTSIZE, 10);
         ObjectSetString(0, "EA_TrendInfo", OBJPROP_FONT, "Arial Bold");
         yPos += 20;
+
+        string structureText = StringFormat("%s:%s | %s:%s | H1 Slope: %.1f",
+            TimeframeToText(TrendMacroTimeframe),
+            (g_MacroTrendBias == 1) ? "UP" : (g_MacroTrendBias == -1) ? "DOWN" : "FLAT",
+            TimeframeToText(TrendStructureTimeframe),
+            (g_StructureTrendBias == 1) ? "UP" : (g_StructureTrendBias == -1) ? "DOWN" : "FLAT",
+            g_H1SlopePips);
+
+        ObjectCreate(0, "EA_StructureInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_StructureInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_StructureInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_StructureInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_StructureInfo", OBJPROP_TEXT, structureText);
+        ObjectSetInteger(0, "EA_StructureInfo", OBJPROP_COLOR, clrKhaki);
+        ObjectSetInteger(0, "EA_StructureInfo", OBJPROP_FONTSIZE, 9);
+        ObjectSetString(0, "EA_StructureInfo", OBJPROP_FONT, "Arial");
+        yPos += 18;
     }
     
     // Trade Entry Status (combined signal)
     string entryStatus = "";
     color entryColor = clrGray;
     
-    bool buySignal = (g_MomentumSignal == 1 && g_TrendBias >= 0);
-    bool sellSignal = (g_MomentumSignal == -1 && g_TrendBias <= 0);
+    bool buySignal = (g_MomentumSignal == 1 && g_TrendBias == 1);
+    bool sellSignal = (g_MomentumSignal == -1 && g_TrendBias == -1);
+    bool buyPatternConfirmed = IsCandlePatternConfirmedForSide(true);
+    bool sellPatternConfirmed = IsCandlePatternConfirmedForSide(false);
     
-    if(buySignal)
+    if(buySignal && RequireAlignedCandlePatternForFreshEntries && !buyPatternConfirmed)
+    {
+        entryStatus = "⌛ BUY setup found | Waiting for bullish candle confirmation";
+        entryColor = clrGold;
+    }
+    else if(sellSignal && RequireAlignedCandlePatternForFreshEntries && !sellPatternConfirmed)
+    {
+        entryStatus = "⌛ SELL setup found | Waiting for bearish candle confirmation";
+        entryColor = clrGold;
+    }
+    else if(buySignal)
     {
         entryStatus = "✓ BUY SIGNAL ACTIVE (M5+H1 Aligned)";
         entryColor = clrLime;
@@ -3870,6 +5795,51 @@ void UpdateInfoPanel()
     ObjectSetInteger(0, "EA_EntrySignal", OBJPROP_FONTSIZE, 9);
     ObjectSetString(0, "EA_EntrySignal", OBJPROP_FONT, "Arial Bold");
     yPos += 22;
+
+    if(EnableSingleDirectionExposure)
+    {
+        int directionBias = GetDirectionalEntryBias();
+        int buyExposureCount = CountOpenPositionsForSide(true) + CountPendingOrdersForSide(true);
+        int sellExposureCount = CountOpenPositionsForSide(false) + CountPendingOrdersForSide(false);
+        string directionText = "Exposure Lock: STANDBY";
+        color directionColor = clrSilver;
+
+        if(buyExposureCount > 0 && sellExposureCount <= 0)
+        {
+            directionText = StringFormat("Exposure Lock: BUY side active | Exposure %d", buyExposureCount);
+            directionColor = clrLime;
+        }
+        else if(sellExposureCount > 0 && buyExposureCount <= 0)
+        {
+            directionText = StringFormat("Exposure Lock: SELL side active | Exposure %d", sellExposureCount);
+            directionColor = clrOrangeRed;
+        }
+        else if(directionBias == 1)
+        {
+            directionText = "Exposure Lock: BUY only | Waiting for pullback entries";
+            directionColor = clrLime;
+        }
+        else if(directionBias == -1)
+        {
+            directionText = "Exposure Lock: SELL only | Waiting for pullback entries";
+            directionColor = clrOrangeRed;
+        }
+        else
+        {
+            directionText = "Exposure Lock: No confirmed trend | New trades blocked";
+            directionColor = clrOrange;
+        }
+
+        ObjectCreate(0, "EA_DirectionLockInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_DirectionLockInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_DirectionLockInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_DirectionLockInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_DirectionLockInfo", OBJPROP_TEXT, directionText);
+        ObjectSetInteger(0, "EA_DirectionLockInfo", OBJPROP_COLOR, directionColor);
+        ObjectSetInteger(0, "EA_DirectionLockInfo", OBJPROP_FONTSIZE, 9);
+        ObjectSetString(0, "EA_DirectionLockInfo", OBJPROP_FONT, "Arial Bold");
+        yPos += 20;
+    }
 
     // Neutral market filter status
     if(EnableNeutralMarketFilter && NeutralMarketAvoidMinutes > 0)
@@ -3907,6 +5877,81 @@ void UpdateInfoPanel()
         ObjectSetString(0, "EA_NeutralInfo", OBJPROP_FONT, "Arial Bold");
         yPos += 20;
     }
+
+    string srText = StringFormat("S/R %s: S %.2f | R %.2f", TimeframeToText(SupportResistanceTimeframe), g_SupportLevel, g_ResistanceLevel);
+    ObjectCreate(0, "EA_SRInfo", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_SRInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_SRInfo", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_SRInfo", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_SRInfo", OBJPROP_TEXT, srText);
+    ObjectSetInteger(0, "EA_SRInfo", OBJPROP_COLOR, EnableSupportResistanceFilter ? clrLightBlue : clrGray);
+    ObjectSetInteger(0, "EA_SRInfo", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_SRInfo", OBJPROP_FONT, "Arial");
+    yPos += 18;
+
+    string orderBlockText = StringFormat("OB %s: Buy[%s] Sell[%s]", TimeframeToText(OrderBlockTimeframe),
+        g_BullishOrderBlockActive ? StringFormat("%.2f-%.2f", g_BullishOrderBlockLow, g_BullishOrderBlockHigh) : "none",
+        g_BearishOrderBlockActive ? StringFormat("%.2f-%.2f", g_BearishOrderBlockLow, g_BearishOrderBlockHigh) : "none");
+    ObjectCreate(0, "EA_OrderBlockInfo", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_OrderBlockInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_OrderBlockInfo", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_OrderBlockInfo", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_OrderBlockInfo", OBJPROP_TEXT, orderBlockText);
+    ObjectSetInteger(0, "EA_OrderBlockInfo", OBJPROP_COLOR, EnableOrderBlockFilter ? clrMediumPurple : clrGray);
+    ObjectSetInteger(0, "EA_OrderBlockInfo", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_OrderBlockInfo", OBJPROP_FONT, "Arial");
+    yPos += 18;
+
+    string fvgText = StringFormat("FVG %s: Buy[%s] Sell[%s]", TimeframeToText(FVGTimeframe),
+        g_BullishFVGActive ? StringFormat("%.2f-%.2f", g_BullishFVGLow, g_BullishFVGHigh) : "none",
+        g_BearishFVGActive ? StringFormat("%.2f-%.2f", g_BearishFVGLow, g_BearishFVGHigh) : "none");
+    ObjectCreate(0, "EA_FVGInfo", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_FVGInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_FVGInfo", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_FVGInfo", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_FVGInfo", OBJPROP_TEXT, fvgText);
+    ObjectSetInteger(0, "EA_FVGInfo", OBJPROP_COLOR, EnableFVGFilter ? clrGold : clrGray);
+    ObjectSetInteger(0, "EA_FVGInfo", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_FVGInfo", OBJPROP_FONT, "Arial");
+    yPos += 18;
+
+    string sweepText = StringFormat("Sweep %s: Buy[%s] Sell[%s]", TimeframeToText(LiquiditySweepTimeframe),
+        g_BuyLiquiditySweepActive ? "ACTIVE" : "none",
+        g_SellLiquiditySweepActive ? "ACTIVE" : "none");
+    ObjectCreate(0, "EA_SweepInfo", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_SweepInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_SweepInfo", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_SweepInfo", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_SweepInfo", OBJPROP_TEXT, sweepText);
+    ObjectSetInteger(0, "EA_SweepInfo", OBJPROP_COLOR, EnableLiquiditySweepFilter ? clrAqua : clrGray);
+    ObjectSetInteger(0, "EA_SweepInfo", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_SweepInfo", OBJPROP_FONT, "Arial");
+    yPos += 18;
+
+    double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    string pdZone = "N/A";
+    if(g_DealingRangeHigh > g_DealingRangeLow)
+    {
+        double rangePosition = (currentBid - g_DealingRangeLow) / (g_DealingRangeHigh - g_DealingRangeLow);
+        if(rangePosition <= BuyDiscountMaxPercent)
+            pdZone = "DISCOUNT";
+        else if(rangePosition >= SellPremiumMinPercent)
+            pdZone = "PREMIUM";
+        else
+            pdZone = "EQUILIBRIUM";
+    }
+
+    string premiumText = StringFormat("PD %s: %s | %.2f-%.2f | Mid %.2f", TimeframeToText(PremiumDiscountTimeframe),
+        pdZone, g_DealingRangeLow, g_DealingRangeHigh, g_DealingRangeMid);
+    ObjectCreate(0, "EA_PremiumInfo", OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, "EA_PremiumInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, "EA_PremiumInfo", OBJPROP_XDISTANCE, 10);
+    ObjectSetInteger(0, "EA_PremiumInfo", OBJPROP_YDISTANCE, yPos);
+    ObjectSetString(0, "EA_PremiumInfo", OBJPROP_TEXT, premiumText);
+    ObjectSetInteger(0, "EA_PremiumInfo", OBJPROP_COLOR, EnablePremiumDiscountFilter ? clrMediumSeaGreen : clrGray);
+    ObjectSetInteger(0, "EA_PremiumInfo", OBJPROP_FONTSIZE, 9);
+    ObjectSetString(0, "EA_PremiumInfo", OBJPROP_FONT, "Arial");
+    yPos += 18;
     
     // ===== ATR GAP INFO =====
     ObjectDelete(0, "EA_ATRInfo");
@@ -3926,6 +5971,114 @@ void UpdateInfoPanel()
         ObjectSetInteger(0, "EA_ATRInfo", OBJPROP_FONTSIZE, 9);
         ObjectSetString(0, "EA_ATRInfo", OBJPROP_FONT, "Arial");
         yPos += 20;
+    }
+    
+    // ===== CANDLE PATTERN INFO =====
+    ObjectDelete(0, "EA_CandlePatternInfo");
+    if(EnableCandlePatterns)
+    {
+        string patternText = "Candle Pattern: ";
+        color patternColor = clrGray;
+        if(g_CandlePatternSignal == 1)
+        {
+            patternText += g_CandlePatternName + " (BUY)";
+            patternColor = clrLime;
+        }
+        else if(g_CandlePatternSignal == -1)
+        {
+            patternText += g_CandlePatternName + " (SELL)";
+            patternColor = clrOrangeRed;
+        }
+        else
+        {
+            patternText += "None";
+        }
+        ObjectCreate(0, "EA_CandlePatternInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_CandlePatternInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_CandlePatternInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_CandlePatternInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_CandlePatternInfo", OBJPROP_TEXT, patternText);
+        ObjectSetInteger(0, "EA_CandlePatternInfo", OBJPROP_COLOR, patternColor);
+        ObjectSetInteger(0, "EA_CandlePatternInfo", OBJPROP_FONTSIZE, 9);
+        ObjectSetString(0, "EA_CandlePatternInfo", OBJPROP_FONT, "Arial");
+        yPos += 18;
+    }
+
+    // ===== ROUND NUMBER INFO =====
+    ObjectDelete(0, "EA_RoundNumberInfo");
+    if(EnableRoundNumberFilter)
+    {
+        double currentBidRN = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+        double nearestRN = GetNearestRoundNumber(currentBidRN);
+        bool nearRound = IsRoundNumberAligned(currentBidRN);
+        string rnText = StringFormat("Round: %.0f | Dist: %.1f pips | %s",
+            nearestRN, MathAbs(currentBidRN - nearestRN) / pip,
+            nearRound ? "IN ZONE" : "outside");
+        ObjectCreate(0, "EA_RoundNumberInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_RoundNumberInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_RoundNumberInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_RoundNumberInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_RoundNumberInfo", OBJPROP_TEXT, rnText);
+        ObjectSetInteger(0, "EA_RoundNumberInfo", OBJPROP_COLOR, nearRound ? clrGold : clrGray);
+        ObjectSetInteger(0, "EA_RoundNumberInfo", OBJPROP_FONTSIZE, 9);
+        ObjectSetString(0, "EA_RoundNumberInfo", OBJPROP_FONT, "Arial");
+        yPos += 18;
+    }
+
+    // ===== BREAKOUT + RETEST INFO =====
+    ObjectDelete(0, "EA_BreakoutInfo");
+    if(EnableBreakoutRetest)
+    {
+        string bkoText = "Breakout: ";
+        color bkoColor = clrGray;
+        if(g_BuyBreakoutRetestActive && g_SellBreakoutRetestActive)
+        {
+            bkoText += StringFormat("BUY@%.2f + SELL@%.2f", g_BuyBreakoutLevel, g_SellBreakoutLevel);
+            bkoColor = clrYellow;
+        }
+        else if(g_BuyBreakoutRetestActive)
+        {
+            bkoText += StringFormat("BUY Retest @ %.2f", g_BuyBreakoutLevel);
+            bkoColor = clrLime;
+        }
+        else if(g_SellBreakoutRetestActive)
+        {
+            bkoText += StringFormat("SELL Retest @ %.2f", g_SellBreakoutLevel);
+            bkoColor = clrOrangeRed;
+        }
+        else
+        {
+            bkoText += "None";
+        }
+        ObjectCreate(0, "EA_BreakoutInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_BreakoutInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_BreakoutInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_BreakoutInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_BreakoutInfo", OBJPROP_TEXT, bkoText);
+        ObjectSetInteger(0, "EA_BreakoutInfo", OBJPROP_COLOR, bkoColor);
+        ObjectSetInteger(0, "EA_BreakoutInfo", OBJPROP_FONTSIZE, 9);
+        ObjectSetString(0, "EA_BreakoutInfo", OBJPROP_FONT, "Arial");
+        yPos += 18;
+    }
+
+    // ===== DYNAMIC TP INFO =====
+    ObjectDelete(0, "EA_DynamicTPInfo");
+    if(EnableATRDynamicTP)
+    {
+        double dynTP = GetDynamicTPPips();
+        double dynSL = GetAdaptiveStopLossPips(g_TrendBias != -1);
+        string dtpText = StringFormat("Dynamic TP: %.1f pips | Adaptive SL: %.1f pips | RR: 1:%.1f",
+            dynTP, dynSL > 0 ? dynSL : (double)BuyStopLossPips,
+            dynSL > 0 ? dynTP / dynSL : dynTP / BuyStopLossPips);
+        ObjectCreate(0, "EA_DynamicTPInfo", OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, "EA_DynamicTPInfo", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSetInteger(0, "EA_DynamicTPInfo", OBJPROP_XDISTANCE, 10);
+        ObjectSetInteger(0, "EA_DynamicTPInfo", OBJPROP_YDISTANCE, yPos);
+        ObjectSetString(0, "EA_DynamicTPInfo", OBJPROP_TEXT, dtpText);
+        ObjectSetInteger(0, "EA_DynamicTPInfo", OBJPROP_COLOR, clrDodgerBlue);
+        ObjectSetInteger(0, "EA_DynamicTPInfo", OBJPROP_FONTSIZE, 9);
+        ObjectSetString(0, "EA_DynamicTPInfo", OBJPROP_FONT, "Arial");
+        yPos += 18;
     }
     
     // ===== SELL SECTION (LEFT SIDE) =====
