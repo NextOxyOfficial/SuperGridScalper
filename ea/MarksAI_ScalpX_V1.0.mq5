@@ -26,17 +26,20 @@ input int       CachedLicenseMaxAgeHours  = 24;        // Cache max age (hours)
 //=== TRADING SETTINGS ===
 input group "=== ScalpX Settings ==="
 input double   ProfitPercent         = 10.0;       // Close all at X% profit of equity
-input int      MaxOpenTrades         = 15;         // Max open trades at once
-input int      TradesPerCandle       = 5;          // Trades per confirmed candle
+input int      MaxOpenTrades         = 34;         // Max open trades at once
+input int      TradesPerCandle       = 1;          // Trades per confirmed candle
 
 input group "=== Lot Sizing ==="
-input double   MarginUsePercent      = 40.0;       // Use X% of free margin (lower = softer lots)
-input double   MaxLotLimit           = 135;       // Maximum lot size per trade
+input double   MarginUsePercent      = 15.0;       // Use X% of free margin (lower = softer lots)
+input double   MaxLotLimit           = 6.49;       // Maximum lot size per trade
 
 input group "=== Trailing Stop ==="
 input bool     UseTrailing           = true;       // Enable trailing SL
-input double   TrailStartPips        = 3.0;        // Start trailing after X pips profit
-input double   TrailStepPips         = 1.5;        // Trail SL by X pips behind price
+input double   InitialSLPips         = 200.0;       // Initial SL on entry (safety net)
+input double   InitialTPPips         = 100.0;       // Initial TP on entry
+input double   TrailStartPips        = 6.0;        // Start trailing after X pips profit (from Lite EA)
+input double   InitialLockPips       = 3.5;        // Lock X pips profit when trail starts (from Lite EA)
+input double   TrailingRatio         = 0.45;       // SL follows 45% of extra price movement (from Lite EA)
 
 input group "=== Session Filter (Optional) ==="
 input bool     UseSessionFilter      = false;
@@ -125,7 +128,7 @@ int OnInit()
    Print("Equity: $", DoubleToString(equity, 2),
          " | Target: $", DoubleToString(equity * ProfitPercent / 100.0, 2));
    Print("Timeframe: ", EnumToString(_Period), " | Pip: ", pipSize);
-   Print("Trail: ", TrailStartPips, " pips start, ", TrailStepPips, " step");
+   Print("Trail: ", TrailStartPips, " pips start, Lock: ", InitialLockPips, " pips, Ratio: ", TrailingRatio);
    Print("License: ", g_LicenseMessage);
    
    return(INIT_SUCCEEDED);
@@ -292,8 +295,12 @@ void OnTick()
 //+------------------------------------------------------------------+
 void ManageTrailingStop()
 {
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double spread = ask - bid;
+   
    double trailStartDist = TrailStartPips * pipSize;
-   double trailStepDist  = TrailStepPips * pipSize;
+   double initialLockDist = InitialLockPips * pipSize;
    
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
@@ -304,35 +311,42 @@ void ManageTrailingStop()
       
       double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
       double currentSL = PositionGetDouble(POSITION_SL);
+      double currentTP = PositionGetDouble(POSITION_TP);
       long posType = PositionGetInteger(POSITION_TYPE);
       
       if(posType == POSITION_TYPE_BUY)
       {
-         double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
          double profitDist = bid - openPrice;
          
          if(profitDist >= trailStartDist)
          {
-            double newSL = NormalizeDouble(bid - trailStepDist, digits_);
+            // Smart trail: lock initial profit + spread buffer + ratio of extra movement
+            double extraDist = profitDist - trailStartDist;
+            double slFromOpen = spread + initialLockDist + (extraDist * TrailingRatio);
+            double newSL = NormalizeDouble(openPrice + slFromOpen, digits_);
+            
+            // Only move SL forward, never backward
             if(newSL > currentSL + pointValue || currentSL == 0)
             {
-               if(newSL > openPrice)
-                  trade.PositionModify(ticket, newSL, 0);
+               if(newSL > openPrice && newSL < bid)
+                  trade.PositionModify(ticket, newSL, currentTP);
             }
          }
       }
       else if(posType == POSITION_TYPE_SELL)
       {
-         double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
          double profitDist = openPrice - ask;
          
          if(profitDist >= trailStartDist)
          {
-            double newSL = NormalizeDouble(ask + trailStepDist, digits_);
+            double extraDist = profitDist - trailStartDist;
+            double slFromOpen = spread + initialLockDist + (extraDist * TrailingRatio);
+            double newSL = NormalizeDouble(openPrice - slFromOpen, digits_);
+            
             if(newSL < currentSL - pointValue || currentSL == 0)
             {
-               if(newSL < openPrice)
-                  trade.PositionModify(ticket, newSL, 0);
+               if(newSL < openPrice && newSL > ask)
+                  trade.PositionModify(ticket, newSL, currentTP);
             }
          }
       }
@@ -488,7 +502,21 @@ void OpenBuy(double lots)
    if(trade.Buy(lots, _Symbol, ask, 0, 0, "ScalpX_BUY"))
    {
       totalTradesOpened++;
-      Print("BUY ", lots, " @ ", ask, " | Open: ", CountMyTrades(),
+      
+      // Set initial protective SL (35 pips safety net)
+      if(InitialSLPips > 0)
+      {
+         ulong ticket = trade.ResultOrder();
+         if(ticket > 0)
+         {
+            double sl = NormalizeDouble(ask - (InitialSLPips * pipSize), digits_);
+            double tp = (InitialTPPips > 0) ? NormalizeDouble(ask + (InitialTPPips * pipSize), digits_) : 0;
+            trade.PositionModify(ticket, sl, tp);
+         }
+      }
+      
+      Print("BUY ", lots, " @ ", ask, " | SL: ", InitialSLPips, " TP: ", InitialTPPips,
+            " | Open: ", CountMyTrades(),
             " | Equity: $", DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2));
    }
    else
@@ -521,7 +549,21 @@ void OpenSell(double lots)
    if(trade.Sell(lots, _Symbol, bid, 0, 0, "ScalpX_SELL"))
    {
       totalTradesOpened++;
-      Print("SELL ", lots, " @ ", bid, " | Open: ", CountMyTrades(),
+      
+      // Set initial protective SL
+      if(InitialSLPips > 0)
+      {
+         ulong ticket = trade.ResultOrder();
+         if(ticket > 0)
+         {
+            double sl = NormalizeDouble(bid + (InitialSLPips * pipSize), digits_);
+            double tp = (InitialTPPips > 0) ? NormalizeDouble(bid - (InitialTPPips * pipSize), digits_) : 0;
+            trade.PositionModify(ticket, sl, tp);
+         }
+      }
+      
+      Print("SELL ", lots, " @ ", bid, " | SL: ", InitialSLPips, " TP: ", InitialTPPips,
+            " | Open: ", CountMyTrades(),
             " | Equity: $", DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2));
    }
    else
