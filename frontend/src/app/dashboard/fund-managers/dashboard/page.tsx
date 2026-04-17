@@ -1145,23 +1145,11 @@ export default function FMDashboardPage() {
                     <label className="text-gray-400 text-[10px] sm:text-xs font-semibold">Daily Profit Target (Auto-Stop)</label>
                   </div>
                   {eaCtrl.enable_daily_target && (
-                    <div className="grid grid-cols-3 gap-2 pl-5">
-                      <div>
-                        <label className="text-gray-500 text-[10px] block mb-0.5">Balance ($)</label>
-                        <input type="number" step="1" min="0" value={eaCtrl.daily_balance_target}
-                          onChange={e => setEaCtrl({ ...eaCtrl, daily_balance_target: parseFloat(e.target.value) || 0 })}
-                          className="w-full bg-[#0a0a0f] border border-purple-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-purple-500/50 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-[10px] block mb-0.5">Equity ($)</label>
+                    <div className="pl-5">
+                      <div className="max-w-[200px]">
+                        <label className="text-gray-500 text-[10px] block mb-0.5">Equity Target ($)</label>
                         <input type="number" step="1" min="0" value={eaCtrl.daily_equity_target}
                           onChange={e => setEaCtrl({ ...eaCtrl, daily_equity_target: parseFloat(e.target.value) || 0 })}
-                          className="w-full bg-[#0a0a0f] border border-purple-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-purple-500/50 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-[10px] block mb-0.5">Stop bot for (minutes)</label>
-                        <input type="number" step="1" min="1" value={eaCtrl.cooldown_minutes}
-                          onChange={e => setEaCtrl({ ...eaCtrl, cooldown_minutes: parseInt(e.target.value) || 60 })}
                           className="w-full bg-[#0a0a0f] border border-purple-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-purple-500/50 focus:outline-none" />
                       </div>
                     </div>

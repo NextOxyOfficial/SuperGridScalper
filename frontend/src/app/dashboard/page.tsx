@@ -2358,19 +2358,8 @@ export default function DashboardHome() {
                               <label className="text-gray-400 text-[10px] sm:text-xs font-semibold">Daily Profit Target (Auto-Stop)</label>
                             </div>
                             {eaControl.enable_daily_target && (
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-5">
-                                <div>
-                                  <label className="text-gray-500 text-[10px] block mb-0.5">Balance Target ($)</label>
-                                  <input
-                                    type="number"
-                                    step="1"
-                                    min="0"
-                                    value={eaControl.daily_balance_target ?? ''}
-                                    onChange={e => updateEaControlField('daily_balance_target', e.target.value)}
-                                    className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
-                                  />
-                                </div>
-                                <div>
+                              <div className="pl-5">
+                                <div className="max-w-[200px]">
                                   <label className="text-gray-500 text-[10px] block mb-0.5">Equity Target ($)</label>
                                   <input
                                     type="number"
@@ -2381,22 +2370,11 @@ export default function DashboardHome() {
                                     className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
                                   />
                                 </div>
-                                <div>
-                                  <label className="text-gray-500 text-[10px] block mb-0.5">Cooldown (min)</label>
-                                  <input
-                                    type="number"
-                                    step="1"
-                                    min="1"
-                                    value={eaControl.cooldown_minutes ?? ''}
-                                    onChange={e => updateEaControlField('cooldown_minutes', e.target.value)}
-                                    className="w-full bg-[#0a0a0f] border border-cyan-500/20 rounded px-2 py-1.5 text-white text-[10px] sm:text-xs focus:border-cyan-500/50 focus:outline-none"
-                                  />
-                                </div>
                               </div>
                             )}
                             {eaControl.enable_daily_target && (
                               <p className="text-gray-600 text-[9px] sm:text-[10px] pl-5">
-                                EA will stop when balance or equity target is reached, then restart after cooldown.
+                                EA will stop trading when equity reaches the target. Resets daily.
                               </p>
                             )}
                           </div>
