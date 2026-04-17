@@ -36,7 +36,7 @@ input double   MaxLotLimit           = 6.49;       // Maximum lot size per trade
 input group "=== Trailing Stop ==="
 input bool     UseTrailing           = true;       // Enable trailing SL
 input double   InitialSLPips         = 200.0;       // Initial SL on entry (safety net)
-input double   InitialTPPips         = 100.0;       // Initial TP on entry
+input double   InitialTPPips         = 400.0;       // Initial TP on entry
 input double   TrailStartPips        = 6.0;        // Start trailing after X pips profit (from Lite EA)
 input double   InitialLockPips       = 3.5;        // Lock X pips profit when trail starts (from Lite EA)
 input double   TrailingRatio         = 0.45;       // SL follows 45% of extra price movement (from Lite EA)
