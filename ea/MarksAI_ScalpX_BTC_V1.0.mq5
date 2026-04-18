@@ -1,14 +1,15 @@
 //+------------------------------------------------------------------+
-//|                       MarksAI_ScalpX_V1.0.mq5                      |
-//|                    Mark's AI ScalpX - Smart Pattern Scalper         |
+//|                    MarksAI_ScalpX_BTC_V1.0.mq5                     |
+//|              Mark's AI ScalpX BTC - Smart Pattern Scalper          |
 //|          Confirmed candle patterns + trailing SL + auto-compound   |
+//|          Optimized for BTCUSD/BTCUSDT - 1 pip = $1.00             |
 //|                     www.markstrades.com                             |
 //+------------------------------------------------------------------+
-#property copyright "Mark's AI ScalpX V1.0 - markstrades.com"
+#property copyright "Mark's AI ScalpX BTC V1.0 - markstrades.com"
 #property version   "1.00"
 #property strict
-#property description "Mark's AI ScalpX - Smart Pattern Scalper"
-#property description "Any Timeframe | Auto-Compound | Trailing SL | Confirmed Patterns"
+#property description "Mark's AI ScalpX BTC - Smart Pattern Scalper"
+#property description "BTCUSD/BTCUSDT | Auto-Compound | Trailing SL | Confirmed Patterns"
 #property description "Licensed Product - www.markstrades.com"
 
 #include <Trade\Trade.mqh>
@@ -24,30 +25,30 @@ input bool      UseCachedLicenseInTester  = true;      // Use cached license in 
 input int       CachedLicenseMaxAgeHours  = 24;        // Cache max age (hours)
 
 //=== TRADING SETTINGS ===
-input group "=== ScalpX Settings ==="
+input group "=== ScalpX BTC Settings ==="
 input double   ProfitPercent         = 10.0;       // Close all at X% profit of equity
-input int      MaxOpenTrades         = 34;         // Max open trades at once
-input int      TradesPerCandle       = 1;          // Trades per confirmed candle
+input int      MaxOpenTrades         = 3;          // Max 3 open trades at once
+input int      TradesPerCandle       = 1;          // Strictly 1 trade per candle signal
 
 input group "=== Lot Sizing ==="
-input double   MarginUsePercent      = 15.0;       // Use X% of free margin (lower = softer lots)
-input double   MaxLotLimit           = 26.49;       // Maximum lot size per trade
+input double   MarginUsePercent      = 12.0;       // Use X% of free margin
+input double   MaxLotLimit           = 4.49;       // Maximum lot size per trade
 
 input group "=== Trailing Stop ==="
 input bool     UseTrailing           = true;       // Enable trailing SL
-input double   InitialSLPips         = 200.0;       // Initial SL on entry (safety net)
-input double   InitialTPPips         = 400.0;       // Initial TP on entry
-input double   TrailStartPips        = 40.0;        // Start trailing after X pips profit (from Lite EA)
-input double   InitialLockPips       = 30.0;        // Lock X pips profit when trail starts (from Lite EA)
-input double   TrailingRatio         = 0.45;       // SL follows 45% of extra price movement (from Lite EA)
+input double   InitialSLPips         = 50.0;        // Initial SL on entry ($50 from entry)
+input double   InitialTPPips         = 120.0;       // Initial TP on entry ($120 from entry)
+input double   TrailStartPips        = 15.0;        // Start trailing after $15 profit
+input double   InitialLockPips       = 8.0;         // Lock $8 profit when trail starts
+input double   TrailingRatio         = 0.50;       // SL follows 50% of extra price movement
 
 input group "=== Session Filter (Optional) ==="
 input bool     UseSessionFilter      = false;
-input int      SessionStartHour      = 7;
-input int      SessionEndHour        = 21;
+input int      SessionStartHour      = 0;          // BTC trades 24/7
+input int      SessionEndHour        = 24;
 
 input group "=== Magic Number ==="
-input int      MagicNumber           = 999777;
+input int      MagicNumber           = 999888;     // Different from gold EA (999777)
 
 //=== SERVER URL (Hidden) ===
 string LicenseServer = "https://markstrades.com";
@@ -74,16 +75,29 @@ double pointValue;
 int digits_;
 double pipSize;
 
+//=== EMA HANDLES ===
+int g_EmaFastHandle = INVALID_HANDLE;
+int g_EmaSlowHandle = INVALID_HANDLE;
+
 //+------------------------------------------------------------------+
 int OnInit()
 {
    pointValue = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
    digits_ = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
    
-   pipSize = (digits_ == 3 || digits_ == 5) ? pointValue * 10 : pointValue;
+   // BTC pip calculation: 1 pip = $1.00 (e.g. 84500 -> 84501)
+   // BTCUSD digits=2 (84521.50), point=0.01
+   // So pipSize = 1.0 always for this BTC EA
+   pipSize = 1.0;
    
    trade.SetExpertMagicNumber(MagicNumber);
    trade.SetDeviationInPoints(50);
+   
+   // Create EMA indicators for trend filter
+   g_EmaFastHandle = iMA(_Symbol, _Period, 10, 0, MODE_EMA, PRICE_CLOSE);
+   g_EmaSlowHandle = iMA(_Symbol, _Period, 30, 0, MODE_EMA, PRICE_CLOSE);
+   if(g_EmaFastHandle == INVALID_HANDLE || g_EmaSlowHandle == INVALID_HANDLE)
+      Print("WARNING: EMA indicator failed to create");
    
    // AUTO-DETECT filling mode
    long fillType = SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
@@ -124,11 +138,15 @@ int OnInit()
    UpdateLicensePanel();
    
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-   Print("=== MARK'S AI SCALPX V1.0 STARTED ===");
+   Print("=== MARK'S AI SCALPX BTC V1.0 STARTED ===");
+   Print("Symbol: ", _Symbol, " | Digits: ", digits_, " | Point: ", pointValue);
    Print("Equity: $", DoubleToString(equity, 2),
          " | Target: $", DoubleToString(equity * ProfitPercent / 100.0, 2));
-   Print("Timeframe: ", EnumToString(_Period), " | Pip: ", pipSize);
-   Print("Trail: ", TrailStartPips, " pips start, Lock: ", InitialLockPips, " pips, Ratio: ", TrailingRatio);
+   Print("Timeframe: ", EnumToString(_Period), " | Pip: $", DoubleToString(pipSize, 2));
+   Print("SL: $", DoubleToString(InitialSLPips * pipSize, 0),
+         " | TP: $", DoubleToString(InitialTPPips * pipSize, 0),
+         " | Trail Start: $", DoubleToString(TrailStartPips * pipSize, 0),
+         " | Lock: $", DoubleToString(InitialLockPips * pipSize, 0));
    Print("License: ", g_LicenseMessage);
    
    return(INIT_SUCCEEDED);
@@ -137,6 +155,10 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   // Clean up indicators
+   if(g_EmaFastHandle != INVALID_HANDLE) IndicatorRelease(g_EmaFastHandle);
+   if(g_EmaSlowHandle != INVALID_HANDLE) IndicatorRelease(g_EmaSlowHandle);
+   
    // Clean up chart objects
    ObjectDelete(0, "SX_LicenseURL");
    ObjectDelete(0, "SX_LicenseStatus");
@@ -145,7 +167,7 @@ void OnDeinit(const int reason)
    ObjectDelete(0, "SX_LicenseWarning");
    ObjectDelete(0, "SX_EAName");
    
-   Print("=== SCALPX STOPPED. Trades: ", totalTradesOpened, " Cycles: ", totalCycles, " ===");
+   Print("=== SCALPX BTC STOPPED. Trades: ", totalTradesOpened, " Cycles: ", totalCycles, " ===");
 }
 
 //+------------------------------------------------------------------+
@@ -245,12 +267,21 @@ void OnTick()
       if(dt.hour < SessionStartHour || dt.hour >= SessionEndHour) return;
    }
    
+   //--- STRICT: Only 1 trade per candle, max 3 total
+   int currentTrades = CountMyTrades();
+   if(currentTrades >= MaxOpenTrades)
+   {
+      Print("MAX TRADES REACHED (", currentTrades, "/", MaxOpenTrades, ") - Skipping");
+      return;
+   }
+   
    //--- Wait for CONFIRMED candle pattern (no weak signals)
    int signal = AnalyzeCandles();
    if(signal == 0) return;
    
    int direction = (signal > 0) ? 1 : -1;
    int strength = MathAbs(signal);
+   if(strength < 2) return;  // Only trade on strong signals
    
    //--- Close opposite profitable trades
    CloseOppositeTrades(direction);
@@ -260,34 +291,31 @@ void OnTick()
    if(existingDir != 0 && existingDir != direction)
       return;
    
-   //--- Check max open trades
-   int currentTrades = CountMyTrades();
+   //--- RE-CHECK after closing opposites (strict enforcement)
+   currentTrades = CountMyTrades();
    if(currentTrades >= MaxOpenTrades) return;
    
-   //--- Bulk entry based on signal strength
-   int slotsAvailable = MaxOpenTrades - currentTrades;
-   int tradesToOpen;
-   if(strength >= 3)
-      tradesToOpen = MathMin(slotsAvailable, TradesPerCandle);
-   else if(strength >= 2)
-      tradesToOpen = MathMin(slotsAvailable, TradesPerCandle * 2/3);
-   else
-      return;
+   //--- OPEN EXACTLY 1 TRADE (no bulk, no loop)
+   double lots = CalcLot();
    
-   if(tradesToOpen < 1) tradesToOpen = 1;
+   //--- EMA TREND FILTER: Only trade WITH the trend
+   int emaTrend = GetEMATrend();
+   if(emaTrend != 0 && emaTrend != direction)
+   {
+      Print("EMA FILTER: Signal ", (direction > 0 ? "BUY" : "SELL"),
+            " rejected - EMA trend is ", (emaTrend > 0 ? "BULLISH" : "BEARISH"));
+      return;
+   }
    
    Print("SIGNAL: ", (direction > 0 ? "BUY" : "SELL"), " Strength: ", strength,
-         " | Opening ", tradesToOpen, " trades");
+         " | Trade ", (currentTrades + 1), "/", MaxOpenTrades,
+         " | Lots: ", DoubleToString(lots, 2),
+         " | EMA: ", (emaTrend > 0 ? "BULL" : emaTrend < 0 ? "BEAR" : "FLAT"));
    
-   for(int i = 0; i < tradesToOpen; i++)
-   {
-      double lots = CalcLot();
-      
-      if(direction > 0)
-         OpenBuy(lots);
-      else
-         OpenSell(lots);
-   }
+   if(direction > 0)
+      OpenBuy(lots);
+   else
+      OpenSell(lots);
 }
 
 //+------------------------------------------------------------------+
@@ -354,7 +382,29 @@ void ManageTrailingStop()
 }
 
 //+------------------------------------------------------------------+
-//| CONFIRMED CANDLE ANALYSIS                                          |
+//| EMA TREND FILTER                                                   |
+//+------------------------------------------------------------------+
+int GetEMATrend()
+{
+   if(g_EmaFastHandle == INVALID_HANDLE || g_EmaSlowHandle == INVALID_HANDLE)
+      return 0;
+   
+   double emaFast[2], emaSlow[2];
+   if(CopyBuffer(g_EmaFastHandle, 0, 1, 2, emaFast) < 2) return 0;
+   if(CopyBuffer(g_EmaSlowHandle, 0, 1, 2, emaSlow) < 2) return 0;
+   
+   double gap = emaFast[1] - emaSlow[1];
+   double prevGap = emaFast[0] - emaSlow[0];
+   
+   // Need clear EMA separation (at least $5 gap for BTC)
+   if(gap > 5.0 && prevGap > 0) return 1;   // Bullish
+   if(gap < -5.0 && prevGap < 0) return -1;  // Bearish
+   
+   return 0;  // Flat/unclear
+}
+
+//+------------------------------------------------------------------+
+//| CONFIRMED CANDLE ANALYSIS - BTC OPTIMIZED                          |
 //+------------------------------------------------------------------+
 int AnalyzeCandles()
 {
@@ -371,7 +421,12 @@ int AnalyzeCandles()
    
    if(range1 <= 0) return 0;
    double bodyRatio1 = body1 / range1;
-   if(bodyRatio1 < 0.30) return 0;
+   
+   // BTC: Require stronger body (0.40) to filter noisy wicks
+   if(bodyRatio1 < 0.40) return 0;
+   
+   // BTC: Skip tiny candles (less than $15 range = noise)
+   if(range1 < 15.0) return 0;
    
    //=== Momentum (last 4 candles) ===
    int bullCount = 0, bearCount = 0;
@@ -390,23 +445,24 @@ int AnalyzeCandles()
       double ratio = b / r;
       double weight = (5 - i) * 0.3;
       
-      if(c > o) { bullCount++; bullForce += b * ratio * weight; }
-      else if(c < o) { bearCount++; bearForce += b * ratio * weight; }
+      if(c > o && ratio > 0.35) { bullCount++; bullForce += b * ratio * weight; }
+      else if(c < o && ratio > 0.35) { bearCount++; bearForce += b * ratio * weight; }
    }
    
-   if(bullCount >= 3) score += 3;
-   else if(bearCount >= 3) score -= 3;
-   else if(bullCount >= 2 && bullForce > bearForce * 2.0) score += 2;
-   else if(bearCount >= 2 && bearForce > bullForce * 2.0) score -= 2;
+   // BTC: Need 3+ aligned candles with force dominance
+   if(bullCount >= 3 && bullForce > bearForce * 1.5) score += 3;
+   else if(bearCount >= 3 && bearForce > bullForce * 1.5) score -= 3;
+   else if(bullCount >= 2 && bullForce > bearForce * 2.5) score += 2;
+   else if(bearCount >= 2 && bearForce > bullForce * 2.5) score -= 2;
    
-   //=== Engulfing ===
+   //=== Engulfing (BTC: need 1.5x body, not 1.3x) ===
    double o2 = iOpen(_Symbol, _Period, 2);
    double c2 = iClose(_Symbol, _Period, 2);
    double body2 = MathAbs(c2 - o2);
    
-   if(c2 < o2 && c1 > o1 && body1 > body2 * 1.3)
+   if(c2 < o2 && c1 > o1 && body1 > body2 * 1.5 && body1 > 20.0)
       score += 2;
-   else if(c2 > o2 && c1 < o1 && body1 > body2 * 1.3)
+   else if(c2 > o2 && c1 < o1 && body1 > body2 * 1.5 && body1 > 20.0)
       score -= 2;
    
    //=== Current candle confirmation ===
@@ -416,25 +472,26 @@ int AnalyzeCandles()
    
    if(score > 0 && currentMove > 0) score += 1;
    else if(score < 0 && currentMove < 0) score += -1;
-   else if(score > 0 && currentMove < -body1 * 0.5) return 0;
-   else if(score < 0 && currentMove > body1 * 0.5) return 0;
+   else if(score > 0 && currentMove < -body1 * 0.3) return 0;
+   else if(score < 0 && currentMove > body1 * 0.3) return 0;
    
-   //=== Speed burst ===
+   //=== Speed burst (BTC: need 1.5x average, not 1.3x) ===
    double avgRange = 0;
    for(int i = 3; i <= 7; i++)
       avgRange += iHigh(_Symbol, _Period, i) - iLow(_Symbol, _Period, i);
    avgRange /= 5.0;
    
-   if(avgRange > 0 && range1 > avgRange * 1.3 && bodyRatio1 > 0.5)
+   if(avgRange > 0 && range1 > avgRange * 1.5 && bodyRatio1 > 0.55)
    {
       if(c1 > o1) score += 1;
       else score -= 1;
    }
    
-   if(score >= 5) return 3;
-   else if(score >= 3) return 2;
-   else if(score <= -5) return -3;
-   else if(score <= -3) return -2;
+   // BTC: Higher thresholds (4/6 instead of 3/5)
+   if(score >= 6) return 3;
+   else if(score >= 4) return 2;
+   else if(score <= -6) return -3;
+   else if(score <= -4) return -2;
    
    return 0;
 }
@@ -499,11 +556,11 @@ void OpenBuy(double lots)
       }
    }
    
-   if(trade.Buy(lots, _Symbol, ask, 0, 0, "ScalpX_BUY"))
+   if(trade.Buy(lots, _Symbol, ask, 0, 0, "ScalpX_BTC_BUY"))
    {
       totalTradesOpened++;
       
-      // Set initial protective SL (35 pips safety net)
+      // Set initial protective SL and TP
       if(InitialSLPips > 0)
       {
          ulong ticket = trade.ResultOrder();
@@ -515,7 +572,9 @@ void OpenBuy(double lots)
          }
       }
       
-      Print("BUY ", lots, " @ ", ask, " | SL: ", InitialSLPips, " TP: ", InitialTPPips,
+      Print("BUY ", lots, " @ ", ask,
+            " | SL: $", DoubleToString(InitialSLPips * pipSize, 0),
+            " TP: $", DoubleToString(InitialTPPips * pipSize, 0),
             " | Open: ", CountMyTrades(),
             " | Equity: $", DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2));
    }
@@ -546,11 +605,11 @@ void OpenSell(double lots)
       }
    }
    
-   if(trade.Sell(lots, _Symbol, bid, 0, 0, "ScalpX_SELL"))
+   if(trade.Sell(lots, _Symbol, bid, 0, 0, "ScalpX_BTC_SELL"))
    {
       totalTradesOpened++;
       
-      // Set initial protective SL
+      // Set initial protective SL and TP
       if(InitialSLPips > 0)
       {
          ulong ticket = trade.ResultOrder();
@@ -562,7 +621,9 @@ void OpenSell(double lots)
          }
       }
       
-      Print("SELL ", lots, " @ ", bid, " | SL: ", InitialSLPips, " TP: ", InitialTPPips,
+      Print("SELL ", lots, " @ ", bid,
+            " | SL: $", DoubleToString(InitialSLPips * pipSize, 0),
+            " TP: $", DoubleToString(InitialTPPips * pipSize, 0),
             " | Open: ", CountMyTrades(),
             " | Equity: $", DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2));
    }
@@ -794,7 +855,7 @@ void SendTradeDataToServer()
    jsonRequest += "\"total_buy_profit\":" + DoubleToString(totalBuyProfit, 2) + ",";
    jsonRequest += "\"total_sell_profit\":" + DoubleToString(totalSellProfit, 2) + ",";
    jsonRequest += "\"total_pending_orders\":0,";
-   jsonRequest += "\"trading_mode\":\"ScalpX Pattern Scalper\",";
+   jsonRequest += "\"trading_mode\":\"ScalpX BTC Pattern Scalper\",";
    jsonRequest += "\"symbol\":\"" + _Symbol + "\",";
    jsonRequest += "\"current_price\":" + DoubleToString(bid, digits) + ",";
    jsonRequest += "\"trend_direction\":\"N/A\",";
@@ -924,14 +985,14 @@ uint Fnv1aHash(string s)
 string LicenseCachePrefix(string mt5Account)
 {
    uint h = Fnv1aHash(LicenseKey + "|" + mt5Account);
-   return "LIC_SX_" + StringFormat("%08X", h);
+   return "LIC_SXB_" + StringFormat("%08X", h);
 }
 
 //+------------------------------------------------------------------+
 string LicenseCacheFileName(string mt5Account)
 {
    uint h = Fnv1aHash(LicenseKey + "|" + mt5Account);
-   return StringFormat("scalpx_cache_%08X.bin", h);
+   return StringFormat("scalpx_btc_cache_%08X.bin", h);
 }
 
 //+------------------------------------------------------------------+
@@ -1174,8 +1235,8 @@ void UpdateLicensePanel()
    ObjectSetInteger(0, "SX_EAName", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
    ObjectSetInteger(0, "SX_EAName", OBJPROP_XDISTANCE, rightX);
    ObjectSetInteger(0, "SX_EAName", OBJPROP_YDISTANCE, yPos);
-   ObjectSetString(0, "SX_EAName", OBJPROP_TEXT, "Mark's AI ScalpX V1.0");
-   ObjectSetInteger(0, "SX_EAName", OBJPROP_COLOR, clrGold);
+   ObjectSetString(0, "SX_EAName", OBJPROP_TEXT, "Mark's AI ScalpX BTC V1.0");
+   ObjectSetInteger(0, "SX_EAName", OBJPROP_COLOR, clrOrange);
    ObjectSetInteger(0, "SX_EAName", OBJPROP_FONTSIZE, 10);
    ObjectSetString(0, "SX_EAName", OBJPROP_FONT, "Arial Bold");
    yPos += 18;
